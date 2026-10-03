@@ -68,7 +68,10 @@ function Open-Office {
 function Update-Office {
   # Under `npm run office`, the outer npm passes its settings as npm_config_* variables, and the nested
   # `npm install` treats them as command-line flags (e.g. --allow-scripts, which project installs reject).
-  Get-ChildItem Env: | Where-Object { $_.Name -like 'npm_config_*' } | ForEach-Object { Remove-Item "Env:$($_.Name)" }
+  # Names are case-insensitive on Windows and npm may pass one in two casings, so removal must tolerate a missing name.
+  foreach ($name in @(Get-ChildItem Env: | Where-Object { $_.Name -like 'npm_config_*' } | ForEach-Object { $_.Name })) {
+    [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+  }
   Push-Location $Root
   try {
     & npm.cmd install --no-fund --no-audit
