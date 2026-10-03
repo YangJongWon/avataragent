@@ -122,6 +122,7 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
           <span className={`badge badge-${task.status}`}>{TASK_STATUS_LABEL[task.status]}</span>
           <span>현재 단계: {currentStepLabel(task)}</span>
           <span>비용 {krw(task.costKrw)}</span>
+          {Boolean(task.toolCalls) && <span>🧩 도구 {task.toolCalls}회</span>}
         </div>
         {queue.length > 0 && (
           <ol className="queue-list">

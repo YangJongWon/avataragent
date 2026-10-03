@@ -358,20 +358,42 @@ async function useTools(taskId: string, agent: Agent, context: string) {
     const picked = tools.find((t) => t.ref === call?.tool);
     if (!picked) continue;
     const args = argsOf(call.arguments);
-    const payload = { server: picked.server.name, icon: picked.server.icon, tool: picked.tool.name };
-    store.emit('mcp.called', { taskId, agentId: agent.id, payload: { ...payload, arguments: args } });
     setAgent(agent, 'working', 'focus', `${picked.server.icon} ${picked.server.name}에서 찾아보고 있어요.`);
-    try {
-      const output = await callTool(picked.server, picked.tool.name, args);
-      results.push(`[${picked.server.name} · ${picked.tool.name}] ${JSON.stringify(args)}\n${output}`);
-      store.emit('mcp.result', { taskId, agentId: agent.id, payload: { ...payload, chars: output.length } });
-    } catch (error) {
-      const reason = (error instanceof Error ? error.message : String(error)).split('\n')[0].slice(0, 200);
-      results.push(`[${picked.server.name} · ${picked.tool.name}] 실패: ${reason}`);
-      store.emit('mcp.failed', { taskId, agentId: agent.id, payload: { ...payload, reason } });
-    }
+    const result = await invokeTool(taskId, agent, picked.server, picked.tool.name, args, false);
+    const label = `[${picked.server.name} · ${picked.tool.name}]`;
+    results.push(result.ok ? `${label} ${JSON.stringify(args)}\n${result.output}` : `${label} 실패: ${result.reason}`);
   }
   return results.join('\n\n');
+}
+
+/** Calls one MCP tool for a task, logging the call and counting it on the server and the task. */
+async function invokeTool(taskId: string, agent: Agent, server: McpServer, tool: string, args: Record<string, unknown>, approved: boolean) {
+  const payload = { server: server.name, icon: server.icon, tool };
+  store.emit('mcp.called', { taskId, agentId: agent.id, payload: { ...payload, arguments: args, ...(approved ? { approved } : {}) } });
+  const count = (failed: boolean) => {
+    store.mutate((s) => {
+      const target = s.mcpServers.find((m) => m.id === server.id);
+      if (!target) return;
+      const stats = (target.stats ??= { calls: 0, failures: 0, lastUsedAt: null });
+      stats.calls += 1;
+      if (failed) stats.failures += 1;
+      stats.lastUsedAt = now();
+    });
+    store.updateTask(taskId, (t) => {
+      t.toolCalls = (t.toolCalls ?? 0) + 1;
+    });
+  };
+  try {
+    const output = await callTool(server, tool, args);
+    count(false);
+    store.emit('mcp.result', { taskId, agentId: agent.id, payload: { ...payload, chars: output.length } });
+    return { ok: true as const, output };
+  } catch (error) {
+    const reason = (error instanceof Error ? error.message : String(error)).split('\n')[0].slice(0, 200);
+    count(true);
+    store.emit('mcp.failed', { taskId, agentId: agent.id, payload: { ...payload, reason } });
+    return { ok: false as const, reason };
+  }
 }
 
 async function researchStep(taskId: string, step: WorkflowStep, feedback?: string) {
@@ -806,19 +828,10 @@ async function runActions(taskId: string) {
       set({ status: 'skipped', result: '도구가 꺼졌거나 지워졌어요.' });
       continue;
     }
-    const payload = { server: server.name, icon: server.icon, tool: action.tool };
     set({ status: 'running' });
-    store.emit('mcp.called', { taskId, agentId: manager.id, payload: { ...payload, arguments: action.arguments, approved: true } });
     setAgent(manager, 'working', 'focus', `${server.icon} ${server.name}에 반영하고 있어요.`);
-    try {
-      const output = await callTool(server, action.tool, action.arguments);
-      set({ status: 'done', result: output.slice(0, 500) });
-      store.emit('mcp.result', { taskId, agentId: manager.id, payload: { ...payload, chars: output.length } });
-    } catch (error) {
-      const reason = (error instanceof Error ? error.message : String(error)).split('\n')[0].slice(0, 200);
-      set({ status: 'failed', result: reason });
-      store.emit('mcp.failed', { taskId, agentId: manager.id, payload: { ...payload, reason } });
-    }
+    const result = await invokeTool(taskId, manager, server, action.tool, action.arguments, true);
+    set(result.ok ? { status: 'done', result: result.output.slice(0, 500) } : { status: 'failed', result: result.reason });
   }
 }
 

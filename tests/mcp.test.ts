@@ -121,6 +121,12 @@ test('MCP 도구를 확인하고 조사 단계에서 허용된 도구만 쓴다'
   assert.ok(snapshot.includes('••••1234'));
 
   assert.equal(store.task(task.id).actions?.length ?? 0, 0, '승인 후 실행 도구가 없으면 외부 작업도 없다');
+  assert.equal(store.task(task.id).toolCalls, calls.length, '업무별 도구 호출 수를 센다');
+  assert.equal(store.task(other.id).toolCalls ?? 0, 0);
+  const stats = store.data.mcpServers[0].stats!;
+  assert.equal(stats.calls, calls.length, '서버별 호출 수를 센다');
+  assert.equal(stats.failures, 0);
+  assert.ok(stats.lastUsedAt);
   await runtime.approve(task.id);
   await runtime.approve(other.id);
   await until(() => store.task(task.id).status === 'completed', '완료');
@@ -160,6 +166,7 @@ test('승인 후 실행 도구는 제안만 되고 승인하면 한 번만 실�
   assert.equal(store.task(doneId).actions?.[0].status, 'done');
   assert.equal(store.task(doneId).actions?.[0].result, 'sent');
   assert.equal(sent(), 1);
+  assert.ok((store.task(doneId).toolCalls ?? 0) >= 1, '승인 후 실행한 호출도 센다');
   assert.throws(() => setActionEnabled(doneId, store.task(doneId).actions![0].id, false), '끝난 업무의 작업은 바꿀 수 없다');
 
   const crashedId = await untilApproval('재시작 중 발송');

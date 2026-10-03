@@ -73,10 +73,17 @@ export interface McpServer {
   lastError: string | null;
   /** Names of stored secrets, sent as env vars (stdio) or headers (http). Values never leave the server. */
   secrets?: McpSecretInfo[];
+  stats?: McpUsage;
   /** http only: sign in through the server's OAuth login instead of a fixed token. */
   oauth?: boolean;
   /** Snapshot-only OAuth state; tokens never leave the server. */
   login?: McpLoginInfo;
+}
+
+export interface McpUsage {
+  calls: number;
+  failures: number;
+  lastUsedAt: string | null;
 }
 
 export interface McpLoginInfo {

@@ -168,6 +168,8 @@ export interface Task {
   proposal: Proposal | null;
   /** External tool calls proposed with the latest draft, run on approval. */
   actions?: PlannedAction[];
+  /** MCP tool calls made for this task, research and approved actions together. */
+  toolCalls?: number;
   costKrw: number;
   costByAgent: Record<string, number>;
   value: ValueBreakdown | null;

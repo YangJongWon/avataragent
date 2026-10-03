@@ -456,6 +456,12 @@ export function McpTab({ snapshot, onError, onNotice }: { snapshot: Snapshot } &
                   ))}
                 </div>
                 <div className="muted small">🏢 {scopeLabel(server, snapshot.offices)}</div>
+                {server.stats && server.stats.calls > 0 && (
+                  <div className="muted small">
+                    📊 호출 {server.stats.calls}회 · 실패 {server.stats.failures}회
+                    {server.stats.lastUsedAt && ` · 마지막 ${new Date(server.stats.lastUsedAt).toLocaleString('ko-KR')}`}
+                  </div>
+                )}
                 {server.lastError && <div className="small mcp-error">{server.lastError}</div>}
                 <ToolList server={server} onError={onError} />
                 <div className="row end wrap">
