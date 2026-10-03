@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { DesignKind, ExportFormat } from '../../shared/design.ts';
 import type { McpServer, McpTool, McpToolMode, PlannedAction } from '../../shared/mcp.ts';
 import { setCatalog, type ApiKind, type Company, type ModelEntry } from '../../shared/models.ts';
 import type {
@@ -82,6 +83,20 @@ export const api = {
   checkMcpServer: (id: string) => call<{ tools: McpTool[] }>('POST', `/api/mcp-servers/${id}/check`),
   startMcpLogin: (id: string) => call<{ url: string | null }>('POST', `/api/mcp-servers/${id}/login`),
   logoutMcp: (id: string) => call('DELETE', `/api/mcp-servers/${id}/login`),
+  designReport: (taskId: string, kind: DesignKind) => call<{ dropped: number }>('POST', `/api/tasks/${taskId}/design`, { kind }),
+  exportUrl: (taskId: string, format: ExportFormat, print = false) =>
+    `/api/tasks/${taskId}/export?format=${format}${print ? '&print=1' : ''}`,
+  exportFile: async (taskId: string, format: ExportFormat) => {
+    const res = await fetch(api.exportUrl(taskId, format));
+    if (res.status === 401) location.assign('/login');
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error((data as { error?: string }).error ?? `내보내기 실패 (${res.status})`);
+    }
+    const disposition = res.headers.get('content-disposition') ?? '';
+    const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/)?.[1];
+    return { blob: await res.blob(), filename: encoded ? decodeURIComponent(encoded) : `export.${format}` };
+  },
 };
 
 export type McpServerInput = Pick<McpServer, 'name' | 'icon' | 'transport' | 'url' | 'command' | 'args' | 'enabled' | 'officeIds' | 'oauth'>;

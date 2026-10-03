@@ -2214,3 +2214,34 @@ p.plan-note {
     height: min(60dvh, 240px);
   }
 }
+
+.export-box {
+  border: 2px solid var(--line);
+  background: #fffdf7;
+  padding: 8px;
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.export-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.export-designs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px dashed var(--line);
+  padding-top: 6px;
+}
+.export-design {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.export-design .ok {
+  color: var(--green, #2e7d4f);
+}

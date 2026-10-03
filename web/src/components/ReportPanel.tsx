@@ -8,6 +8,7 @@ import type { PlannedAction } from '../../../shared/mcp.ts';
 import type { Agent, OfficeEvent, Task, TeamId } from '../../../shared/types.ts';
 import { api } from '../api.ts';
 import { eventLabel, krw, TASK_STATUS_LABEL, timeOf } from '../format.ts';
+import { ExportBox } from './ExportBox.tsx';
 
 type Tab = 'team' | 'report' | 'artifacts' | 'reviews' | 'profit' | 'log';
 
@@ -25,15 +26,6 @@ interface Props {
 }
 
 const renderMarkdown = (md: string) => DOMPurify.sanitize(marked.parse(md, { async: false }) as string);
-
-function download(filename: string, content: string) {
-  const url = URL.createObjectURL(new Blob([content], { type: 'text/markdown;charset=utf-8' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 const ACTION_STATUS: Record<PlannedAction['status'], string> = {
   proposed: '',
@@ -77,6 +69,7 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
   const [valueInput, setValueInput] = useState('');
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const agentMap = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
 
   if (!task) {
@@ -267,10 +260,11 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
                 <span className="muted">
                   {agentMap.get(draft.agentId)?.name} 작성 · v{draft.version}
                 </span>
-                <button className="pixel-btn small" onClick={() => download(`${task.title}.md`, report)}>
-                  Markdown 내보내기
+                <button className="pixel-btn small" onClick={() => setExportOpen((v) => !v)}>
+                  내보내기 {exportOpen ? '▴' : '▾'}
                 </button>
               </div>
+              {exportOpen && <ExportBox task={task} draftVersion={draft.version} markdown={report} canOperate={canOperate} onError={onError} />}
               <div className="markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(report) }} />
             </>
           ) : (

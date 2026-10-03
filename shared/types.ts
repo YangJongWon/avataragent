@@ -1,3 +1,4 @@
+import type { TaskDesigns } from './design.ts';
 import type { McpServer, PlannedAction } from './mcp.ts';
 import type { Company, ModelEntry } from './models.ts';
 import type { Skin } from './skins.ts';
@@ -174,6 +175,8 @@ export interface Task {
   costByAgent: Record<string, number>;
   value: ValueBreakdown | null;
   failureReason: string | null;
+  /** AI layouts for exports, each tied to the draft version it was made from. */
+  designs?: TaskDesigns;
   createdAt: string;
   completedAt: string | null;
 }

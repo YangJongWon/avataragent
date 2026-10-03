@@ -16,6 +16,7 @@ import {
   type Tier,
 } from '../shared/models.ts';
 import { allowedModes, isToolMode, type McpServer } from '../shared/mcp.ts';
+import { isExportFormat } from '../shared/design.ts';
 import { isSkin } from '../shared/skins.ts';
 import { TEAMS } from '../shared/teams.ts';
 import type { AiMode, ServerMessage, ShareLink, ShareRole, TeamId, Viewer } from '../shared/types.ts';
@@ -24,7 +25,8 @@ import { listModels } from './ai.ts';
 import { authEnabled, authRouter, stillValid, viewerOf } from './auth.ts';
 import { config } from './config.ts';
 import { closeStorage, storageInfo } from './db.ts';
-import { setActionEnabled, simulateInquiry, simulateMail } from './orchestrator.ts';
+import { designReport, setActionEnabled, simulateInquiry, simulateMail } from './orchestrator.ts';
+import { buildExport } from './exports/index.ts';
 import { closeAllConnections, closeConnection, discoverTools } from './mcp.ts';
 import { finishLogin, logout, OAUTH_CALLBACK_PATH, startLogin } from './mcp-oauth.ts';
 import { apiKeyFor, dropMcpSecrets, setApiKey, setMcpSecrets } from './secrets.ts';
@@ -175,6 +177,35 @@ app.post('/api/tasks/:id/approve', async (req, res) => {
   const valueKrw = req.body?.valueKrw;
   await workflowRuntime.approve(req.params.id, typeof valueKrw === 'number' && Number.isFinite(valueKrw) ? valueKrw : undefined);
   res.json({ ok: true });
+});
+
+app.get('/api/tasks/:id/export', async (req, res) => {
+  const task = store.task(req.params.id);
+  guard(res, 'view', task.officeId);
+  const format = req.query.format;
+  if (!isExportFormat(format)) {
+    res.status(400).json({ error: '지원하지 않는 형식이에요.' });
+    return;
+  }
+  const file = await buildExport(task, store.office(task.officeId), format, { print: req.query.print === '1' });
+  res.setHeader('content-type', file.mime);
+  res.setHeader('x-export-designed', file.designed ? '1' : '0');
+  if (format === 'pdf') {
+    res.setHeader('content-security-policy', "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:");
+  } else {
+    res.setHeader('content-disposition', `attachment; filename="export.${format}"; filename*=UTF-8''${encodeURIComponent(file.filename)}`);
+  }
+  res.send(file.body);
+});
+
+app.post('/api/tasks/:id/design', async (req, res) => {
+  guard(res, 'operate', officeOfTask(req.params.id));
+  const kind = req.body?.kind;
+  if (kind !== 'doc' && kind !== 'deck') {
+    res.status(400).json({ error: 'kind는 doc 또는 deck이어야 해요.' });
+    return;
+  }
+  res.json(await designReport(req.params.id, kind));
 });
 
 app.put('/api/tasks/:id/actions/:actionId', (req, res) => {

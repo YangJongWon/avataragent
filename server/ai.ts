@@ -3,7 +3,7 @@ import { config } from './config.ts';
 import { apiKeyFor } from './secrets.ts';
 import { store } from './store.ts';
 
-export type Purpose = 'plan' | 'brief' | 'research' | 'clarify' | 'draft' | 'review' | 'check' | 'tools' | 'actions';
+export type Purpose = 'plan' | 'brief' | 'research' | 'clarify' | 'draft' | 'review' | 'check' | 'tools' | 'actions' | 'design';
 
 export interface CompletionRequest {
   purpose: Purpose;
@@ -208,7 +208,7 @@ async function anthropic(endpoint: Endpoint, model: string, req: CompletionReque
     anthropicHeaders(endpoint.key),
     {
       model,
-      max_tokens: 4096,
+      max_tokens: req.purpose === 'design' ? 8192 : 4096,
       system: req.system,
       messages: [{ role: 'user', content: req.user }],
     },
