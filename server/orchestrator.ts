@@ -335,60 +335,70 @@ async function researchStep(taskId: string, step: WorkflowStep, feedback?: strin
 
 async function askForHelp(taskId: string, step: WorkflowStep, writer: Agent) {
   const task = store.task(taskId);
-  setAgent(writer, 'working', 'focus', '쓰기 전에 지시 내용을 다시 읽고 있어요.');
-  const raw = await callAI(
-    writer,
-    task,
-    'clarify',
-    [
-      `[작업 지시서]\n${latest(task, 'brief')?.content}`,
-      `[조사 메모]\n${researchNotes(task)}`,
-      '',
-      '결과물을 쓰기 전에, 사용자에게 꼭 물어봐야 결과가 크게 달라지는 모호한 점이 있는지 판단해라.',
-      '정말 필요한 경우에만 질문하고, 질문은 하나만 한다.',
-      'JSON으로만 답한다: {"needs_clarification": boolean, "question": string, "options": string[] (2~3개), "assumption": string (답이 없을 때 따를 가정)}',
-    ].join('\n'),
-    () =>
-      JSON.stringify(
-        store.task(taskId).clarifications.length === 0
-          ? {
-              needs_clarification: true,
-              question: '과제의 초점이 두 가지로 읽혀요. 어느 쪽을 중심으로 정리할까요?',
-              options: ['비용·효과 중심', '기술적 장단점 중심'],
-              assumption: '비용·효과 중심',
-            }
-          : { needs_clarification: false, question: '', options: [], assumption: '' },
-      ),
-    true,
-  );
-  const parsed = parseJson(raw, { needs_clarification: false, question: '', options: [] as string[], assumption: '' });
-  if (!parsed.needs_clarification || !parsed.question) return;
+  let help = task.help;
+  if (!help) {
+    setAgent(writer, 'working', 'focus', '쓰기 전에 지시 내용을 다시 읽고 있어요.');
+    const raw = await callAI(
+      writer,
+      task,
+      'clarify',
+      [
+        `[작업 지시서]\n${latest(task, 'brief')?.content}`,
+        `[조사 메모]\n${researchNotes(task)}`,
+        '',
+        '결과물을 쓰기 전에, 사용자에게 꼭 물어봐야 결과가 크게 달라지는 모호한 점이 있는지 판단해라.',
+        '정말 필요한 경우에만 질문하고, 질문은 하나만 한다.',
+        'JSON으로만 답한다: {"needs_clarification": boolean, "question": string, "options": string[] (2~3개), "assumption": string (답이 없을 때 따를 가정)}',
+      ].join('\n'),
+      () =>
+        JSON.stringify(
+          store.task(taskId).clarifications.length === 0
+            ? {
+                needs_clarification: true,
+                question: '과제의 초점이 두 가지로 읽혀요. 어느 쪽을 중심으로 정리할까요?',
+                options: ['비용·효과 중심', '기술적 장단점 중심'],
+                assumption: '비용·효과 중심',
+              }
+            : { needs_clarification: false, question: '', options: [], assumption: '' },
+        ),
+      true,
+    );
+    const parsed = parseJson(raw, { needs_clarification: false, question: '', options: [] as string[], assumption: '' });
+    if (!parsed.needs_clarification || !parsed.question) return;
 
-  const help = {
-    id: `help_${randomUUID()}`,
-    agentId: writer.id,
-    question: parsed.question,
-    options: (parsed.options ?? []).slice(0, 3),
-    assumption: parsed.assumption || parsed.options?.[0] || '일반적인 방향',
-    deadline: Date.now() + config.helpTimeoutSec * 1000,
-  };
-  store.updateTask(taskId, (t) => {
-    t.help = help;
-    t.status = 'awaiting_help';
-  });
-  setStep(taskId, step.id, 'awaiting');
+    help = {
+      id: `help_${randomUUID()}`,
+      agentId: writer.id,
+      question: parsed.question,
+      options: (parsed.options ?? []).slice(0, 3),
+      assumption: parsed.assumption || parsed.options?.[0] || '일반적인 방향',
+      deadline: Date.now() + config.helpTimeoutSec * 1000,
+    };
+    store.updateTask(taskId, (t) => {
+      t.help = help;
+      t.status = 'awaiting_help';
+    });
+    setStep(taskId, step.id, 'awaiting');
+    store.emit('agent.help_requested', {
+      taskId,
+      agentId: writer.id,
+      payload: { question: help.question, options: help.options, deadline: help.deadline },
+    });
+  } else {
+    store.emit('agent.help_restored', {
+      taskId,
+      agentId: writer.id,
+      payload: { question: help.question, options: help.options, deadline: help.deadline },
+    });
+  }
   setAgent(writer, 'help_requested', 'troubled', `${help.question} 조금만 도와주실 수 있을까요?`);
-  store.emit('agent.help_requested', {
-    taskId,
-    agentId: writer.id,
-    payload: { question: help.question, options: help.options, deadline: help.deadline },
-  });
 
   const answer = await new Promise<string | null>((resolve) => {
+    const remainingMs = Math.max(0, help.deadline - Date.now());
     const timer = setTimeout(() => {
       helpWaiters.delete(taskId);
       resolve(null);
-    }, config.helpTimeoutSec * 1000);
+    }, remainingMs);
     helpWaiters.set(taskId, (value) => {
       clearTimeout(timer);
       helpWaiters.delete(taskId);
@@ -667,19 +677,26 @@ const HANDOFF_LABEL: Partial<Record<WorkflowStep['kind'], string>> = { brief: '�
 
 async function runTask(taskId: string) {
   try {
-    if (store.task(taskId).planMode === 'ai') await designAtStart(taskId);
+    const initial = store.task(taskId);
+    if (initial.planMode === 'ai' && initial.plan.every((step) => step.status === 'pending') && initial.artifacts.length === 0) {
+      await designAtStart(taskId);
+    }
 
     const plan = store.task(taskId).plan;
     const draftIndex = plan.findIndex((s) => s.kind === 'draft');
     const draft = plan[draftIndex];
     const loopsTaken = (step: WorkflowStep) => store.task(taskId).loopCounts?.[step.id] ?? 0;
     store.updateTask(taskId, (t) => {
-      t.loopCounts = {};
+      t.loopCounts ??= {};
+      if (t.status === 'running') t.failureReason = null;
     });
 
-    let at = 0;
-    let runs = 0;
-    let draftRuns = 0;
+    const currentId = store.task(taskId).currentStepId;
+    const currentAt = currentId ? plan.findIndex((step) => step.id === currentId) : -1;
+    const firstIncomplete = plan.findIndex((step) => step.status !== 'done');
+    let at = currentAt >= 0 && plan[currentAt].status !== 'done' ? currentAt : firstIncomplete >= 0 ? firstIncomplete : plan.length - 1;
+    let runs = plan.filter((step) => step.status === 'done').length + Object.values(store.task(taskId).loopCounts ?? {}).reduce((a, b) => a + b, 0);
+    let draftRuns = store.task(taskId).artifacts.filter((artifact) => artifact.kind === 'draft').length;
     let feedback: string | undefined;
     let approvedValue: number | undefined;
     for (;;) {
@@ -815,6 +832,14 @@ export function drainQueues() {
     if (!canStart(office.id)) continue;
     const next = queuedOf(office.id)[0];
     if (next) startTask(next.id);
+  }
+}
+
+export function resumeActiveTasks() {
+  for (const task of store.data.tasks) {
+    if (!ACTIVE.includes(task.status)) continue;
+    store.emit('task.restored', { taskId: task.id, payload: { status: task.status, stepId: task.currentStepId } });
+    void runTask(task.id);
   }
 }
 

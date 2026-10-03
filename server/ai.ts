@@ -30,9 +30,51 @@ export function costKrw(result: CompletionResult, model: ModelEntry) {
 
 export async function complete(req: CompletionRequest): Promise<CompletionResult> {
   if (config.provider === 'mock') return mock(req);
-  if (config.provider === 'agents') return callProvider(VENDORS[req.model.vendor].provider, req.model.apiModel, req);
-  if (!config.model) throw new Error('AI_MODEL이 비어 있습니다. .env 파일에 모델 ID를 입력하거나 AI_PROVIDER=agents를 쓰세요.');
-  return callProvider(config.provider, config.model, req);
+  const provider = config.provider === 'agents' ? VENDORS[req.model.vendor].provider : config.provider;
+  const model = config.provider === 'agents' ? req.model.apiModel : config.model;
+  if (config.provider !== 'agents' && !config.model) {
+    throw new Error('AI_MODEL이 비어 있습니다. .env 파일에 모델 ID를 입력하거나 AI_PROVIDER=agents를 쓰세요.');
+  }
+  if (config.provider === 'agents' || model) return withRetry(() => callProvider(provider, model, req), req.json);
+  throw new Error('AI 모델 설정을 확인해 주세요.');
+}
+
+class ProviderRequestError extends Error {
+  constructor(message: string, readonly retryable: boolean) {
+    super(message);
+  }
+}
+
+const jsonObject = (text: string) => {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start < 0 || end <= start) return false;
+  try {
+    const parsed = JSON.parse(text.slice(start, end + 1));
+    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed);
+  } catch {
+    return false;
+  }
+};
+
+async function withRetry(run: () => Promise<CompletionResult>, requireJson = false) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= config.aiMaxRetries; attempt++) {
+    try {
+      const result = await run();
+      if (requireJson && !jsonObject(result.text)) {
+        throw new ProviderRequestError('AI가 올바른 JSON 객체를 반환하지 않았습니다.', true);
+      }
+      return result;
+    } catch (error) {
+      lastError = error;
+      const retryable = error instanceof ProviderRequestError ? error.retryable : error instanceof TypeError;
+      if (!retryable || attempt >= config.aiMaxRetries) throw error;
+      const delay = config.aiRetryBaseMs * 2 ** attempt + Math.round(Math.random() * 250);
+      await sleep(delay);
+    }
+  }
+  throw lastError;
 }
 
 function callProvider(provider: VendorProvider, model: string, req: CompletionRequest) {
@@ -64,14 +106,32 @@ function requireKey(key: string, name: string) {
 }
 
 async function postJson(url: string, headers: Record<string, string>, body: unknown) {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...headers },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`AI 호출 실패 (${res.status}): ${text.slice(0, 300)}`);
-  return JSON.parse(text);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), config.aiTimeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      const retryable = res.status === 408 || res.status === 409 || res.status === 429 || res.status >= 500;
+      throw new ProviderRequestError(`AI 호출 실패 (${res.status}): ${text.slice(0, 300)}`, retryable);
+    }
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new ProviderRequestError('AI 제공자가 JSON이 아닌 HTTP 응답을 반환했습니다.', true);
+    }
+  } catch (error) {
+    if (error instanceof ProviderRequestError) throw error;
+    if (controller.signal.aborted) throw new ProviderRequestError(`AI 호출이 ${config.aiTimeoutMs}ms 제한시간을 넘었습니다.`, true);
+    throw new ProviderRequestError(`AI 네트워크 호출 실패: ${error instanceof Error ? error.message : String(error)}`, true);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function openaiCompatible(url: string, key: string, name: string, model: string, req: CompletionRequest): Promise<CompletionResult> {

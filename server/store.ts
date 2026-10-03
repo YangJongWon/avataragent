@@ -23,7 +23,7 @@ import type {
 } from '../shared/types.ts';
 import { reviewLoop, templatePlan } from '../shared/workflow.ts';
 import { config, ORGANIZATION_SAFETY_RULES } from './config.ts';
-import { appendEvent, loadKv, maxSeq, recentEvents, saveKv } from './db.ts';
+import { appendEvent, loadKv, loadRelationalState, maxSeq, recentEvents, saveRelationalState } from './db.ts';
 import { defaultInterests, initialInquiries, initialMails } from './seed.ts';
 
 const PROJECT_ID = 'company_alpha';
@@ -141,7 +141,7 @@ function migrateTask(task: LegacyTask, state: PersistedState) {
 }
 
 function load(): PersistedState {
-  const saved = loadKv<PersistedState>('state');
+  const saved = loadRelationalState<PersistedState>() ?? loadKv<PersistedState>('state');
   if (!saved) return fresh();
   if (saved.version === 2) {
     saved.shares = [];
@@ -166,13 +166,6 @@ class Store {
   private snapshotScheduled = false;
 
   constructor() {
-    for (const task of this.state.tasks) {
-      if (task.status === 'running' || task.status === 'awaiting_help' || task.status === 'awaiting_approval') {
-        task.status = 'failed';
-        task.failureReason = '서버가 다시 시작되어 진행 중이던 업무가 중단되었습니다.';
-        task.help = null;
-      }
-    }
     for (const agent of this.state.agents) {
       if (!isModelId(agent.model)) agent.model = DEFAULT_MODEL_BY_ROLE[agent.role];
       if (!isSkin(agent.skin)) agent.skin = 'pixel';
@@ -351,7 +344,7 @@ class Store {
   }
 
   private persist() {
-    saveKv('state', this.state);
+    saveRelationalState(this.state as unknown as import('./db.ts').RelationalStateShape);
   }
 }
 

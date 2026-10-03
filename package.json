@@ -10,9 +10,15 @@
     "build": "vite build",
     "start": "tsx server/index.ts",
     "office": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/office.ps1",
-    "typecheck": "tsc --noEmit -p ."
+    "typecheck": "tsc --noEmit -p .",
+    "test": "node --experimental-strip-types --test --test-concurrency=1 tests/*.test.ts"
   },
   "dependencies": {
+    "@temporalio/activity": "^1.24.0",
+    "@temporalio/client": "^1.24.0",
+    "@temporalio/common": "^1.24.0",
+    "@temporalio/worker": "^1.24.0",
+    "@temporalio/workflow": "^1.24.0",
     "@xyflow/react": "^12.12.0",
     "dompurify": "^3.4.16",
     "express": "^5.2.1",

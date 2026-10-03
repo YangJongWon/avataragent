@@ -13,20 +13,13 @@ import { canSeeEvent, ForbiddenError, snapshotFor } from './access.ts';
 import { authEnabled, authRouter, stillValid, viewerOf } from './auth.ts';
 import { config } from './config.ts';
 import {
-  answerHelp,
-  approve,
   autoRunTick,
-  cancelTask,
-  createTask,
-  designPlan,
-  drainQueues,
-  requestChanges,
   setPaused,
   simulateInquiry,
   simulateMail,
-  updatePlan,
 } from './orchestrator.ts';
 import { store } from './store.ts';
+import { workflowRuntime } from './workflow-runtime.ts';
 
 const app = express();
 app.set('trust proxy', 'loopback');
@@ -55,7 +48,7 @@ app.post('/api/tasks', (req, res) => {
   if (typeof officeId !== 'string') throw new Error('사무실을 선택해 주세요.');
   guard(res, 'operate', officeId);
   res.json(
-    createTask({
+    workflowRuntime.createTask({
       officeId,
       title: typeof title === 'string' ? title : undefined,
       description: typeof description === 'string' ? description : undefined,
@@ -72,7 +65,7 @@ app.post('/api/offices/:id/plan-preview', async (req, res, next) => {
     guard(res, 'operate', req.params.id);
     const { title, description, taskType } = req.body ?? {};
     res.json(
-      await designPlan({
+      await workflowRuntime.designPlan({
         officeId: req.params.id,
         title: String(title ?? ''),
         description: String(description ?? ''),
@@ -86,7 +79,7 @@ app.post('/api/offices/:id/plan-preview', async (req, res, next) => {
 
 app.put('/api/tasks/:id/plan', (req, res) => {
   guard(res, 'operate', officeOfTask(req.params.id));
-  res.json(updatePlan(req.params.id, req.body?.steps));
+  res.json(workflowRuntime.updatePlan(req.params.id, req.body?.steps));
 });
 
 app.post('/api/offices', (req, res) => {
@@ -151,27 +144,27 @@ app.put('/api/interests', (req, res) => {
 
 app.post('/api/tasks/:id/cancel', (req, res) => {
   guard(res, 'operate', officeOfTask(req.params.id));
-  cancelTask(req.params.id);
+  workflowRuntime.cancelTask(req.params.id);
   res.json({ ok: true });
 });
 
 app.post('/api/tasks/:id/help', (req, res) => {
   guard(res, 'operate', officeOfTask(req.params.id));
   const answer = req.body?.answer;
-  answerHelp(req.params.id, typeof answer === 'string' && answer.trim() ? answer : null);
+  workflowRuntime.answerHelp(req.params.id, typeof answer === 'string' && answer.trim() ? answer : null);
   res.json({ ok: true });
 });
 
 app.post('/api/tasks/:id/approve', (req, res) => {
   guard(res, 'operate', officeOfTask(req.params.id));
   const valueKrw = req.body?.valueKrw;
-  approve(req.params.id, typeof valueKrw === 'number' && Number.isFinite(valueKrw) ? valueKrw : undefined);
+  workflowRuntime.approve(req.params.id, typeof valueKrw === 'number' && Number.isFinite(valueKrw) ? valueKrw : undefined);
   res.json({ ok: true });
 });
 
 app.post('/api/tasks/:id/request-changes', (req, res) => {
   guard(res, 'operate', officeOfTask(req.params.id));
-  requestChanges(req.params.id, String(req.body?.comment ?? ''));
+  workflowRuntime.requestChanges(req.params.id, String(req.body?.comment ?? ''));
   res.json({ ok: true });
 });
 
@@ -312,5 +305,6 @@ server.listen(config.port, () => {
   console.log(
     `[office] server http://localhost:${config.port}  provider=${config.provider} model=${config.model || '(미설정)'}  password=${authEnabled() ? 'on' : 'off'}`,
   );
-  drainQueues();
+  workflowRuntime.start();
+  workflowRuntime.drain();
 });

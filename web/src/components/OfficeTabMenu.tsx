@@ -47,8 +47,22 @@ export function OfficeTabMenu({ title, x, y, items, onClose }: Props) {
   }, [onClose]);
 
   return (
-    <div ref={ref} className="context-menu floating" style={pos} role="menu" onContextMenu={(e) => e.preventDefault()}>
-      <div className="context-title">{title}</div>
+    <div
+      ref={ref}
+      className="context-menu floating"
+      style={pos}
+      role="menu"
+      tabIndex={-1}
+      onBlur={(e) => {
+        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+        onClose();
+      }}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <div className="context-title">
+        <span>{title}</span>
+        <button className="context-close" onClick={onClose} aria-label="닫기">X</button>
+      </div>
       {items.map((item) => (
         <button
           key={item.label}

@@ -115,11 +115,17 @@ export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
         <div
           className={`context-menu${menuPos.x > SCENE_W * 0.6 ? ' flip' : ''}`}
           style={pct(menuPos.x > SCENE_W * 0.6 ? menuPos.x - 40 : menuPos.x + 40, Math.min(menuPos.y + 30, SCENE_H * 0.45))}
+          tabIndex={-1}
+          onBlur={(e) => {
+            // Don't close if focus moves to something inside the menu
+            if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+            setMenuAgent(null);
+          }}
           onMouseLeave={() => setMenuAgent(null)}
         >
           <div className="context-title">
             <span>{menu.name}</span>
-            <button className="context-close" onClick={() => setMenuAgent(null)} aria-label="닫기">X(닫기)</button>
+            <button className="context-close" onClick={() => setMenuAgent(null)} aria-label="닫기">X</button>
           </div>
           {[
             { label: '상태 보기', run: () => setBubbleAgent(menu.id) },

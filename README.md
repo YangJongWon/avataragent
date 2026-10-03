@@ -75,6 +75,14 @@ npm run office -- stop
 
 > 외부에 공개할 때는 `.env`의 `ACCESS_PASSWORD`를 꼭 설정하세요.
 
+### 검증
+
+```powershell
+npm test
+npm run typecheck
+npm run build
+```
+
 ## 폴더 구조
 
 ```text
@@ -89,3 +97,4 @@ scripts/  운영 스크립트 (office.ps1)
 - [제품 기획서](AI_AGENT_OFFICE_PRODUCT_PLAN.md)
 - [개발 현황](DEVELOPMENT_STATUS.md)
 - [운영 가이드](OPERATIONS.md)
+- [아키텍처 결정 기록](docs/ARCHITECTURE_DECISIONS.md)
