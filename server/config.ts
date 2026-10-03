@@ -51,6 +51,9 @@ export const config = {
   /** stdio MCP servers run commands on this PC, so registering them must be switched on explicitly. */
   mcpAllowStdio: process.env.MCP_ALLOW_STDIO === '1',
   mcpTimeoutMs: num('MCP_TIMEOUT_MS', 30_000),
+  /** LibreOffice for rendering exports so a vision model can check them; found on the usual paths when empty. */
+  sofficePath: process.env.SOFFICE_PATH?.trim() || '',
+  designReviewRounds: Math.max(1, Math.min(3, Math.round(num('DESIGN_REVIEW_ROUNDS', 2)))),
   workflowRuntime: process.env.WORKFLOW_RUNTIME === 'temporal' ? ('temporal' as const) : ('local' as const),
   temporal: {
     address: process.env.TEMPORAL_ADDRESS || 'localhost:7233',

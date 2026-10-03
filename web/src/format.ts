@@ -61,7 +61,9 @@ export function eventLabel(event: OfficeEvent, agents: Map<string, Agent>) {
     case 'mcp.changed':
       return `${p.summary}`;
     case 'task.designed':
-      return `${who} ✨ ${p.kind === 'deck' ? '슬라이드' : '문서'} 디자인 완료 (초안 v${p.version})${Number(p.dropped) ? ` · 근거 없는 숫자 블록 ${p.dropped}개 제외` : ''}`;
+      return `${who} ✨ ${p.kind === 'deck' ? '슬라이드' : p.kind === 'sheet' ? 'Excel' : '문서'} 디자인 완료 (초안 v${p.version})${
+        p.reviewed ? ` · 화면 검수 ${p.rounds}회 ${p.passed ? '통과' : '지적 남음'}` : ''
+      }${Number(p.dropped) ? ` · 근거 없는 숫자 블록 ${p.dropped}개 제외` : ''}`;
     case 'artifact.created':
       return `${who} 산출물 생성: ${p.title}`;
     case 'task.handed_off':

@@ -2236,11 +2236,19 @@ p.plan-note {
   border-top: 1px dashed var(--line);
   padding-top: 6px;
 }
-.export-design {
+.export-design-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+.export-design .row {
+  gap: 4px;
+}
+.export-design ul {
+  margin: 4px 0;
+  padding-left: 18px;
 }
 .export-design .ok {
   color: var(--green, #2e7d4f);

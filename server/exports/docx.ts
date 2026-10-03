@@ -97,11 +97,11 @@ function chartTable(chart: ChartData, theme: Theme) {
   return new Table({ width: full, borders: noBorders, rows });
 }
 
-function card(children: Paragraph[], shade: string, edge: string) {
+function card(children: Paragraph[], shade: string, pad = 160) {
   return new Table({
     width: full,
-    borders: { ...noBorders, left: { style: BorderStyle.SINGLE, size: 24, color: edge } },
-    rows: [new TableRow({ children: [new TableCell({ shading: fill(shade), margins: { top: 140, bottom: 140, left: 240, right: 240 }, children })] })],
+    borders: noBorders,
+    rows: [new TableRow({ children: [new TableCell({ shading: fill(shade), margins: { top: pad, bottom: pad, left: pad + 80, right: pad + 80 }, children })] })],
   });
 }
 
@@ -145,20 +145,16 @@ function block(b: Block, theme: Theme, prev: Block | undefined): (Paragraph | Ta
       ];
     }
     case 'callout': {
-      const [shade, edge] = b.tone === 'good' ? ['ECFDF3', theme.good] : b.tone === 'warn' ? ['FFF7ED', theme.warn] : ['EEF2FF', '6366F1'];
+      const [shade, edge] = b.tone === 'good' ? ['ECFDF3', theme.good] : b.tone === 'warn' ? ['FFF7ED', theme.warn] : [theme.soft, theme.accent];
       return [
-        card([...(b.title ? [new Paragraph({ children: [text(b.title, { bold: true, color: edge })] })] : []), new Paragraph({ children: [text(b.text)] })], shade, edge),
+        card([...(b.title ? [new Paragraph({ children: [text(b.title, { bold: true, color: edge })] })] : []), new Paragraph({ children: [text(b.text)] })], shade),
         gap(),
       ];
     }
     case 'quote':
       return [
-        new Paragraph({
-          indent: { left: 400 },
-          border: { left: { style: BorderStyle.SINGLE, size: 18, color: theme.accent, space: 12 } },
-          spacing: { before: 120, after: 160 },
-          children: [text(b.text, { italics: true }), ...(b.by ? [text(`  — ${b.by}`, { color: theme.muted })] : [])],
-        }),
+        card([new Paragraph({ children: [text('“ ', { bold: true, size: 36, color: theme.accent }), text(b.text, { italics: true }), ...(b.by ? [text(`  — ${b.by}`, { color: theme.muted })] : [])] })], 'F6F7F9'),
+        gap(),
       ];
     case 'table': {
       const caption = captionOf(b.table.title, prev);
@@ -183,7 +179,7 @@ function block(b: Block, theme: Theme, prev: Block | undefined): (Paragraph | Ta
             (i) =>
               new TableRow({
                 children: [
-                  new TableCell({ width: pct(22), margins: cellMargins, borders: { left: { style: BorderStyle.SINGLE, size: 24, color: theme.accent } }, children: [new Paragraph({ children: [text(i.when, { bold: true, color: theme.accent })] })] }),
+                  new TableCell({ width: pct(22), margins: cellMargins, shading: fill(theme.soft), children: [new Paragraph({ children: [text(i.when, { bold: true, color: theme.accent })] })] }),
                   new TableCell({ width: pct(78), margins: cellMargins, children: [new Paragraph({ children: [text(i.what)] })] }),
                 ],
               }),
@@ -217,12 +213,19 @@ function block(b: Block, theme: Theme, prev: Block | undefined): (Paragraph | Ta
 
 export async function renderDocx(doc: DocSpec, theme: Theme): Promise<Buffer> {
   const children: (Paragraph | Table)[] = [
-    new Paragraph({ spacing: { after: 80 }, border: { left: { style: BorderStyle.SINGLE, size: 48, color: theme.accent, space: 12 } }, children: [text(doc.title, { bold: true, size: 48 })] }),
-    new Paragraph({ spacing: { after: 360 }, indent: { left: 0 }, children: [text(doc.subtitle, { color: theme.muted })] }),
+    card(
+      [
+        new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: doc.title, bold: true, size: 48, color: 'FFFFFF', font: theme.headFont })] }),
+        new Paragraph({ children: [text(doc.subtitle, { color: theme.soft })] }),
+      ],
+      theme.dark,
+      360,
+    ),
+    gap(),
   ];
   if (doc.summary.length) {
     children.push(
-      card([new Paragraph({ children: [text('핵심 요약', { bold: true, color: theme.accent })] }), ...doc.summary.map((s) => para(s, { bullet: { level: 0 } }))], theme.soft, theme.accent),
+      card([new Paragraph({ children: [text('핵심 요약', { bold: true, color: theme.accent })] }), ...doc.summary.map((s) => para(s, { bullet: { level: 0 } }))], theme.soft),
       gap(),
     );
   }
@@ -238,8 +241,8 @@ export async function renderDocx(doc: DocSpec, theme: Theme): Promise<Buffer> {
     styles: {
       default: { document: { run: { font: theme.font, size: 21, color: theme.ink }, paragraph: { spacing: { line: 300 } } } },
       paragraphStyles: [
-        { id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: { size: 30, bold: true, color: theme.accent }, paragraph: { spacing: { before: 360, after: 120 }, keepNext: true } },
-        { id: 'Heading2', name: 'Heading 2', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: { size: 24, bold: true }, paragraph: { spacing: { before: 240, after: 80 }, keepNext: true } },
+        { id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: { size: 30, bold: true, color: theme.accent, font: theme.headFont }, paragraph: { spacing: { before: 360, after: 120 }, keepNext: true } },
+        { id: 'Heading2', name: 'Heading 2', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: { size: 24, bold: true, font: theme.headFont }, paragraph: { spacing: { before: 240, after: 80 }, keepNext: true } },
       ],
     },
     sections: [

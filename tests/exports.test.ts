@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
+import { fitDeck, lintDoc } from '../server/exports/fit.ts';
 import { buildExport } from '../server/exports/index.ts';
+import { mockWorkbook, sanitizeWorkbook } from '../server/exports/sheet.ts';
 import { deckFromDoc, docFromMarkdown, enrichDoc, sanitizeDeck, sanitizeDoc } from '../server/exports/spec.ts';
 import type { Office, Task } from '../shared/types.ts';
 
@@ -149,4 +151,108 @@ test('an AI layout is used only for the draft version it was made from', async (
   assert.equal((await buildExport(current, office, 'docx')).designed, true);
   assert.equal((await buildExport(stale, office, 'docx')).designed, false);
   assert.equal((await buildExport(current, office, 'csv')).designed, false);
+});
+
+test('a workbook plan keeps only steps that point at real columns', () => {
+  const doc = docFromMarkdown(REPORT, 't', 's');
+  const plan = sanitizeWorkbook(
+    {
+      sheets: [
+        {
+          table: 0,
+          name: '후보 비교',
+          sort: { column: '만족도', desc: true },
+          computed: [
+            { name: '비용 비중', op: 'share', a: '월 비용(원)' },
+            { name: '이상한 열', op: 'diff', a: '후보', b: '만족도' },
+          ],
+          totals: [{ column: '월 비용(원)', fn: 'sum' }, { column: '비용 비중', fn: 'sum' }, { column: '없는 열', fn: 'sum' }, { column: '만족도', fn: 'median' }],
+          highlight: [{ column: '만족도', op: '<', value: 70, tone: 'bad' }],
+          bars: ['월 비용(원)', '후보'],
+        },
+        { table: 7 },
+      ],
+      style: { palette: 'ocean', fonts: 'serif' },
+    },
+    doc,
+  );
+  assert.equal(plan.sheets.length, 1);
+  const s = plan.sheets[0];
+  assert.deepEqual(s.computed, [{ name: '비용 비중', op: 'share', a: '월 비용(원)' }]);
+  assert.deepEqual(s.totals, [{ column: '월 비용(원)', fn: 'sum' }, { column: '비용 비중', fn: 'sum' }]);
+  assert.deepEqual(s.bars, ['월 비용(원)']);
+  assert.deepEqual(plan.style, { palette: 'ocean' });
+});
+
+test('the designed workbook writes real formulas, sorting and conditional formats', async () => {
+  const doc = docFromMarkdown(REPORT, 't', 's');
+  const spec = sanitizeWorkbook(
+    {
+      sheets: [
+        {
+          table: 0,
+          sort: { column: '만족도', desc: true },
+          computed: [{ name: '비용 비중', op: 'share', a: '월 비용(원)' }],
+          totals: [{ column: '월 비용(원)', fn: 'sum' }, { column: '만족도', fn: 'average' }],
+          highlight: [{ column: '만족도', op: '<', value: 70, tone: 'bad' }],
+          bars: ['월 비용(원)'],
+        },
+      ],
+    },
+    doc,
+  );
+  const task = taskWith(REPORT, { sheet: { draftVersion: 2, spec, dropped: 0, createdAt: '2026-10-04T00:00:00Z' } });
+  const file = await buildExport(task, office, 'xlsx');
+  assert.equal(file.designed, true);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(file.body as Buffer);
+  const ws = wb.getWorksheet('비교')!;
+  assert.deepEqual([2, 3, 4].map((r) => ws.getCell(`A${r}`).value), ['B안', 'A안', 'C안']);
+  assert.equal(ws.getCell('D1').value, '비용 비중');
+  assert.deepEqual(ws.getCell('D2').value, { formula: 'IF(SUM(B$2:B$4)=0,"",B2/SUM(B$2:B$4))', result: 1200000 / 4500000 });
+  assert.equal(ws.getCell('A5').value, '요약');
+  assert.deepEqual(ws.getCell('B5').value, { formula: 'SUM(B2:B4)', result: 4500000 });
+  assert.equal((ws.getCell('C5').value as { formula: string }).formula, 'AVERAGE(C2:C4)');
+  const zip = await JSZip.loadAsync(file.body as Buffer);
+  const sheetXml = await zip.file('xl/worksheets/sheet2.xml')!.async('string');
+  assert.ok(sheetXml.includes('<dataBar') && sheetXml.includes('operator="lessThan"'));
+
+  const mock = mockWorkbook(doc);
+  assert.deepEqual(mock.sheets[0].totals, [{ column: '월 비용(원)', fn: 'sum' }, { column: '만족도', fn: 'average' }]);
+});
+
+test('slides that would overflow get split instead of shrinking below the floor', () => {
+  const long = Array.from({ length: 24 }, (_, i) => `${i + 1}번째 항목은 설명이 길어서 한 줄에 다 들어가지 않을 수도 있는 긴 문장입니다`);
+  const rows = Array.from({ length: 30 }, (_, i) => [`행 ${i + 1}`, '내용이 조금 긴 칸', String(i)]);
+  const { slides, issues } = fitDeck({
+    title: 't',
+    subtitle: 's',
+    sources: [],
+    slides: [
+      { title: '짧은 목록', block: { type: 'bullets', items: ['하나', '둘', '셋'] } },
+      { title: '긴 목록', block: { type: 'bullets', items: long } },
+      { title: '긴 표', block: { type: 'table', table: { columns: ['이름', '내용', '값'], rows } } },
+    ],
+  });
+  assert.equal(slides[0].rows, true);
+  const listParts = slides.filter((s) => s.title.startsWith('긴 목록'));
+  assert.ok(listParts.length >= 2 && listParts.every((s) => s.pt >= 14));
+  assert.deepEqual(listParts.flatMap((s) => (s.block?.type === 'bullets' ? s.block.items : [])), long);
+  const tableParts = slides.filter((s) => s.title.startsWith('긴 표'));
+  assert.ok(tableParts.length >= 2);
+  assert.equal(tableParts.reduce((n, s) => n + (s.block?.type === 'table' ? s.block.table.rows.length : 0), 0), 30);
+  assert.equal(issues.length, 2);
+  assert.ok(lintDoc({ title: 't', subtitle: '', summary: [], sources: [], blocks: [{ type: 'paragraph', text: '가'.repeat(700) }] }).length >= 2);
+});
+
+test('the chosen palette and fonts reach the files', async () => {
+  const doc = { ...enrichDoc(docFromMarkdown(REPORT, 't', 's')), style: { palette: 'forest' as const, fonts: 'classic' as const } };
+  const deck = { ...deckFromDoc(doc), style: doc.style };
+  const record = { dropped: 0, createdAt: '2026-10-04T00:00:00Z', draftVersion: 2 };
+  const task = taskWith(REPORT, { doc: { ...record, spec: doc }, deck: { ...record, spec: deck } });
+  const pptx = await JSZip.loadAsync((await buildExport(task, office, 'pptx')).body as Buffer);
+  const cover = await pptx.file('ppt/slides/slide1.xml')!.async('string');
+  assert.ok(cover.includes('1B3A1C') && cover.includes('바탕'));
+  const html = (await buildExport(task, office, 'pdf')).body as string;
+  assert.ok(html.includes('#2C5F2D') && html.includes('Batang'));
 });

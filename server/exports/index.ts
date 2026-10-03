@@ -1,4 +1,4 @@
-import { EXPORT_FORMATS, type DeckSpec, type DesignKind, type DocSpec, type ExportFormat } from '../../shared/design.ts';
+import { EXPORT_FORMATS, type DeckSpec, type DesignKind, type DocSpec, type ExportFormat, type TaskDesigns, type WorkbookSpec } from '../../shared/design.ts';
 import { splitDraft } from '../../shared/draft.ts';
 import type { Artifact, Office, Task } from '../../shared/types.ts';
 import { renderDocx } from './docx.ts';
@@ -37,38 +37,47 @@ export function subtitleOf(task: Task, office: Office) {
   return `${office.name} · ${date}`;
 }
 
-export function designFor<K extends DesignKind>(task: Task, kind: K, draftVersion: number) {
+export function designFor<K extends DesignKind>(task: Task, kind: K, draftVersion: number): TaskDesigns[K] | undefined {
   const record = task.designs?.[kind];
   return record && record.draftVersion === draftVersion ? record : undefined;
+}
+
+/** The report exactly as written: the source for CSV/Excel values and the fallback layout. */
+export function plainDoc(task: Task, office: Office) {
+  return docFromMarkdown(reportOf(task).markdown, task.title, subtitleOf(task, office));
+}
+
+export function renderDoc(spec: DocSpec, office: Office) {
+  return renderDocx(spec, themeOf(office.team, spec.style));
+}
+
+export function renderDeck(spec: DeckSpec, office: Office) {
+  return renderPptx(spec, themeOf(office.team, spec.style));
 }
 
 const fileName = (title: string, ext: string) => `${title.replace(/[\\/:*?"<>|\r\n]+/g, '_').trim().slice(0, 80) || 'report'}.${ext}`;
 
 export async function buildExport(task: Task, office: Office, format: ExportFormat, opts: { print?: boolean } = {}): Promise<ExportFile> {
-  const { draft, markdown } = reportOf(task);
-  const theme = themeOf(office.team);
-  const plain = docFromMarkdown(markdown, task.title, subtitleOf(task, office));
+  const { draft } = reportOf(task);
+  const plain = plainDoc(task, office);
   const kind = EXPORT_FORMATS[format].design;
-  const docDesign = kind === 'doc' ? designFor(task, 'doc', draft.version) : undefined;
-  const deckDesign = kind === 'deck' ? designFor(task, 'deck', draft.version) : undefined;
-  const doc: DocSpec = docDesign?.spec ?? plain;
-  const deck: DeckSpec = deckDesign?.spec ?? deckFromDoc(plain);
-  const file = (body: Buffer | string, ext: string) => ({
-    body,
-    mime: MIME[format],
-    filename: fileName(task.title, ext),
-    designed: Boolean(docDesign ?? deckDesign),
-  });
+  const doc = kind === 'doc' ? designFor(task, 'doc', draft.version) : undefined;
+  const deck = kind === 'deck' ? designFor(task, 'deck', draft.version) : undefined;
+  const sheet = kind === 'sheet' ? designFor(task, 'sheet', draft.version) : undefined;
+  const docSpec: DocSpec = doc?.spec ?? plain;
+  const deckSpec: DeckSpec = deck?.spec ?? deckFromDoc(plain);
+  const workbook: WorkbookSpec | undefined = sheet?.spec;
+  const file = (body: Buffer | string, ext: string) => ({ body, mime: MIME[format], filename: fileName(task.title, ext), designed: Boolean(doc ?? deck ?? sheet) });
   switch (format) {
     case 'csv':
       return file(renderCsv(plain), 'csv');
     case 'xlsx':
-      return file(await renderXlsx(plain, theme), 'xlsx');
+      return file(await renderXlsx(plain, themeOf(office.team, workbook?.style), workbook), 'xlsx');
     case 'docx':
-      return file(await renderDocx(doc, theme), 'docx');
+      return file(await renderDoc(docSpec, office), 'docx');
     case 'pptx':
-      return file(await renderPptx(deck, theme), 'pptx');
+      return file(await renderDeck(deckSpec, office), 'pptx');
     case 'pdf':
-      return file(renderHtml(doc, theme, Boolean(opts.print)), 'html');
+      return file(renderHtml(docSpec, themeOf(office.team, docSpec.style), Boolean(opts.print)), 'html');
   }
 }

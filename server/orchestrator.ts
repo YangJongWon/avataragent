@@ -5,11 +5,8 @@ import type { Agent, Artifact, Expression, Role, StepStatus, Task, TeamId, Workf
 import { MAX_LOOP, normalizePlan, parseLoop, remapLoops, STEP_KIND, templatePlan, validatePlan } from '../shared/workflow.ts';
 import { usableBy, type McpServer, type McpTool, type McpToolMode, type PlannedAction } from '../shared/mcp.ts';
 import { modelOf } from '../shared/models.ts';
-import { complete, costKrw, parseJson, type Purpose } from './ai.ts';
+import { complete, costKrw, parseJson, type Attachment, type Purpose } from './ai.ts';
 import { config, ORGANIZATION_SAFETY_RULES } from './config.ts';
-import type { DesignKind } from '../shared/design.ts';
-import { reportOf, subtitleOf } from './exports/index.ts';
-import { deckFromDoc, designPrompt, docFromMarkdown, enrichDoc, sanitizeDeck, sanitizeDoc } from './exports/spec.ts';
 import { callTool } from './mcp.ts';
 import { nextInquiry, nextMail } from './seed.ts';
 import { store } from './store.ts';
@@ -82,7 +79,7 @@ async function waitIfPaused(agent: Agent) {
   }
 }
 
-async function callAI(agent: Agent, task: Task | null, purpose: Purpose, user: string, mockText: () => string, json = false) {
+export async function callAI(agent: Agent, task: Task | null, purpose: Purpose, user: string, mockText: () => string, json = false, attachments?: Attachment[]) {
   const budget = store.budget;
   const taskId = task?.id;
   if (budget.spentKrw >= budget.monthlyKrw) {
@@ -96,7 +93,7 @@ async function callAI(agent: Agent, task: Task | null, purpose: Purpose, user: s
   }
 
   const model = modelOf(store.agent(agent.id).model);
-  const result = await complete({ purpose, system: systemPrompt(agent), user, json, model, mockText });
+  const result = await complete({ purpose, system: systemPrompt(agent), user, json, model, mockText, attachments });
   const amount = costKrw(result, model);
 
   if (taskId) {
@@ -1290,40 +1287,6 @@ export function setActionEnabled(taskId: string, actionId: string, enabled: bool
     if (target) target.enabled = enabled;
   });
   return store.task(taskId).actions?.find((a) => a.id === actionId);
-}
-
-const designing = new Set<string>();
-
-/** The writer lays the finished report out for Word/PDF or slides; the server renders whatever survives sanitizing. */
-export async function designReport(taskId: string, kind: DesignKind) {
-  const key = `${taskId}:${kind}`;
-  if (designing.has(key)) throw new Error('이미 디자인하는 중이에요. 잠시만 기다려 주세요.');
-  designing.add(key);
-  try {
-    const task = store.task(taskId);
-    const office = store.office(task.officeId);
-    const { draft, markdown } = reportOf(task);
-    const agent = store.data.agents.find((a) => a.id === draft.agentId && a.officeId === task.officeId) ?? agentOf(task, 'writer');
-    const subtitle = subtitleOf(task, office);
-    const mock = () => {
-      const doc = enrichDoc(docFromMarkdown(markdown, task.title, subtitle));
-      return JSON.stringify(kind === 'doc' ? doc : deckFromDoc(doc));
-    };
-    const text = await callAI(agent, task, 'design', designPrompt(kind, markdown, task.title), mock, true);
-    const raw = parseJson<Record<string, unknown>>(text, {});
-    const source = `${task.title}\n${markdown}`;
-    const { spec, dropped } = kind === 'doc' ? sanitizeDoc(raw, source, task.title, subtitle) : sanitizeDeck(raw, source, task.title, subtitle);
-    const empty = 'blocks' in spec ? spec.blocks.length === 0 : spec.slides.length === 0;
-    if (empty) throw new Error('AI 디자인 결과를 읽지 못했어요. 다시 시도하거나 기본 디자인으로 내보내 주세요.');
-    const record = { draftVersion: draft.version, spec, dropped, createdAt: now() };
-    store.updateTask(taskId, (t) => {
-      t.designs = { ...t.designs, [kind]: record };
-    });
-    store.emit('task.designed', { taskId, agentId: agent.id, payload: { kind, dropped, version: draft.version } });
-    return { dropped };
-  } finally {
-    designing.delete(key);
-  }
 }
 
 export function setPaused(agentId: string, paused: boolean) {

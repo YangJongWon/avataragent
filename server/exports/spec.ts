@@ -1,5 +1,5 @@
 import { marked, type Token, type Tokens } from 'marked';
-import type { Block, CalloutTone, ChartData, CompareSide, DeckSpec, DesignKind, DocSpec, Kpi, Slide, TableData } from '../../shared/design.ts';
+import { isPaletteId, type Block, type CalloutTone, type ChartData, type CompareSide, type DeckSpec, type DesignStyle, type DocSpec, type Kpi, type Slide, type TableData } from '../../shared/design.ts';
 
 const SUMMARY_RE = /^(핵심\s*)?(요약|summary|tl;?dr)/i;
 const SOURCES_RE = /^(출처|참고(\s*자료|\s*문헌)?|sources?|references?)/i;
@@ -94,6 +94,8 @@ export function docFromMarkdown(markdown: string, fallbackTitle: string, subtitl
   return doc;
 }
 
+export const tablesOf = (doc: DocSpec) => doc.blocks.flatMap((b) => (b.type === 'table' ? [b.table] : []));
+
 /** A table's title repeats the heading right above it when it came from the markdown section. */
 export function captionOf(title: string | undefined, prev: Block | undefined) {
   if (!title) return '';
@@ -184,10 +186,10 @@ export function parseNumber(cell: string): number | null {
   return Number(s);
 }
 
-const str = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
-const strs = (v: unknown, maxItems: number, maxLen: number) =>
+export const str = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
+export const strs = (v: unknown, maxItems: number, maxLen: number) =>
   (Array.isArray(v) ? v : []).map((x) => str(x, maxLen)).filter(Boolean).slice(0, maxItems);
-const obj = (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+export const obj = (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 
 function sanitizeTable(v: unknown): TableData | null {
   const t = obj(v);
@@ -298,9 +300,18 @@ export function sanitizeDoc(raw: unknown, source: string, fallbackTitle: string,
       summary: strs(r.summary, 8, 300).filter(keep),
       blocks,
       sources: strs(r.sources, 30, 400),
+      style: sanitizeStyle(r.style),
     },
     dropped,
   };
+}
+
+export function sanitizeStyle(v: unknown): DesignStyle | undefined {
+  const s = obj(v);
+  const style: DesignStyle = {};
+  if (isPaletteId(s.palette)) style.palette = s.palette;
+  if (s.fonts === 'modern' || s.fonts === 'classic') style.fonts = s.fonts;
+  return Object.keys(style).length ? style : undefined;
 }
 
 export function sanitizeDeck(raw: unknown, source: string, fallbackTitle: string, subtitle: string): Sanitized<DeckSpec> {
@@ -323,7 +334,13 @@ export function sanitizeDeck(raw: unknown, source: string, fallbackTitle: string
     slides.push({ title, block, notes: str(o.notes, 500) || undefined });
   }
   return {
-    spec: { title: str(r.title, 120) || fallbackTitle, subtitle: str(r.subtitle, 120) || subtitle, slides, sources: strs(r.sources, 30, 400) },
+    spec: {
+      title: str(r.title, 120) || fallbackTitle,
+      subtitle: str(r.subtitle, 120) || subtitle,
+      slides,
+      sources: strs(r.sources, 30, 400),
+      style: sanitizeStyle(r.style),
+    },
     dropped,
   };
 }
@@ -368,62 +385,4 @@ export function enrichDoc(base: DocSpec): DocSpec {
   }
   doc.blocks = blocks;
   return doc;
-}
-
-const BLOCK_GUIDE = [
-  '{"type":"heading","text":"섹션 제목"}',
-  '{"type":"subheading","text":"소제목"}',
-  '{"type":"paragraph","text":"문단"}',
-  '{"type":"bullets","items":["항목"],"ordered":false}',
-  '{"type":"kpis","items":[{"label":"지표 이름","value":"38%","note":"짧은 설명"}]}  ← 핵심 숫자 2~4개',
-  '{"type":"callout","tone":"good|info|warn","title":"결론","text":"강조할 내용"}  ← 결론·권고·주의',
-  '{"type":"quote","text":"인용","by":"출처"}',
-  '{"type":"table","table":{"title":"표 제목","columns":["열"],"rows":[["값"]]}}',
-  '{"type":"chart","chart":{"kind":"bar|line|pie","title":"차트 제목","labels":["항목"],"series":[{"name":"계열","values":[1]}],"unit":"%"}}  ← 표의 수치 비교',
-  '{"type":"timeline","items":[{"when":"1주차","what":"할 일"}]}  ← 일정·단계',
-  '{"type":"compare","left":{"title":"A안","items":["장점"]},"right":{"title":"B안","items":["장점"]}}  ← 두 안 비교',
-];
-
-const COMMON_RULES = [
-  '- 보고서에 없는 사실이나 숫자를 만들지 마세요. 숫자는 보고서에 적힌 값을 그대로 옮기고, 계산하거나 단위를 바꾸지 마세요. 근거 없는 숫자가 든 블록은 자동으로 빠집니다.',
-  '- 글을 그대로 나열하지 말고, 핵심 숫자는 kpis, 결론과 권고는 callout, 수치가 든 표는 table과 chart, 일정은 timeline, 두 안 비교는 compare로 바꿔 한눈에 보이게 하세요.',
-  '- 한 차트에는 단위와 크기가 비슷한 값만 넣으세요. 금액과 점수처럼 단위가 다르면 차트를 나누세요.',
-  '- 출처는 sources 배열에 그대로 옮기세요.',
-  '- JSON 객체 하나만 출력하세요. 설명이나 코드 블록 표시는 쓰지 마세요.',
-];
-
-export function designPrompt(kind: DesignKind, markdown: string, title: string) {
-  const head =
-    kind === 'doc'
-      ? [
-          '[이번 일] 완성된 보고서를 Word·PDF 문서 디자인으로 편집합니다.',
-          '- 보고서의 내용은 빠짐없이 옮기되, 읽기 좋은 순서와 구조로 다시 배치하세요.',
-          '- summary에는 결론 중심의 핵심 요약 3~5줄을 넣으세요.',
-          '',
-          '[출력 형식]',
-          '{"title":"제목","subtitle":"부제","summary":["요약"],"blocks":[블록...],"sources":["출처"]}',
-        ]
-      : [
-          '[이번 일] 완성된 보고서를 발표용 슬라이드(PowerPoint)로 편집합니다.',
-          '- 슬라이드 6~14장. 한 장에 메시지 하나, 블록은 한 장에 하나만 씁니다.',
-          '- 슬라이드 제목은 주제가 아니라 그 장의 결론을 한 문장으로 쓰세요 (예: "B안이 비용을 30% 줄인다").',
-          '- bullets는 한 장에 3~5개, 항목은 짧게. notes에는 발표자가 말할 내용을 1~2문장으로.',
-          '- 표지와 출처 장은 자동으로 붙으니 만들지 마세요.',
-          '',
-          '[출력 형식]',
-          '{"title":"제목","subtitle":"부제","slides":[{"title":"이 장의 결론","block":블록,"notes":"발표자 메모"}],"sources":["출처"]}',
-        ];
-  return [
-    ...head,
-    '',
-    '[블록 종류]',
-    ...BLOCK_GUIDE.map((b) => `- ${b}`),
-    '',
-    '[규칙]',
-    ...COMMON_RULES,
-    '',
-    `[업무 제목] ${title}`,
-    '[보고서]',
-    markdown,
-  ].join('\n');
 }

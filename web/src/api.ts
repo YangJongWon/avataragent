@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { DesignKind, ExportFormat } from '../../shared/design.ts';
+import type { DesignKind, DesignReview, ExportFormat } from '../../shared/design.ts';
 import type { McpServer, McpTool, McpToolMode, PlannedAction } from '../../shared/mcp.ts';
 import { setCatalog, type ApiKind, type Company, type ModelEntry } from '../../shared/models.ts';
 import type {
@@ -83,7 +83,9 @@ export const api = {
   checkMcpServer: (id: string) => call<{ tools: McpTool[] }>('POST', `/api/mcp-servers/${id}/check`),
   startMcpLogin: (id: string) => call<{ url: string | null }>('POST', `/api/mcp-servers/${id}/login`),
   logoutMcp: (id: string) => call('DELETE', `/api/mcp-servers/${id}/login`),
-  designReport: (taskId: string, kind: DesignKind) => call<{ dropped: number }>('POST', `/api/tasks/${taskId}/design`, { kind }),
+  designReport: (taskId: string, kind: DesignKind, review = false) =>
+    call<{ dropped: number; review?: DesignReview }>('POST', `/api/tasks/${taskId}/design`, { kind, review }),
+  exportCapabilities: () => call<ExportCapabilities>('GET', '/api/export-capabilities'),
   exportUrl: (taskId: string, format: ExportFormat, print = false) =>
     `/api/tasks/${taskId}/export?format=${format}${print ? '&print=1' : ''}`,
   exportFile: async (taskId: string, format: ExportFormat) => {
@@ -100,6 +102,12 @@ export const api = {
 };
 
 export type McpServerInput = Pick<McpServer, 'name' | 'icon' | 'transport' | 'url' | 'command' | 'args' | 'enabled' | 'officeIds' | 'oauth'>;
+
+export interface ExportCapabilities {
+  visualReview: boolean;
+  hint: string;
+  rounds: number;
+}
 
 export type CompanyInput = Pick<Company, 'name' | 'hat' | 'color' | 'api' | 'baseUrl'>;
 export type ModelInput = Omit<ModelEntry, 'id' | 'builtin'>;

@@ -3,7 +3,7 @@ import { config } from './config.ts';
 import { apiKeyFor } from './secrets.ts';
 import { store } from './store.ts';
 
-export type Purpose = 'plan' | 'brief' | 'research' | 'clarify' | 'draft' | 'review' | 'check' | 'tools' | 'actions' | 'design';
+export type Purpose = 'plan' | 'brief' | 'research' | 'clarify' | 'draft' | 'review' | 'check' | 'tools' | 'actions' | 'design' | 'design_review';
 
 export interface CompletionRequest {
   purpose: Purpose;
@@ -12,6 +12,14 @@ export interface CompletionRequest {
   json?: boolean;
   model: ModelEntry;
   mockText: () => string;
+  /** Rendered files for a vision-capable model to look at. */
+  attachments?: Attachment[];
+}
+
+export interface Attachment {
+  mime: 'application/pdf';
+  name: string;
+  data: Buffer;
 }
 
 export interface CompletionResult {
@@ -187,7 +195,15 @@ async function openaiCompatible(endpoint: Endpoint, model: string, req: Completi
       model,
       messages: [
         { role: 'system', content: req.system },
-        { role: 'user', content: req.user },
+        {
+          role: 'user',
+          content: req.attachments?.length
+            ? [
+                ...req.attachments.map((a) => ({ type: 'file', file: { filename: a.name, file_data: `data:${a.mime};base64,${a.data.toString('base64')}` } })),
+                { type: 'text', text: req.user },
+              ]
+            : req.user,
+        },
       ],
       ...(req.json ? { response_format: { type: 'json_object' } } : {}),
     },
@@ -208,9 +224,17 @@ async function anthropic(endpoint: Endpoint, model: string, req: CompletionReque
     anthropicHeaders(endpoint.key),
     {
       model,
-      max_tokens: req.purpose === 'design' ? 8192 : 4096,
+      max_tokens: req.purpose === 'design' || req.purpose === 'design_review' ? 8192 : 4096,
       system: req.system,
-      messages: [{ role: 'user', content: req.user }],
+      messages: [
+        {
+          role: 'user',
+          content: [
+            ...(req.attachments ?? []).map((a) => ({ type: 'document', source: { type: 'base64', media_type: a.mime, data: a.data.toString('base64') } })),
+            { type: 'text', text: req.user },
+          ],
+        },
+      ],
     },
   );
   const text = (data.content ?? [])
@@ -228,7 +252,12 @@ async function gemini(endpoint: Endpoint, model: string, req: CompletionRequest)
     { 'x-goog-api-key': endpoint.key },
     {
       systemInstruction: { parts: [{ text: req.system }] },
-      contents: [{ role: 'user', parts: [{ text: req.user }] }],
+      contents: [
+        {
+          role: 'user',
+          parts: [...(req.attachments ?? []).map((a) => ({ inlineData: { mimeType: a.mime, data: a.data.toString('base64') } })), { text: req.user }],
+        },
+      ],
       ...(req.json ? { generationConfig: { responseMimeType: 'application/json' } } : {}),
     },
   );
@@ -247,7 +276,7 @@ async function mock(req: CompletionRequest): Promise<CompletionResult> {
   const text = req.mockText();
   return {
     text,
-    inputTokens: Math.round((req.system.length + req.user.length) / 2),
+    inputTokens: Math.round((req.system.length + req.user.length) / 2) + (req.attachments ?? []).reduce((n, a) => n + Math.round(a.data.length / 40), 0),
     outputTokens: Math.round(text.length / 2),
   };
 }

@@ -25,7 +25,8 @@ import { listModels } from './ai.ts';
 import { authEnabled, authRouter, stillValid, viewerOf } from './auth.ts';
 import { config } from './config.ts';
 import { closeStorage, storageInfo } from './db.ts';
-import { designReport, setActionEnabled, simulateInquiry, simulateMail } from './orchestrator.ts';
+import { setActionEnabled, simulateInquiry, simulateMail } from './orchestrator.ts';
+import { designReport, exportCapabilities } from './exports/designer.ts';
 import { buildExport } from './exports/index.ts';
 import { closeAllConnections, closeConnection, discoverTools } from './mcp.ts';
 import { finishLogin, logout, OAUTH_CALLBACK_PATH, startLogin } from './mcp-oauth.ts';
@@ -201,11 +202,15 @@ app.get('/api/tasks/:id/export', async (req, res) => {
 app.post('/api/tasks/:id/design', async (req, res) => {
   guard(res, 'operate', officeOfTask(req.params.id));
   const kind = req.body?.kind;
-  if (kind !== 'doc' && kind !== 'deck') {
-    res.status(400).json({ error: 'kind는 doc 또는 deck이어야 해요.' });
+  if (kind !== 'doc' && kind !== 'deck' && kind !== 'sheet') {
+    res.status(400).json({ error: 'kind는 doc, deck, sheet 중 하나여야 해요.' });
     return;
   }
-  res.json(await designReport(req.params.id, kind));
+  res.json(await designReport(req.params.id, kind, { review: req.body?.review === true }));
+});
+
+app.get('/api/export-capabilities', (_req, res) => {
+  res.json(exportCapabilities());
 });
 
 app.put('/api/tasks/:id/actions/:actionId', (req, res) => {

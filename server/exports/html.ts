@@ -114,17 +114,20 @@ function block(b: Block, theme: Theme, prev: Block | undefined): string {
 /** A standalone print page: the browser's "PDF로 저장" turns it into the PDF. */
 export function renderHtml(doc: DocSpec, theme: Theme, autoPrint: boolean) {
   const a = `#${theme.accent}`;
+  const head = theme.headFont === '바탕' ? "'Batang', '바탕', 'AppleMyungjo', serif" : "'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', sans-serif";
   const css = `
 @page { size: A4; margin: 18mm 16mm; }
 * { box-sizing: border-box; }
 body { font-family: 'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; color: #${theme.ink}; line-height: 1.65; margin: 0; font-size: 10.5pt; }
+h1, h2, h3, h4, .kpi-value { font-family: ${head}; }
 main { max-width: 780px; margin: 0 auto; padding: 32px 24px; }
-header.cover { border-left: 8px solid ${a}; padding: 8px 0 8px 18px; margin-bottom: 28px; }
-header.cover h1 { margin: 0; font-size: 24pt; line-height: 1.3; }
-header.cover .sub { color: #${theme.muted}; margin-top: 6px; }
-.summary { background: #${theme.soft}; border-radius: 10px; padding: 14px 20px; margin-bottom: 24px; }
+header.cover { background: #${theme.dark}; color: #fff; border-radius: 14px; padding: 28px 30px; margin-bottom: 24px; position: relative; overflow: hidden; }
+header.cover::after { content: ''; position: absolute; right: -60px; top: -60px; width: 220px; height: 220px; border-radius: 50%; background: ${a}; opacity: .55; }
+header.cover h1 { margin: 0; font-size: 24pt; line-height: 1.3; position: relative; z-index: 1; max-width: 80%; }
+header.cover .sub { color: #${theme.soft}; margin-top: 8px; position: relative; z-index: 1; }
+.summary { background: #${theme.soft}; border-radius: 12px; padding: 14px 20px; margin-bottom: 24px; }
 .summary b { color: ${a}; }
-h2 { font-size: 15pt; color: ${a}; border-bottom: 2px solid #${theme.soft}; padding-bottom: 4px; margin: 28px 0 10px; break-after: avoid; }
+h2 { font-size: 15pt; color: ${a}; margin: 30px 0 10px; break-after: avoid; }
 h3 { font-size: 12pt; margin: 18px 0 6px; break-after: avoid; }
 h4 { margin: 0 0 6px; color: ${a}; }
 ul, ol { padding-left: 22px; }
@@ -133,24 +136,29 @@ figcaption { font-weight: 700; margin-bottom: 6px; }
 table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
 th { background: ${a}; color: #fff; text-align: left; padding: 6px 8px; }
 td { border-bottom: 1px solid #e5e7eb; padding: 6px 8px; vertical-align: top; }
-tbody tr:nth-child(even) td { background: #fafafa; }
+tbody tr:nth-child(even) td { background: #f6f7f9; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 16px 0; break-inside: avoid; }
-.kpi { border: 1px solid #e5e7eb; border-top: 4px solid ${a}; border-radius: 10px; padding: 12px 14px; }
+.kpi { background: #${theme.soft}; border-radius: 12px; padding: 14px 16px; }
 .kpi-value { font-size: 20pt; font-weight: 800; color: ${a}; line-height: 1.2; }
 .kpi-label { font-weight: 700; }
 .kpi-note { color: #${theme.muted}; font-size: 9pt; }
-.callout { border-radius: 10px; padding: 12px 16px; margin: 16px 0; background: #eef2ff; border-left: 5px solid #6366f1; break-inside: avoid; }
-.callout.good { background: #ecfdf3; border-color: #${theme.good}; }
-.callout.warn { background: #fff7ed; border-color: #${theme.warn}; }
+.callout { border-radius: 12px; padding: 14px 18px; margin: 16px 0; background: #${theme.soft}; break-inside: avoid; }
+.callout b { color: ${a}; }
+.callout.good { background: #ecfdf3; }
+.callout.good b { color: #${theme.good}; }
+.callout.warn { background: #fff7ed; }
+.callout.warn b { color: #${theme.warn}; }
 .callout p { margin: 4px 0 0; }
-blockquote { margin: 16px 0; padding: 8px 18px; border-left: 4px solid ${a}; color: #374151; font-style: italic; }
+blockquote { margin: 16px 0; padding: 14px 20px 14px 52px; background: #f6f7f9; border-radius: 12px; color: #374151; font-style: italic; position: relative; }
+blockquote::before { content: '\\201C'; position: absolute; left: 14px; top: -6px; font-size: 44pt; color: ${a}; font-family: Georgia, serif; }
 blockquote cite { display: block; font-style: normal; color: #${theme.muted}; margin-top: 4px; }
 .timeline { list-style: none; padding: 0; border-left: 3px solid ${a}; margin: 16px 0 16px 8px; }
 .timeline li { position: relative; padding: 4px 0 10px 20px; }
 .timeline li::before { content: ''; position: absolute; left: -9px; top: 9px; width: 15px; height: 15px; border-radius: 50%; background: #fff; border: 3px solid ${a}; }
 .timeline .when { font-weight: 700; color: ${a}; margin-right: 10px; }
 .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; break-inside: avoid; }
-.compare > div { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 14px; }
+.compare > div { background: #f6f7f9; border-radius: 12px; padding: 14px 16px; }
+.compare > div + div { background: #${theme.soft}; }
 .chart { width: 100%; height: auto; font-size: 11px; }
 .chart .axis { fill: #${theme.muted}; font-size: 11px; }
 .chart .val { fill: #${theme.ink}; font-size: 10px; }
