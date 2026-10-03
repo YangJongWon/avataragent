@@ -333,7 +333,47 @@ async function researchStep(taskId: string, step: WorkflowStep, feedback?: strin
   setStep(taskId, step.id, 'done');
 }
 
-async function askForHelp(taskId: string, step: WorkflowStep, writer: Agent) {
+/**
+ * Decides whether the writer must ask the user before drafting. Returns `'continue'` to draft now,
+ * or `'waiting'` when the runtime will deliver the answer later (durable runtimes wait outside the process).
+ */
+type Clarify = (taskId: string, step: WorkflowStep, writer: Agent) => Promise<'continue' | 'waiting'>;
+
+async function askForHelp(taskId: string, step: WorkflowStep, writer: Agent): Promise<'continue'> {
+  const help = await raiseHelp(taskId, step, writer);
+  if (!help) return 'continue';
+  const answer = await new Promise<string | null>((resolve) => {
+    const remainingMs = Math.max(0, help.deadline - Date.now());
+    const timer = setTimeout(() => {
+      helpWaiters.delete(taskId);
+      resolve(null);
+    }, remainingMs);
+    helpWaiters.set(taskId, (value) => {
+      clearTimeout(timer);
+      helpWaiters.delete(taskId);
+      resolve(value);
+    });
+  });
+  settleHelp(taskId, step, writer, answer);
+  return 'continue';
+}
+
+/**
+ * Clarify for durable runtimes. Without an answer it raises the question and reports `'waiting'`;
+ * on the re-run it applies the delivered answer (null = timed out, use the assumption).
+ */
+export function clarifyWith(answer: string | null | undefined): Clarify {
+  return async (taskId, step, writer) => {
+    if (answer !== undefined) {
+      settleHelp(taskId, step, writer, answer);
+      return 'continue';
+    }
+    return (await raiseHelp(taskId, step, writer)) ? 'waiting' : 'continue';
+  };
+}
+
+/** Puts the writer's question to the user, or re-announces one restored after a restart. Null when no question is needed. */
+async function raiseHelp(taskId: string, step: WorkflowStep, writer: Agent) {
   const task = store.task(taskId);
   let help = task.help;
   if (!help) {
@@ -364,7 +404,7 @@ async function askForHelp(taskId: string, step: WorkflowStep, writer: Agent) {
       true,
     );
     const parsed = parseJson(raw, { needs_clarification: false, question: '', options: [] as string[], assumption: '' });
-    if (!parsed.needs_clarification || !parsed.question) return;
+    if (!parsed.needs_clarification || !parsed.question) return null;
 
     help = {
       id: `help_${randomUUID()}`,
@@ -392,20 +432,13 @@ async function askForHelp(taskId: string, step: WorkflowStep, writer: Agent) {
     });
   }
   setAgent(writer, 'help_requested', 'troubled', `${help.question} 조금만 도와주실 수 있을까요?`);
+  return help;
+}
 
-  const answer = await new Promise<string | null>((resolve) => {
-    const remainingMs = Math.max(0, help.deadline - Date.now());
-    const timer = setTimeout(() => {
-      helpWaiters.delete(taskId);
-      resolve(null);
-    }, remainingMs);
-    helpWaiters.set(taskId, (value) => {
-      clearTimeout(timer);
-      helpWaiters.delete(taskId);
-      resolve(value);
-    });
-  });
-
+/** Applies the user's answer, or the writer's assumption when the answer is null (timed out). */
+function settleHelp(taskId: string, step: WorkflowStep, writer: Agent, answer: string | null) {
+  const help = store.task(taskId).help;
+  if (!help) return;
   const decided = answer?.trim() || help.assumption;
   store.updateTask(taskId, (t) => {
     t.help = null;
@@ -422,14 +455,15 @@ async function askForHelp(taskId: string, step: WorkflowStep, writer: Agent) {
   }
 }
 
-async function draftStep(taskId: string, step: WorkflowStep, attempt: number, feedback?: string) {
+/** Returns false when the draft is on hold until the user answers a help request. */
+async function draftStep(taskId: string, step: WorkflowStep, attempt: number, clarify: Clarify, feedback?: string) {
   const spec = specOf(store.task(taskId));
   const writer = agentOfStep(store.task(taskId), step);
   await waitIfPaused(writer);
   setStep(taskId, step.id, 'running');
-  store.emit('task.started', { taskId, agentId: writer.id, payload: { step: step.id, attempt } });
+  if (!store.task(taskId).help) store.emit('task.started', { taskId, agentId: writer.id, payload: { step: step.id, attempt } });
 
-  if (attempt === 1 && spec.allowClarify) await askForHelp(taskId, step, writer);
+  if (attempt === 1 && spec.allowClarify && (await clarify(taskId, step, writer)) === 'waiting') return false;
 
   const task = store.task(taskId);
   const lastReview = task.reviews.at(-1);
@@ -458,6 +492,7 @@ async function draftStep(taskId: string, step: WorkflowStep, attempt: number, fe
   );
   addArtifact(taskId, writer, step, 'draft', '초안', draft);
   setStep(taskId, step.id, 'done');
+  return true;
 }
 
 /** `returnTo` is the step a rejection sends the work back to; null means the review only leaves an opinion. */
@@ -600,9 +635,15 @@ function estimateValue(task: Task, itemCount: number) {
   };
 }
 
-async function awaitApproval(taskId: string, step: WorkflowStep): Promise<ApprovalDecision> {
+/** Posts the result for the user's decision. A repeat call for the same step only restores the waiting state. */
+export function requestApproval(taskId: string, stepId: string) {
   const task = store.task(taskId);
+  const step = stepById(task, stepId);
   const manager = agentOf(task, 'manager');
+  if (task.status === 'awaiting_approval' && task.currentStepId === step.id) {
+    setAgent(manager, 'awaiting_approval', 'normal', '결과물을 올렸어요. 사용자 승인을 기다리고 있어요.');
+    return;
+  }
   const { json } = splitDraft(latest(task, 'draft')?.content ?? '');
   setStep(taskId, step.id, 'awaiting');
   store.updateTask(taskId, (t) => {
@@ -616,7 +657,6 @@ async function awaitApproval(taskId: string, step: WorkflowStep): Promise<Approv
     agentId: manager.id,
     payload: { estimatedKrw: store.task(taskId).value?.estimatedKrw },
   });
-  return new Promise((resolve) => approvalWaiters.set(taskId, resolve));
 }
 
 function recognizeValue(taskId: string, override?: number) {
@@ -675,112 +715,158 @@ function finish(taskId: string, applied: string) {
 const MAX_STEP_RUNS = 40;
 const HANDOFF_LABEL: Partial<Record<WorkflowStep['kind'], string>> = { brief: '작업 지시서', draft: '초안' };
 
+export interface RunPoint {
+  /** Index of the step to run next. */
+  at: number;
+  /** Step executions already spent, counted against MAX_STEP_RUNS. */
+  runs: number;
+  steps: { id: string; kind: WorkflowStep['kind'] }[];
+}
+
+export type StepOutcome = { kind: 'next'; at: number; feedback: string | null } | { kind: 'needs_help'; timeoutMs: number };
+
+export const tooManyRunsMessage = '업무 여정이 너무 많이 반복돼서 멈췄어요. 루프 조건을 확인해 주세요.';
+
+/** Designs an AI plan on first start, then works out where a new or restored run continues. */
+export async function prepareRun(taskId: string): Promise<RunPoint> {
+  const initial = store.task(taskId);
+  if (initial.planMode === 'ai' && initial.plan.every((step) => step.status === 'pending') && initial.artifacts.length === 0) {
+    await designAtStart(taskId);
+  }
+  store.updateTask(taskId, (t) => {
+    t.loopCounts ??= {};
+    if (t.status === 'running') t.failureReason = null;
+  });
+  const task = store.task(taskId);
+  const plan = task.plan;
+  const currentAt = task.currentStepId ? plan.findIndex((step) => step.id === task.currentStepId) : -1;
+  const firstIncomplete = plan.findIndex((step) => step.status !== 'done');
+  return {
+    at: currentAt >= 0 && plan[currentAt].status !== 'done' ? currentAt : firstIncomplete >= 0 ? firstIncomplete : plan.length - 1,
+    runs: plan.filter((step) => step.status === 'done').length + Object.values(task.loopCounts ?? {}).reduce((a, b) => a + b, 0),
+    steps: plan.map((step) => ({ id: step.id, kind: step.kind })),
+  };
+}
+
+/** Runs the non-approval step at `at` and decides where the journey goes next. */
+export async function runStepAt(taskId: string, at: number, feedback: string | null, clarify: Clarify = askForHelp): Promise<StepOutcome> {
+  const plan = store.task(taskId).plan;
+  const step = plan[at];
+  if (step.kind === 'approval') throw new Error('승인 단계는 requestApproval로 처리해야 해요.');
+  const reason = feedback ?? undefined;
+  const drafts = () => store.task(taskId).artifacts.filter((artifact) => artifact.kind === 'draft').length;
+  const canLoop = Boolean(step.loop) && (store.task(taskId).loopCounts?.[step.id] ?? 0) < step.loop!.max;
+  let loopReason: string | null = null;
+
+  if (step.kind === 'brief') await briefStep(taskId, step, reason);
+  else if (step.kind === 'research') await researchStep(taskId, step, reason);
+  else if (step.kind === 'draft') {
+    if (!(await draftStep(taskId, step, drafts() + 1, clarify, reason))) {
+      const help = store.task(taskId).help;
+      return { kind: 'needs_help', timeoutMs: Math.max(0, (help?.deadline ?? Date.now()) - Date.now()) };
+    }
+  } else if (step.kind === 'review') {
+    const result = await reviewStep(taskId, step, drafts(), canLoop ? plan[step.loop!.to] : null);
+    if (!result.approved && canLoop) loopReason = result.reason;
+  }
+
+  if (canLoop && step.kind !== 'review') {
+    const check = await checkLoop(taskId, step);
+    if (check.repeat) loopReason = check.reason;
+  }
+  if (loopReason !== null) {
+    takeLoop(taskId, plan, at, loopReason);
+    return { kind: 'next', at: step.loop!.to, feedback: loopReason };
+  }
+  const label = HANDOFF_LABEL[step.kind] ?? step.label;
+  if (step.kind !== 'review') handOff(taskId, agentOfStep(store.task(taskId), step), agentOfStep(store.task(taskId), plan[at + 1]), label);
+  return { kind: 'next', at: at + 1, feedback: null };
+}
+
+/** Records the user's change request and returns the draft step index the journey restarts from. */
+export function applyChangeRequest(taskId: string, stepId: string, comment: string) {
+  const task = store.task(taskId);
+  const at = task.plan.findIndex((s) => s.id === stepId);
+  const draftIndex = task.plan.findIndex((s) => s.kind === 'draft');
+  const manager = agentOf(task, 'manager');
+  if (task.status !== 'awaiting_approval') return draftIndex;
+  store.updateTask(taskId, (t) => {
+    t.userChangeRequests.push(comment);
+    t.status = 'running';
+    t.loopCounts = {};
+    stepById(t, stepId).status = 'rejected';
+    for (let i = draftIndex; i < at; i++) t.plan[i].status = 'pending';
+    t.proposal = null;
+  });
+  setAgent(manager, 'idle', 'normal', '수정 요청을 작성자에게 전달했어요.');
+  store.emit('approval.denied', { taskId, agentId: manager.id, payload: { comment } });
+  store.emit('task.handed_off', {
+    taskId,
+    agentId: manager.id,
+    payload: { from: manager.id, to: agentOfStep(task, task.plan[draftIndex]).id, label: '수정 요청' },
+  });
+  return draftIndex;
+}
+
+/** Applies the approved result. A repeat call after completion does nothing. */
+export function completeTask(taskId: string, valueKrw?: number) {
+  const task = store.task(taskId);
+  if (task.status === 'completed') return;
+  const manager = agentOf(task, 'manager');
+  const approval = task.plan.find((s) => s.kind === 'approval')!;
+  setStep(taskId, approval.id, 'done');
+  store.emit('approval.granted', { taskId, agentId: manager.id, payload: {} });
+  recognizeValue(taskId, valueKrw);
+  const { json } = splitDraft(latest(task, 'draft')?.content ?? '');
+  const applied = specOf(task).onApprove(json, store.task(taskId));
+  store.emit('team.applied', { taskId, agentId: manager.id, payload: { summary: applied } });
+  finish(taskId, applied);
+}
+
+export function failTask(taskId: string, reason: string) {
+  const task = store.task(taskId);
+  if (task.status === 'failed') return;
+  const step = task.plan.find((s) => s.id === task.currentStepId);
+  store.updateTask(taskId, (t) => {
+    t.status = 'failed';
+    t.failureReason = reason;
+    t.help = null;
+    const current = t.plan.find((s) => s.id === t.currentStepId);
+    if (current) current.status = 'error';
+  });
+  const agent = step ? agentOfStep(task, step) : agentOf(task, 'manager');
+  setAgent(agent, 'error', 'panic', `문제가 생겼어요: ${reason}`);
+  store.emit('task.failed', { taskId, agentId: agent.id, payload: { reason } });
+}
+
+/** In-process wait for the user's decision; durable runtimes receive it as a signal instead. */
+const approvalDecision = (taskId: string) => new Promise<ApprovalDecision>((resolve) => approvalWaiters.set(taskId, resolve));
+
 async function runTask(taskId: string) {
   try {
-    const initial = store.task(taskId);
-    if (initial.planMode === 'ai' && initial.plan.every((step) => step.status === 'pending') && initial.artifacts.length === 0) {
-      await designAtStart(taskId);
-    }
-
-    const plan = store.task(taskId).plan;
-    const draftIndex = plan.findIndex((s) => s.kind === 'draft');
-    const draft = plan[draftIndex];
-    const loopsTaken = (step: WorkflowStep) => store.task(taskId).loopCounts?.[step.id] ?? 0;
-    store.updateTask(taskId, (t) => {
-      t.loopCounts ??= {};
-      if (t.status === 'running') t.failureReason = null;
-    });
-
-    const currentId = store.task(taskId).currentStepId;
-    const currentAt = currentId ? plan.findIndex((step) => step.id === currentId) : -1;
-    const firstIncomplete = plan.findIndex((step) => step.status !== 'done');
-    let at = currentAt >= 0 && plan[currentAt].status !== 'done' ? currentAt : firstIncomplete >= 0 ? firstIncomplete : plan.length - 1;
-    let runs = plan.filter((step) => step.status === 'done').length + Object.values(store.task(taskId).loopCounts ?? {}).reduce((a, b) => a + b, 0);
-    let draftRuns = store.task(taskId).artifacts.filter((artifact) => artifact.kind === 'draft').length;
-    let feedback: string | undefined;
-    let approvedValue: number | undefined;
+    let { at, runs } = await prepareRun(taskId);
+    let feedback: string | null = null;
     for (;;) {
-      if (++runs > MAX_STEP_RUNS) throw new Error('업무 여정이 너무 많이 반복돼서 멈췄어요. 루프 조건을 확인해 주세요.');
-      const step = plan[at];
-      const reason = feedback;
-      feedback = undefined;
-      const canLoop = Boolean(step.loop) && loopsTaken(step) < step.loop!.max;
-      let loopReason: string | null = null;
-
-      if (step.kind === 'brief') await briefStep(taskId, step, reason);
-      else if (step.kind === 'research') await researchStep(taskId, step, reason);
-      else if (step.kind === 'draft') await draftStep(taskId, step, ++draftRuns, reason);
-      else if (step.kind === 'review') {
-        const result = await reviewStep(taskId, step, draftRuns, canLoop ? plan[step.loop!.to] : null);
-        if (!result.approved && canLoop) loopReason = result.reason;
-      }
-
+      if (++runs > MAX_STEP_RUNS) throw new Error(tooManyRunsMessage);
+      const step = store.task(taskId).plan[at];
       if (step.kind === 'approval') {
-        const decision = await awaitApproval(taskId, step);
+        requestApproval(taskId, step.id);
+        const decision = await approvalDecision(taskId);
         approvalWaiters.delete(taskId);
-        const task = store.task(taskId);
-        const manager = agentOf(task, 'manager');
-        if (decision.kind === 'changes') {
-          store.updateTask(taskId, (t) => {
-            t.userChangeRequests.push(decision.comment);
-            t.status = 'running';
-            t.loopCounts = {};
-            stepById(t, step.id).status = 'rejected';
-            for (let i = draftIndex; i < at; i++) t.plan[i].status = 'pending';
-            t.proposal = null;
-          });
-          setAgent(manager, 'idle', 'normal', '수정 요청을 작성자에게 전달했어요.');
-          store.emit('approval.denied', { taskId, agentId: manager.id, payload: { comment: decision.comment } });
-          store.emit('task.handed_off', {
-            taskId,
-            agentId: manager.id,
-            payload: { from: manager.id, to: agentOfStep(task, draft).id, label: '수정 요청' },
-          });
-          at = draftIndex;
-          continue;
+        if (decision.kind === 'approve') {
+          completeTask(taskId, decision.valueKrw);
+          return;
         }
-        approvedValue = decision.valueKrw;
-        break;
-      }
-
-      if (canLoop && step.kind !== 'review') {
-        const check = await checkLoop(taskId, step);
-        if (check.repeat) loopReason = check.reason;
-      }
-      if (loopReason !== null) {
-        takeLoop(taskId, plan, at, loopReason);
-        feedback = loopReason;
-        at = step.loop!.to;
+        at = applyChangeRequest(taskId, step.id, decision.comment);
+        feedback = null;
         continue;
       }
-      const label = HANDOFF_LABEL[step.kind] ?? step.label;
-      if (step.kind !== 'review') handOff(taskId, agentOfStep(store.task(taskId), step), agentOfStep(store.task(taskId), plan[at + 1]), label);
-      at += 1;
+      const outcome = await runStepAt(taskId, at, feedback);
+      if (outcome.kind === 'needs_help') throw new Error('도움 요청 응답을 받지 못했어요.');
+      ({ at, feedback } = outcome);
     }
-
-    const task = store.task(taskId);
-    const manager = agentOf(task, 'manager');
-    setStep(taskId, plan[at].id, 'done');
-    store.emit('approval.granted', { taskId, agentId: manager.id, payload: {} });
-    recognizeValue(taskId, approvedValue);
-    const { json } = splitDraft(latest(task, 'draft')?.content ?? '');
-    const applied = specOf(task).onApprove(json, store.task(taskId));
-    store.emit('team.applied', { taskId, agentId: manager.id, payload: { summary: applied } });
-    finish(taskId, applied);
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    const task = store.task(taskId);
-    const step = task.plan.find((s) => s.id === task.currentStepId);
-    store.updateTask(taskId, (t) => {
-      t.status = 'failed';
-      t.failureReason = reason;
-      t.help = null;
-      const current = t.plan.find((s) => s.id === t.currentStepId);
-      if (current) current.status = 'error';
-    });
-    const agent = step ? agentOfStep(task, step) : agentOf(task, 'manager');
-    setAgent(agent, 'error', 'panic', `문제가 생겼어요: ${reason}`);
-    store.emit('task.failed', { taskId, agentId: agent.id, payload: { reason } });
+    failTask(taskId, error instanceof Error ? error.message : String(error));
   } finally {
     setTimeout(drainQueues, NEXT_TASK_DELAY_MS);
   }

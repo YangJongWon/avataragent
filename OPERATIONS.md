@@ -130,10 +130,21 @@ New-NetFirewallRule -DisplayName "avataragent 8787 (Tailscale)" -Direction Inbou
 
 408, 409, 429와 5xx 응답, 네트워크 오류와 제한시간 초과는 재시도한다. 인증 실패와 일반적인 4xx 요청 오류는 재시도하지 않는다.
 
+## 업무 실행기 (local / Temporal)
+
+기본은 서버 프로세스 안에서 업무를 돌리는 로컬 실행기다. Temporal 실행기로 바꾸면 업무마다 Temporal Workflow가 만들어지고, 서버가 꺼졌다 켜져도 Temporal 실행 이력에서 이어서 진행한다.
+
+1. Temporal 서버를 켠다. 개인 테스트는 Temporal CLI의 개발 서버로 충분하다: `temporal server start-dev` (기본 주소 `localhost:7233`, 웹 UI `http://localhost:8233`).
+2. `.env`에 `WORKFLOW_RUNTIME=temporal`을 넣고 `restart`한다. 주소가 다르면 `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, `TEMPORAL_TASK_QUEUE`를 함께 지정한다.
+
+- Temporal Worker는 지금은 서버 프로세스 안에서 같이 돈다. 서버를 끄면 진행 중인 업무는 멈췄다가 다시 켤 때 이어진다.
+- 로컬 실행기로 진행 중이던 업무는 Temporal로 바꾼 뒤 처음 켤 때 Temporal이 이어받는다. 반대로 되돌릴 때는 Temporal에서 진행 중인 업무가 없을 때 바꾼다.
+- Temporal 서버가 꺼져 있으면 새 업무는 "Temporal 실행을 시작하지 못했어요"로 실패한다.
+
 ## 검증 명령
 
 | 검사 | 명령 |
 |---|---|
-| 자동 테스트 | `npm test` |
+| 자동 테스트 | `npm test` (Temporal 테스트는 개발 서버를 처음 한 번 내려받는다. 못 받는 환경에서는 `SKIP_TEMPORAL_TESTS=1`) |
 | 타입 검사 | `npm run typecheck` |
 | 프로덕션 빌드 | `npm run build` |

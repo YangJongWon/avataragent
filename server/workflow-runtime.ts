@@ -55,6 +55,8 @@ export interface WorkflowRuntime {
   start(): Promise<void>;
   /** Starts the next queued task in every idle office. */
   drain(): Promise<void>;
+  /** Releases workers and connections; running tasks resume on the next start(). */
+  stop(): Promise<void>;
 }
 
 /** Shape check for request bodies; plan rules (order, agents, loops) are enforced by the runtime. */
@@ -78,9 +80,9 @@ export const localWorkflowRuntime: WorkflowRuntime = {
   tick: async () => autoRunTick(),
   start: async () => resumeActiveTasks(),
   drain: async () => drainQueues(),
+  stop: async () => {},
 };
 
-// WORKFLOW_RUNTIME=temporal opts into the TemporalRuntime skeleton; its step activities
-// are not connected yet, so local stays the default.
+// TemporalRuntime needs a Temporal Service (see OPERATIONS.md), so local stays the default.
 export const workflowRuntime: WorkflowRuntime =
   config.workflowRuntime === 'temporal' ? (await import('./temporal/runtime.ts')).createTemporalRuntime() : localWorkflowRuntime;

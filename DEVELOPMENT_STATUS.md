@@ -11,12 +11,16 @@
 - HTTP API와 기존 오케스트레이터 사이에 `WorkflowRuntime` 인터페이스를 추가했다. 현재 LocalRuntime을 사용하며 Temporal Worker와 Signal 전환이 끝나면 TemporalRuntime을 기본값으로 바꾼다.
   - API는 업무 실행을 모두 `workflowRuntime`으로만 요청한다. 자동 확인(`tick`)과 직원 일시정지(`pauseAgent`)도 경계 안으로 옮겼고, 메일·문의 시뮬레이션은 데이터만 만든다.
   - 인터페이스는 자체 입력·출력 타입(`CreateTaskInput`, `PlanDraftInput`, `PlanDraft`)을 쓰고 모든 메서드가 `Promise`를 돌려준다. 요청 본문의 단계 모양은 `toStepInputs`로 경계에서 검사한다.
-  - `tests/workflow-runtime.test.ts` 계약 테스트가 생성·대기·취소·여정 변경·도움 응답·수정 요청·승인·일시정지·자동 확인을 LocalRuntime에 대해 검증한다. TemporalRuntime이 준비되면 같은 테스트를 그대로 돌린다.
-- `WORKFLOW_RUNTIME=temporal`로 켜는 TemporalRuntime 골격을 추가했다(`server/temporal/`).
+  - 계약 테스트(`tests/runtime-contract.ts`)가 생성·대기·취소·여정 변경·도움 응답·수정 요청·승인·AI 여정 설계·일시정지·자동 확인을 검증한다. LocalRuntime(`workflow-runtime.test.ts`)과 TemporalRuntime(`temporal-runtime.test.ts`, 임시 Temporal 개발 서버)에 같은 테스트를 돌린다.
+- `WORKFLOW_RUNTIME=temporal`로 켜는 TemporalRuntime을 추가했다(`server/temporal/`). 계약 테스트를 모두 통과하지만 운영 기본값은 아직 local이다.
   - 시작된 업무마다 Temporal Workflow 하나를 만들고, 도움 응답과 승인·수정 요청은 Signal로 전달한다. 사무실당 한 업무 규칙은 기존 대기열(`drainQueues`)을 그대로 쓴다.
-  - Workflow는 여정 순서·루프·승인 대기만 결정적으로 다루고, AI 호출과 저장은 Activity(`TaskActivities`)로 분리했다.
-  - Worker는 지금은 API 프로세스 안에서 돈다. Activity가 메모리 상태와 SQLite 파일을 공유하기 때문이며, 저장소가 트랜잭션 기반으로 바뀌면(ADR-002) 별도 프로세스로 뺄 수 있다.
-  - 남은 일: 단계 실행 Activity(`runStep`, `requestApproval`, `recordChangeRequest`, `completeTask`)를 오케스트레이터 단계 함수와 연결, AI 여정 설계, 일시정지 시 Activity heartbeat 대기, 기존 LocalRuntime 실행 중 업무의 이전, `@temporalio/testing`으로 계약 테스트 실행.
+  - 오케스트레이터 실행 루프를 `prepareRun`·`runStepAt`·`requestApproval`·`applyChangeRequest`·`completeTask`·`failTask`로 나눴다. LocalRuntime과 Temporal Activity가 같은 단계 함수를 쓰므로 팀별 동작이 두 실행기에서 같다.
+  - 도움 요청은 질문 올리기와 답 반영으로 나뉜다. Temporal에서는 Activity가 질문만 올리고 끝나며, Workflow가 Signal이나 제한시간을 기다린 뒤 답을 넣어 같은 단계를 다시 실행한다.
+  - Activity는 실행 중 heartbeat를 보내므로 일시정지된 직원을 오래 기다려도 끊기지 않고, Worker가 죽으면 1분 안에 다른 시도로 넘어간다. 단계 오류는 재시도하지 않는 실패로 바꾼다(AI 계층이 이미 재시도함).
+  - AI 여정 설계 업무는 첫 Activity(`prepareRun`)에서 설계한다. 미리보기(`designPlan`)는 요청 안에서 바로 호출한다.
+  - Temporal로 처음 켤 때 LocalRuntime이 진행 중으로 남긴 업무를 찾아 Workflow를 시작해 현재 단계부터 이어받는다. 이미 Workflow가 있는 업무는 건너뛴다.
+  - Worker는 API 프로세스 안에서 돈다. Activity가 메모리 상태와 SQLite 파일을 공유하기 때문이며, 저장소가 트랜잭션 기반으로 바뀌면(ADR-002) 별도 프로세스로 뺄 수 있다.
+  - 남은 일: 실제 운영 Temporal 서버로 바꿔 보기, 이 기간 동안 쌓인 Workflow 코드 변경의 버전 관리(patching) 규칙, 외부 쓰기 도구의 멱등 키, 사무실 대기열을 Temporal 쪽으로 옮길지 결정.
 - 단일 `kv.state` 저장을 사무실, 직원, 업무, 메일, 일정, 문의, 발송함, 추천, 공유 링크와 메타데이터 관계형 테이블로 분리했다.
 - 기존 `kv.state` 데이터는 최초 실행 시 새 테이블로 자동 이전된다. SQLite는 WAL 모드와 외래키를 사용하며 한 번의 트랜잭션으로 상태를 저장한다.
 - 서버 재시작 시 실행 중인 업무를 더 이상 즉시 실패 처리하지 않는다. 현재 단계부터 재개하고, 승인 대기와 도움 요청 대기를 복원한다.

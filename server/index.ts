@@ -501,3 +501,12 @@ server.listen(config.port, () => {
     await workflowRuntime.drain();
   }, '작업 복구');
 });
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.once(signal, () => {
+    workflowRuntime
+      .stop()
+      .catch((error) => console.error('[office] 실행기 종료 실패:', error))
+      .finally(() => process.exit(0));
+  });
+}
