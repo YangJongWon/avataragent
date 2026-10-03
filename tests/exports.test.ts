@@ -256,3 +256,21 @@ test('the chosen palette and fonts reach the files', async () => {
   const html = (await buildExport(task, office, 'pdf')).body as string;
   assert.ok(html.includes('#2C5F2D') && html.includes('Batang'));
 });
+
+test('Word gets native charts with their data embedded', async () => {
+  const doc = enrichDoc(docFromMarkdown(REPORT, 't', 's'));
+  doc.blocks.push({ type: 'chart', chart: { kind: 'pie', title: '비중', labels: ['가', '나'], series: [{ name: '비중', values: [60, 40] }], unit: '%' } });
+  const record = { dropped: 0, createdAt: '2026-10-04T00:00:00Z', draftVersion: 2 };
+  const zip = await JSZip.loadAsync((await buildExport(taskWith(REPORT, { doc: { ...record, spec: doc } }), office, 'docx')).body as Buffer);
+  const xml = await zip.file('word/document.xml')!.async('string');
+  assert.ok(!xml.includes('[[CHART:'));
+  assert.equal(xml.match(/<c:chart /g)?.length, 2);
+  const bar = await zip.file('word/charts/chart1.xml')!.async('string');
+  assert.ok(bar.includes('<c:barChart>') && bar.includes('<c:v>1200000</c:v>') && bar.includes('<c:externalData r:id="rId1">'));
+  assert.ok((await zip.file('word/charts/chart2.xml')!.async('string')).includes('<c:doughnutChart>'));
+  assert.ok((await zip.file('word/_rels/document.xml.rels')!.async('string')).includes('Target="charts/chart2.xml"'));
+  assert.ok((await zip.file('[Content_Types].xml')!.async('string')).includes('/word/charts/chart1.xml'));
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(await zip.file('word/embeddings/Microsoft_Excel_Worksheet1.xlsx')!.async('nodebuffer'));
+  assert.equal(wb.getWorksheet('Sheet1')!.getCell('B3').value, 1200000);
+});

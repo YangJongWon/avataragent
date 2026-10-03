@@ -16,6 +16,7 @@ import {
   type IBorderOptions,
 } from 'docx';
 import type { Block, ChartData, DocSpec } from '../../shared/design.ts';
+import { chartMarker, injectCharts } from './docx-chart.ts';
 import { captionOf } from './spec.ts';
 import type { Theme } from './theme.ts';
 
@@ -67,36 +68,6 @@ function grid(rows: string[][], header: string[] | null, theme: Theme) {
   });
 }
 
-/** Word has no native chart here; a bar of block characters keeps the comparison readable and editable. */
-function chartTable(chart: ChartData, theme: Theme) {
-  const all = chart.series.flatMap((s) => s.values.map(Math.abs));
-  const max = Math.max(...all, 1);
-  const total = chart.series[0].values.reduce((a, b) => a + b, 0) || 1;
-  const unit = chart.unit ?? '';
-  const rows: TableRow[] = [];
-  chart.labels.forEach((label, i) => {
-    chart.series.forEach((s, si) => {
-      const v = s.values[i];
-      const bar = '█'.repeat(Math.max(1, Math.round((Math.abs(v) / max) * 24)));
-      const value = `${v.toLocaleString('ko-KR')}${unit}${chart.kind === 'pie' ? ` (${Math.round((v / total) * 100)}%)` : ''}`;
-      rows.push(
-        new TableRow({
-          children: [
-            new TableCell({ width: pct(28), margins: cellMargins, children: [new Paragraph({ children: [text(si === 0 ? label : '')] })] }),
-            new TableCell({
-              width: pct(52),
-              margins: cellMargins,
-              children: [new Paragraph({ children: [text(bar, { color: theme.chart[si % theme.chart.length] }), ...(chart.series.length > 1 ? [text(`  ${s.name}`, { color: theme.muted, size: 16 })] : [])] })],
-            }),
-            new TableCell({ width: pct(20), margins: cellMargins, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [text(value, { bold: true })] })] }),
-          ],
-        }),
-      );
-    });
-  });
-  return new Table({ width: full, borders: noBorders, rows });
-}
-
 function card(children: Paragraph[], shade: string, pad = 160) {
   return new Table({
     width: full,
@@ -107,7 +78,7 @@ function card(children: Paragraph[], shade: string, pad = 160) {
 
 const gap = () => new Paragraph({ spacing: { after: 120 }, children: [] });
 
-function block(b: Block, theme: Theme, prev: Block | undefined): (Paragraph | Table)[] {
+function block(b: Block, theme: Theme, prev: Block | undefined, charts: ChartData[]): (Paragraph | Table)[] {
   switch (b.type) {
     case 'heading':
       return [new Paragraph({ heading: HeadingLevel.HEADING_1, children: [text(b.text)] })];
@@ -166,8 +137,8 @@ function block(b: Block, theme: Theme, prev: Block | undefined): (Paragraph | Ta
     }
     case 'chart':
       return [
-        ...(b.chart.title ? [new Paragraph({ spacing: { before: 120, after: 80 }, children: [text(`📊 ${b.chart.title}`, { bold: true })] })] : []),
-        chartTable(b.chart, theme),
+        ...(b.chart.title ? [new Paragraph({ spacing: { before: 120, after: 80 }, keepNext: true, children: [text(b.chart.title, { bold: true })] })] : []),
+        new Paragraph({ children: [text(chartMarker(charts.push(b.chart) - 1))] }),
         gap(),
       ];
     case 'timeline':
@@ -229,7 +200,8 @@ export async function renderDocx(doc: DocSpec, theme: Theme): Promise<Buffer> {
       gap(),
     );
   }
-  doc.blocks.forEach((b, i) => children.push(...block(b, theme, doc.blocks[i - 1])));
+  const charts: ChartData[] = [];
+  doc.blocks.forEach((b, i) => children.push(...block(b, theme, doc.blocks[i - 1], charts)));
   if (doc.sources.length) {
     children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [text('출처')] }));
     doc.sources.forEach((s, i) => children.push(new Paragraph({ spacing: { after: 60 }, children: [text(`${i + 1}. ${s}`, { size: 18, color: theme.muted })] })));
@@ -257,5 +229,5 @@ export async function renderDocx(doc: DocSpec, theme: Theme): Promise<Buffer> {
       },
     ],
   });
-  return Packer.toBuffer(document);
+  return injectCharts(await Packer.toBuffer(document), charts, theme);
 }
