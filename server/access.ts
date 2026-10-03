@@ -32,7 +32,15 @@ export function snapshotFor(viewer: Viewer): Snapshot {
   const officeIds = new Set(offices.map((o) => o.id));
   const hasTeam = (team: string) => offices.some((o) => o.team === team);
   const everything = seesEverything(viewer);
-  const { shares: _shares, publicUrl: _publicUrl, aiMode: _aiMode, envProvider: _envProvider, ...rest } = full;
+  const {
+    shares: _shares,
+    publicUrl: _publicUrl,
+    aiMode: _aiMode,
+    envProvider: _envProvider,
+    mcpServers: _mcpServers,
+    mcpStdioAllowed: _mcpStdioAllowed,
+    ...rest
+  } = full;
   return {
     ...rest,
     viewer,

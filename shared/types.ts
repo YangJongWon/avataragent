@@ -1,3 +1,4 @@
+import type { McpServer } from './mcp.ts';
 import type { Company, ModelEntry } from './models.ts';
 import type { Skin } from './skins.ts';
 
@@ -280,6 +281,10 @@ export interface Snapshot {
   envProvider?: string;
   companies: Company[];
   models: ModelEntry[];
+  /** Owner only. */
+  mcpServers?: McpServer[];
+  /** Owner only: MCP_ALLOW_STDIO is on. */
+  mcpStdioAllowed?: boolean;
   offices: Office[];
   agents: Agent[];
   tasks: Task[];

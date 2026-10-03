@@ -8,6 +8,7 @@ import {
   type Company,
   type ModelEntry,
 } from '../shared/models.ts';
+import type { McpServer } from '../shared/mcp.ts';
 import { isSkin } from '../shared/skins.ts';
 import { TEAM_ORDER, TEAMS } from '../shared/teams.ts';
 import type {
@@ -33,7 +34,7 @@ import type {
 import { reviewLoop, templatePlan } from '../shared/workflow.ts';
 import { config, ORGANIZATION_SAFETY_RULES, type ProviderName } from './config.ts';
 import { appendEvent, loadKv, loadRelationalState, maxSeq, recentEvents, saveRelationalState } from './db.ts';
-import { keyInfo } from './secrets.ts';
+import { keyInfo, mcpSecretInfo } from './secrets.ts';
 import { defaultInterests, initialInquiries, initialMails } from './seed.ts';
 
 const PROJECT_ID = 'company_alpha';
@@ -57,6 +58,7 @@ export interface PersistedState {
   companies: Company[];
   models: ModelEntry[];
   aiMode: AiMode;
+  mcpServers: McpServer[];
 }
 
 function defaultOffices(): Office[] {
@@ -125,6 +127,7 @@ function fresh(): PersistedState {
     companies: structuredClone(DEFAULT_COMPANIES),
     models: structuredClone(DEFAULT_MODELS),
     aiMode: 'env',
+    mcpServers: [],
   };
 }
 
@@ -132,6 +135,7 @@ function fillCatalog(state: PersistedState) {
   state.companies ??= [];
   state.models ??= [];
   state.aiMode ??= 'env';
+  state.mcpServers ??= [];
   for (const company of DEFAULT_COMPANIES) {
     if (!state.companies.some((c) => c.id === company.id)) state.companies.push(structuredClone(company));
   }
@@ -231,6 +235,8 @@ class Store {
       envProvider: config.provider,
       companies: s.companies.map((c) => ({ ...c, key: keyInfo(c) })),
       models: s.models,
+      mcpServers: s.mcpServers.map((m) => ({ ...m, secrets: mcpSecretInfo(m.id) })),
+      mcpStdioAllowed: config.mcpAllowStdio,
       offices: s.offices,
       agents: s.agents,
       tasks: s.tasks,

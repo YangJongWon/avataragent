@@ -7,6 +7,7 @@ import { api, useOffice } from './api.ts';
 import { Drawer } from './components/Drawer.tsx';
 import { HireTab } from './components/HireTab.tsx';
 import { AgentCardModal, HelpDialog, NewOfficeModal, NewTaskModal, PlanEditModal, RulesModal } from './components/Modals.tsx';
+import { McpTab } from './components/McpTab.tsx';
 import { ModelsTab } from './components/ModelsTab.tsx';
 import { ProfitTab } from './components/ProfitTab.tsx';
 import { ReportPanel } from './components/ReportPanel.tsx';
@@ -18,7 +19,7 @@ import { krw, roleTitle } from './format.ts';
 import { OfficeView } from './office/OfficeView.tsx';
 import { useCompact } from './useCompact.ts';
 
-type Tab = 'office' | 'hire' | 'models' | 'profit';
+type Tab = 'office' | 'hire' | 'models' | 'mcp' | 'profit';
 type Dialog =
   | { kind: 'newTask' }
   | { kind: 'newOffice' }
@@ -295,6 +296,7 @@ export function App() {
               ['office', '사무실'],
               ['hire', '직원 고용'],
               ['models', '모델 관리'],
+              ['mcp', 'MCP 관리'],
               ['profit', '손익·결산'],
             ] as [Tab, string][]
           )
@@ -446,6 +448,7 @@ export function App() {
         <HireTab key={office.id} office={office} agents={view.agents} onError={showError} onNotice={toast} onManageModels={() => setTab('models')} />
       )}
       {tab === 'models' && <ModelsTab snapshot={snapshot} onError={showError} onNotice={toast} />}
+      {tab === 'mcp' && <McpTab snapshot={snapshot} onError={showError} onNotice={toast} />}
       {tab === 'profit' && <ProfitTab snapshot={snapshot} onError={showError} onNotice={toast} />}
 
       {dialog?.kind === 'newOffice' && (

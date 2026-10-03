@@ -52,6 +52,14 @@ export function eventLabel(event: OfficeEvent, agents: Map<string, Agent>) {
       return `${who} ${p.label ?? '도구'} 시작`;
     case 'tool.completed':
       return `${who} 도구 사용 완료`;
+    case 'mcp.called':
+      return `${who} ${p.icon ?? '🧩'} ${p.server} · ${p.tool} 호출`;
+    case 'mcp.result':
+      return `${who} ${p.server} · ${p.tool} 결과 받음 (${p.chars}자)`;
+    case 'mcp.failed':
+      return `${who} ${p.server} · ${p.tool} 실패: ${p.reason}`;
+    case 'mcp.changed':
+      return `${p.summary}`;
     case 'artifact.created':
       return `${who} 산출물 생성: ${p.title}`;
     case 'task.handed_off':

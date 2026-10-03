@@ -15,6 +15,7 @@ import {
   type ModelEntry,
   type Tier,
 } from '../shared/models.ts';
+import { canEnableTool, type McpServer } from '../shared/mcp.ts';
 import { isSkin } from '../shared/skins.ts';
 import { TEAMS } from '../shared/teams.ts';
 import type { AiMode, ServerMessage, ShareLink, ShareRole, TeamId, Viewer } from '../shared/types.ts';
@@ -23,7 +24,8 @@ import { listModels } from './ai.ts';
 import { authEnabled, authRouter, stillValid, viewerOf } from './auth.ts';
 import { config } from './config.ts';
 import { simulateInquiry, simulateMail } from './orchestrator.ts';
-import { apiKeyFor, setApiKey } from './secrets.ts';
+import { closeAllConnections, closeConnection, discoverTools } from './mcp.ts';
+import { apiKeyFor, dropMcpSecrets, setApiKey, setMcpSecrets } from './secrets.ts';
 import { store } from './store.ts';
 import { toStepInputs, workflowRuntime } from './workflow-runtime.ts';
 
@@ -399,6 +401,147 @@ app.delete('/api/models/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+const MAX_MCP_SERVERS = 20;
+const SECRET_NAME = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/;
+
+const mcpById = (id: string) => {
+  const server = store.data.mcpServers.find((m) => m.id === id);
+  if (!server) throw new Error('알 수 없는 MCP 서버예요.');
+  return server;
+};
+
+function applyMcp(server: McpServer, body: Record<string, unknown>) {
+  if (body.name !== undefined) server.name = text(body.name, 20) || server.name;
+  if (body.icon !== undefined) server.icon = text(body.icon, 4) || server.icon;
+  if (body.transport !== undefined) {
+    if (body.transport !== 'http' && body.transport !== 'stdio') throw new Error('연결 방식을 골라 주세요.');
+    server.transport = body.transport;
+  }
+  if (body.url !== undefined) server.url = text(body.url, 500);
+  if (body.command !== undefined) server.command = text(body.command, 200);
+  if (body.args !== undefined) {
+    if (!Array.isArray(body.args) || body.args.length > 20) throw new Error('실행 인자는 20개까지 넣을 수 있어요.');
+    server.args = body.args.map((a) => String(a).slice(0, 300));
+  }
+  if (body.enabled !== undefined) server.enabled = Boolean(body.enabled);
+  if (body.officeIds !== undefined) {
+    if (body.officeIds === 'all') server.officeIds = 'all';
+    else if (Array.isArray(body.officeIds)) {
+      const known = new Set(store.data.offices.map((o) => o.id));
+      server.officeIds = [...new Set(body.officeIds.map(String))].filter((id) => known.has(id));
+    } else throw new Error('쓸 사무실을 골라 주세요.');
+  }
+  if (body.tools !== undefined) {
+    const choices = (body.tools ?? {}) as Record<string, unknown>;
+    server.tools = server.tools.map((tool) =>
+      tool.name in choices ? { ...tool, enabled: canEnableTool(tool) && Boolean(choices[tool.name]) } : tool,
+    );
+  }
+  if (!server.name) throw new Error('이름을 입력해 주세요.');
+  if (server.transport === 'http') {
+    if (!/^https?:\/\/[^\s/]+/i.test(server.url)) throw new Error('MCP 주소는 http:// 또는 https:// 로 시작해야 해요.');
+  } else {
+    if (!config.mcpAllowStdio) throw new Error('실행 명령(stdio) MCP는 .env에 MCP_ALLOW_STDIO=1을 넣고 서버를 다시 켜야 등록할 수 있어요.');
+    if (!server.command || /[\r\n]/.test(server.command)) throw new Error('실행 명령을 입력해 주세요.');
+  }
+}
+
+function checkedSecrets(raw: unknown): Record<string, string | null> {
+  if (raw === undefined) return {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('비밀값 형식이 올바르지 않아요.');
+  const entries = Object.entries(raw as Record<string, unknown>);
+  if (entries.length > 10) throw new Error('비밀값은 10개까지 넣을 수 있어요.');
+  return Object.fromEntries(
+    entries.map(([name, value]) => {
+      if (!SECRET_NAME.test(name)) throw new Error(`비밀값 이름 "${name}"은(는) 영문, 숫자, _ , - 만 쓸 수 있어요.`);
+      if (value === null || value === '') return [name, null];
+      return [name, String(value).trim().slice(0, 2000)];
+    }),
+  );
+}
+
+app.post('/api/mcp-servers', (req, res) => {
+  guard(res, 'owner');
+  if (store.data.mcpServers.length >= MAX_MCP_SERVERS) throw new Error(`MCP 서버는 ${MAX_MCP_SERVERS}개까지 등록할 수 있어요.`);
+  const body = req.body ?? {};
+  const server: McpServer = {
+    id: `mcp_${randomUUID().slice(0, 8)}`,
+    name: '',
+    icon: '🧩',
+    transport: 'http',
+    url: '',
+    command: '',
+    args: [],
+    enabled: true,
+    officeIds: 'all',
+    tools: [],
+    checkedAt: null,
+    lastError: null,
+  };
+  applyMcp(server, { ...body, tools: undefined });
+  const secrets = checkedSecrets(body.secrets);
+  store.mutate((s) => {
+    s.mcpServers.push(server);
+  });
+  setMcpSecrets(server.id, secrets);
+  store.emit('mcp.changed', { payload: { summary: `MCP 등록: ${server.name}` } });
+  res.json(server);
+});
+
+app.put('/api/mcp-servers/:id', (req, res) => {
+  guard(res, 'owner');
+  const before = mcpById(req.params.id);
+  const server = structuredClone(before);
+  const body = req.body ?? {};
+  applyMcp(server, body);
+  const secrets = checkedSecrets(body.secrets);
+  store.mutate((s) => {
+    s.mcpServers = s.mcpServers.map((m) => (m.id === server.id ? server : m));
+  });
+  setMcpSecrets(server.id, secrets);
+  const reconnect =
+    Object.keys(secrets).length > 0 ||
+    server.transport !== before.transport ||
+    server.url !== before.url ||
+    server.command !== before.command ||
+    server.args.join('\n') !== before.args.join('\n');
+  if (reconnect || !server.enabled) closeConnection(server.id);
+  store.emit('mcp.changed', { payload: { summary: `MCP 변경: ${server.name}` } });
+  res.json(server);
+});
+
+app.delete('/api/mcp-servers/:id', (req, res) => {
+  guard(res, 'owner');
+  const server = mcpById(req.params.id);
+  store.mutate((s) => {
+    s.mcpServers = s.mcpServers.filter((m) => m.id !== server.id);
+  });
+  closeConnection(server.id);
+  dropMcpSecrets(server.id);
+  store.emit('mcp.changed', { payload: { summary: `MCP 삭제: ${server.name}` } });
+  res.json({ ok: true });
+});
+
+app.post('/api/mcp-servers/:id/check', async (req, res) => {
+  guard(res, 'owner');
+  const server = mcpById(req.params.id);
+  try {
+    const tools = await discoverTools(server);
+    store.mutate((s) => {
+      const target = s.mcpServers.find((m) => m.id === server.id);
+      if (target) Object.assign(target, { tools, checkedAt: new Date().toISOString(), lastError: null });
+    });
+    res.json({ tools });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    store.mutate((s) => {
+      const target = s.mcpServers.find((m) => m.id === server.id);
+      if (target) Object.assign(target, { checkedAt: new Date().toISOString(), lastError: reason.slice(0, 500) });
+    });
+    throw new Error(`연결하지 못했어요: ${reason}`);
+  }
+});
+
 const SHARE_ROLE_IDS: ShareRole[] = ['viewer', 'operator', 'manager'];
 const MAX_SHARES = 30;
 
@@ -504,6 +647,7 @@ server.listen(config.port, () => {
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
+    closeAllConnections();
     workflowRuntime
       .stop()
       .catch((error) => console.error('[office] 실행기 종료 실패:', error))

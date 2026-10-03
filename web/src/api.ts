@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { McpServer, McpTool } from '../../shared/mcp.ts';
 import { setCatalog, type ApiKind, type Company, type ModelEntry } from '../../shared/models.ts';
 import type {
   AiMode,
@@ -68,7 +69,14 @@ export const api = {
   createModel: (input: ModelInput) => call<ModelEntry>('POST', '/api/models', input),
   updateModel: (id: string, patch: Partial<ModelInput>) => call<ModelEntry>('PUT', `/api/models/${id}`, patch),
   deleteModel: (id: string) => call('DELETE', `/api/models/${id}`),
+  createMcpServer: (input: McpServerInput & { secrets?: Record<string, string> }) => call<McpServer>('POST', '/api/mcp-servers', input),
+  updateMcpServer: (id: string, patch: Partial<McpServerInput> & { secrets?: Record<string, string | null>; tools?: Record<string, boolean> }) =>
+    call<McpServer>('PUT', `/api/mcp-servers/${id}`, patch),
+  deleteMcpServer: (id: string) => call('DELETE', `/api/mcp-servers/${id}`),
+  checkMcpServer: (id: string) => call<{ tools: McpTool[] }>('POST', `/api/mcp-servers/${id}/check`),
 };
+
+export type McpServerInput = Pick<McpServer, 'name' | 'icon' | 'transport' | 'url' | 'command' | 'args' | 'enabled' | 'officeIds'>;
 
 export type CompanyInput = Pick<Company, 'name' | 'hat' | 'color' | 'api' | 'baseUrl'>;
 export type ModelInput = Omit<ModelEntry, 'id' | 'builtin'>;

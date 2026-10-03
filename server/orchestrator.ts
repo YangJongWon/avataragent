@@ -3,9 +3,11 @@ import { splitDraft } from '../shared/draft.ts';
 import { taskTypeOf, TEAMS } from '../shared/teams.ts';
 import type { Agent, Artifact, Expression, Role, StepStatus, Task, TeamId, WorkflowStep, WorkflowStepInput } from '../shared/types.ts';
 import { MAX_LOOP, normalizePlan, parseLoop, remapLoops, STEP_KIND, templatePlan, validatePlan } from '../shared/workflow.ts';
+import { usableBy, type McpServer, type McpTool } from '../shared/mcp.ts';
 import { modelOf } from '../shared/models.ts';
 import { complete, costKrw, parseJson, type Purpose } from './ai.ts';
 import { config, ORGANIZATION_SAFETY_RULES } from './config.ts';
+import { callTool } from './mcp.ts';
 import { nextInquiry, nextMail } from './seed.ts';
 import { store } from './store.ts';
 import { systemPromptFor, TEAM_SPECS } from './teams.ts';
@@ -302,6 +304,72 @@ async function briefStep(taskId: string, step: WorkflowStep, feedback?: string) 
   setStep(taskId, step.id, 'done');
 }
 
+const MAX_TOOL_CALLS = 3;
+
+type OfficeTool = { server: McpServer; tool: McpTool; ref: string };
+
+const officeTools = (officeId: string): OfficeTool[] =>
+  store.data.mcpServers
+    .filter((server) => usableBy(server, officeId))
+    .flatMap((server) => server.tools.filter((tool) => tool.enabled).map((tool) => ({ server, tool, ref: `${server.id}/${tool.name}` })));
+
+/** Offline demo: query the first tool that takes one string argument with the task title. */
+function mockToolCalls(tools: OfficeTool[], task: Task) {
+  for (const { ref, tool } of tools) {
+    const props = (tool.inputSchema.properties ?? {}) as Record<string, { type?: unknown }>;
+    const required = Array.isArray(tool.inputSchema.required) ? (tool.inputSchema.required as string[]) : [];
+    const strings = Object.keys(props).filter((key) => props[key]?.type === 'string');
+    const target = required.length === 1 && strings.includes(required[0]) ? required[0] : required.length === 0 ? strings[0] : undefined;
+    if (target) return [{ tool: ref, arguments: { [target]: task.title }, why: '업무 제목으로 찾아봐요.' }];
+  }
+  return [];
+}
+
+/** Lets the agent pick up to MAX_TOOL_CALLS enabled MCP tool calls and returns their results for the prompt. */
+async function useTools(taskId: string, agent: Agent, context: string) {
+  const tools = officeTools(store.task(taskId).officeId);
+  if (!tools.length) return '';
+  setAgent(agent, 'working', 'focus', '연결된 도구로 무엇을 찾아볼지 정하고 있어요.');
+  const raw = await callAI(
+    agent,
+    store.task(taskId),
+    'tools',
+    [
+      context,
+      '',
+      '[쓸 수 있는 도구]',
+      ...tools.map(({ ref, server, tool }) => `- ${ref} (${server.name}): ${tool.description || '(설명 없음)'}\n  인자: ${JSON.stringify(tool.inputSchema)}`),
+      '',
+      `이 단계에 꼭 필요한 정보만 도구로 찾아라. 최대 ${MAX_TOOL_CALLS}번이고, 필요 없으면 빈 배열로 답한다.`,
+      '외부에 글을 쓰거나, 보내거나, 지우는 호출은 하지 않는다.',
+      'JSON으로만 답한다: {"calls": [{"tool": string (목록의 이름 그대로), "arguments": object, "why": string}]}',
+    ].join('\n'),
+    () => JSON.stringify({ calls: mockToolCalls(tools, store.task(taskId)) }),
+    true,
+  );
+  const parsed = parseJson(raw, { calls: [] as { tool?: unknown; arguments?: unknown }[] });
+  const results: string[] = [];
+  for (const call of (Array.isArray(parsed.calls) ? parsed.calls : []).slice(0, MAX_TOOL_CALLS)) {
+    const picked = tools.find((t) => t.ref === call?.tool);
+    if (!picked) continue;
+    const args =
+      call.arguments && typeof call.arguments === 'object' && !Array.isArray(call.arguments) ? (call.arguments as Record<string, unknown>) : {};
+    const payload = { server: picked.server.name, icon: picked.server.icon, tool: picked.tool.name };
+    store.emit('mcp.called', { taskId, agentId: agent.id, payload: { ...payload, arguments: args } });
+    setAgent(agent, 'working', 'focus', `${picked.server.icon} ${picked.server.name}에서 찾아보고 있어요.`);
+    try {
+      const output = await callTool(picked.server, picked.tool.name, args);
+      results.push(`[${picked.server.name} · ${picked.tool.name}] ${JSON.stringify(args)}\n${output}`);
+      store.emit('mcp.result', { taskId, agentId: agent.id, payload: { ...payload, chars: output.length } });
+    } catch (error) {
+      const reason = (error instanceof Error ? error.message : String(error)).split('\n')[0].slice(0, 200);
+      results.push(`[${picked.server.name} · ${picked.tool.name}] 실패: ${reason}`);
+      store.emit('mcp.failed', { taskId, agentId: agent.id, payload: { ...payload, reason } });
+    }
+  }
+  return results.join('\n\n');
+}
+
 async function researchStep(taskId: string, step: WorkflowStep, feedback?: string) {
   const task = store.task(taskId);
   const spec = specOf(task);
@@ -312,21 +380,32 @@ async function researchStep(taskId: string, step: WorkflowStep, feedback?: strin
   store.emit('tool.started', { taskId, agentId: agent.id, payload: { tool: 'research', label: step.label } });
 
   const earlier = researchNotes(task);
+  const context = [
+    `[작업 지시서]\n${latest(task, 'brief')?.content}`,
+    `[처리할 자료]\n${task.inputText}`,
+    earlier !== '(조사 단계 없음)' ? `[앞 단계 메모]\n${earlier}` : '',
+    stepNote(step, feedback),
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+  const found = await useTools(taskId, agent, context);
+  setAgent(agent, 'working', 'focus', `${step.label} 중이에요.`);
   const notes = await callAI(
     agent,
-    task,
+    store.task(taskId),
     'research',
     [
-      `[작업 지시서]\n${latest(task, 'brief')?.content}`,
-      `[처리할 자료]\n${task.inputText}`,
-      earlier !== '(조사 단계 없음)' ? `[앞 단계 메모]\n${earlier}` : '',
-      stepNote(step, feedback),
+      context,
+      found ? `[연결된 도구로 찾은 내용]\n${found}` : '',
       '',
       step.instructions || spec.researchAsk,
+      found ? '도구로 찾은 내용을 근거로 쓰고, 어느 도구에서 왔는지 밝혀라.' : '',
     ]
       .filter(Boolean)
       .join('\n\n'),
-    () => `## ${step.label}\n${spec.mock.research(store.task(taskId))}`,
+    () =>
+      `## ${step.label}\n${spec.mock.research(store.task(taskId))}` +
+      (found ? `\n\n### 연결된 도구에서 찾은 내용\n${found.slice(0, 1500)}` : ''),
   );
   store.emit('tool.completed', { taskId, agentId: agent.id, payload: { tool: 'research' } });
   addArtifact(taskId, agent, step, 'research', step.label, notes);

@@ -3,7 +3,7 @@ import { config } from './config.ts';
 import { apiKeyFor } from './secrets.ts';
 import { store } from './store.ts';
 
-export type Purpose = 'plan' | 'brief' | 'research' | 'clarify' | 'draft' | 'review' | 'check';
+export type Purpose = 'plan' | 'brief' | 'research' | 'clarify' | 'draft' | 'review' | 'check' | 'tools';
 
 export interface CompletionRequest {
   purpose: Purpose;

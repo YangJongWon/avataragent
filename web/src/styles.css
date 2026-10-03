@@ -1003,6 +1003,46 @@ p.plan-note {
   margin: 4px 0;
   word-break: break-all;
 }
+.mode-options.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 10px;
+}
+.mcp-secret {
+  gap: 6px;
+  align-items: center;
+}
+.mcp-secret-name {
+  width: 190px;
+  font-weight: 400;
+}
+.mcp-secret .grow {
+  flex: 1;
+  min-width: 140px;
+}
+.mcp-tools {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.mcp-tools li {
+  padding: 3px 0;
+  border-bottom: 1px dashed #e4dccd;
+}
+.mcp-tools .check {
+  flex-wrap: wrap;
+}
+.mcp-error {
+  color: var(--red);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 80px;
+  overflow-y: auto;
+}
+.company-card.mcp-off {
+  opacity: 0.6;
+}
 .model-group {
   margin-top: 10px;
 }

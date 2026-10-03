@@ -39,6 +39,9 @@ export const config = {
   dataDir: process.env.DATA_DIR || 'data',
   accessPassword: process.env.ACCESS_PASSWORD ?? '',
   publicUrl: (process.env.PUBLIC_URL ?? '').replace(/\/+$/, ''),
+  /** stdio MCP servers run commands on this PC, so registering them must be switched on explicitly. */
+  mcpAllowStdio: process.env.MCP_ALLOW_STDIO === '1',
+  mcpTimeoutMs: num('MCP_TIMEOUT_MS', 30_000),
   workflowRuntime: process.env.WORKFLOW_RUNTIME === 'temporal' ? ('temporal' as const) : ('local' as const),
   temporal: {
     address: process.env.TEMPORAL_ADDRESS || 'localhost:7233',
