@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { splitDraft } from '../../../shared/draft.ts';
 import { TEAMS } from '../../../shared/teams.ts';
 import { currentStepLabel } from '../../../shared/workflow.ts';
+import type { PlannedAction } from '../../../shared/mcp.ts';
 import type { Agent, OfficeEvent, Task, TeamId } from '../../../shared/types.ts';
 import { api } from '../api.ts';
 import { eventLabel, krw, TASK_STATUS_LABEL, timeOf } from '../format.ts';
@@ -32,6 +33,43 @@ function download(filename: string, content: string) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+const ACTION_STATUS: Record<PlannedAction['status'], string> = {
+  proposed: '',
+  running: '⏳ 실행 중',
+  done: '✅ 완료',
+  failed: '❌ 실패',
+  unknown: '⚠️ 결과 확인 필요',
+  skipped: '⏭️ 건너뜀',
+};
+
+function ActionList({ actions, editable, onToggle }: { actions: PlannedAction[]; editable: boolean; onToggle?: (id: string, enabled: boolean) => void }) {
+  const pending = actions.every((a) => a.status === 'proposed');
+  return (
+    <div className="actions-box">
+      <b>{pending ? '승인하면 실행할 외부 작업' : '외부 작업 결과'}</b>
+      {pending && <div className="small muted">체크를 끄면 그 작업은 실행하지 않아요. 같은 작업은 한 번만 실행돼요.</div>}
+      <ul>
+        {actions.map((a) => (
+          <li key={a.id} className={pending && !a.enabled ? 'off' : ''}>
+            <label className="check">
+              {pending && <input type="checkbox" checked={a.enabled} disabled={!editable} onChange={(e) => onToggle?.(a.id, e.target.checked)} />}
+              <span>
+                {a.icon} <b>{a.serverName}</b> · <code>{a.tool}</code> {ACTION_STATUS[a.status]}
+              </span>
+            </label>
+            <div>{a.summary}</div>
+            <details>
+              <summary className="small muted">보낼 내용{a.result ? ' · 결과' : ''}</summary>
+              <pre>{JSON.stringify(a.arguments, null, 2)}</pre>
+              {a.result && <pre>{a.result}</pre>}
+            </details>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 export function ReportPanel({ team, teamData, task, tasks, agents, events, canOperate, onSelectTask, onHelp, onError }: Props) {
@@ -124,6 +162,8 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
 
       {task.status === 'failed' && <div className="callout callout-error">중단됨: {task.failureReason}</div>}
 
+      {task.status === 'completed' && task.actions?.some((a) => a.status !== 'proposed') && <ActionList actions={task.actions} editable={false} />}
+
       {task.status === 'awaiting_approval' && task.value && (
         <div className="approval">
           <div className="approval-title">🙋 사용자 승인</div>
@@ -138,6 +178,13 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
                 </ul>
               )}
             </div>
+          )}
+          {task.actions && task.actions.length > 0 && (
+            <ActionList
+              actions={task.actions}
+              editable={canOperate && !busy}
+              onToggle={(id, enabled) => run(() => api.setActionEnabled(task.id, id, enabled))}
+            />
           )}
           <div className="value-breakdown">
             기준 가치 {krw(task.value.baseKrw)} × 품질 {task.value.qualityMultiplier} × 사용자 평가 {task.value.userMultiplier}

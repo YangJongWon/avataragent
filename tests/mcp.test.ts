@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
+import test, { after } from 'node:test';
 import { McpServer as SdkServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import * as z from 'zod';
@@ -62,13 +62,14 @@ const { setMcpSecrets } = await import('../server/secrets.ts');
 const { closeAllConnections, discoverTools } = await import('../server/mcp.ts');
 const { localWorkflowRuntime: runtime } = await import('../server/workflow-runtime.ts');
 const { until } = await import('./runtime-contract.ts');
+const { allowedModes } = await import('../shared/mcp.ts');
 
-test('MCP 도구를 확인하고 조사 단계에서 허용된 도구만 쓴다', async (t) => {
-  t.after(() => {
-    closeAllConnections();
-    http.close();
-  });
+after(() => {
+  closeAllConnections();
+  http.close();
+});
 
+test('MCP 도구를 확인하고 조사 단계에서 허용된 도구만 쓴다', async () => {
   store.mutate((s) => {
     s.mcpServers.push({
       id: 'mcp_test',
@@ -89,10 +90,11 @@ test('MCP 도구를 확인하고 조사 단계에서 허용된 도구만 쓴다'
 
   const tools = await discoverTools(store.data.mcpServers[0]);
   const byName = Object.fromEntries(tools.map((tool) => [tool.name, tool]));
-  assert.equal(byName.search.enabled, true, '읽기 도구는 기본으로 켜진다');
-  assert.equal(byName.send_mail.enabled, false, '읽기 표시가 없는 도구는 기본으로 꺼진다');
+  assert.equal(byName.search.mode, 'auto', '읽기 도구는 기본으로 조사 때 자동');
+  assert.equal(byName.send_mail.mode, 'off', '읽기 표시가 없는 도구는 기본으로 꺼진다');
   assert.equal(byName.delete_all.destructive, true);
-  assert.equal(byName.delete_all.enabled, false);
+  assert.deepEqual(allowedModes(byName.delete_all), ['off', 'approval'], '위험 도구는 승인 후에만 쓸 수 있다');
+  assert.deepEqual(allowedModes(byName.search), ['off', 'auto']);
   store.mutate((s) => {
     s.mcpServers[0].tools = tools;
   });
@@ -118,6 +120,54 @@ test('MCP 도구를 확인하고 조사 단계에서 허용된 도구만 쓴다'
   assert.equal(snapshot.includes('secret-token-1234'), false, '비밀값은 스냅샷에 나가지 않는다');
   assert.ok(snapshot.includes('••••1234'));
 
+  assert.equal(store.task(task.id).actions?.length ?? 0, 0, '승인 후 실행 도구가 없으면 외부 작업도 없다');
   await runtime.approve(task.id);
   await runtime.approve(other.id);
+  await until(() => store.task(task.id).status === 'completed', '완료');
+});
+
+const { setActionEnabled } = await import('../server/orchestrator.ts');
+
+async function untilApproval(title: string) {
+  const task = await runtime.createTask({ officeId: 'office_dev', title, description: '반영' });
+  await until(() => ['awaiting_help', 'awaiting_approval'].includes(store.task(task.id).status), '도움 요청 또는 승인 대기');
+  if (store.task(task.id).status === 'awaiting_help') await runtime.answerHelp(task.id, null);
+  await until(() => store.task(task.id).status === 'awaiting_approval', '승인 대기');
+  return task.id;
+}
+
+test('승인 후 실행 도구는 제안만 되고 승인하면 한 번만 실행된다', async () => {
+  store.mutate((s) => {
+    const send = s.mcpServers[0].tools.find((t) => t.name === 'send_mail')!;
+    send.mode = 'approval';
+  });
+  const sent = () => calls.filter((c) => c.tool === 'send_mail').length;
+
+  const skippedId = await untilApproval('끄고 승인');
+  const [proposed] = store.task(skippedId).actions ?? [];
+  assert.equal(proposed?.tool, 'send_mail', '승인 후 실행 도구로 외부 작업을 제안한다');
+  assert.equal(proposed.status, 'proposed');
+  assert.equal(sent(), 0, '승인 전에는 실행하지 않는다');
+  setActionEnabled(skippedId, proposed.id, false);
+  await runtime.approve(skippedId);
+  await until(() => store.task(skippedId).status === 'completed', '완료');
+  assert.equal(store.task(skippedId).actions?.[0].status, 'skipped');
+  assert.equal(sent(), 0, '끈 작업은 실행하지 않는다');
+
+  const doneId = await untilApproval('승인하면 발송');
+  await runtime.approve(doneId);
+  await until(() => store.task(doneId).status === 'completed', '완료');
+  assert.equal(store.task(doneId).actions?.[0].status, 'done');
+  assert.equal(store.task(doneId).actions?.[0].result, 'sent');
+  assert.equal(sent(), 1);
+  assert.throws(() => setActionEnabled(doneId, store.task(doneId).actions![0].id, false), '끝난 업무의 작업은 바꿀 수 없다');
+
+  const crashedId = await untilApproval('재시작 중 발송');
+  store.updateTask(crashedId, (t) => {
+    t.actions![0].status = 'running';
+  });
+  await runtime.approve(crashedId);
+  await until(() => store.task(crashedId).status === 'completed', '완료');
+  assert.equal(store.task(crashedId).actions?.[0].status, 'unknown', '실행 중에 끊긴 작업은 다시 보내지 않는다');
+  assert.equal(sent(), 1);
 });

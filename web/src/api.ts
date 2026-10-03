@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { McpServer, McpTool } from '../../shared/mcp.ts';
+import type { McpServer, McpTool, McpToolMode, PlannedAction } from '../../shared/mcp.ts';
 import { setCatalog, type ApiKind, type Company, type ModelEntry } from '../../shared/models.ts';
 import type {
   AiMode,
@@ -56,6 +56,8 @@ export const api = {
   approve: (taskId: string, valueKrw?: number) => call('POST', `/api/tasks/${taskId}/approve`, { valueKrw }),
   requestChanges: (taskId: string, comment: string) =>
     call('POST', `/api/tasks/${taskId}/request-changes`, { comment }),
+  setActionEnabled: (taskId: string, actionId: string, enabled: boolean) =>
+    call<PlannedAction>('PUT', `/api/tasks/${taskId}/actions/${actionId}`, { enabled }),
   updateAgent: (agentId: string, patch: { name?: string; rules?: string; model?: string; skin?: Skin }) =>
     call('PUT', `/api/agents/${agentId}`, patch),
   setPaused: (agentId: string, paused: boolean) => call('POST', `/api/agents/${agentId}/pause`, { paused }),
@@ -70,7 +72,7 @@ export const api = {
   updateModel: (id: string, patch: Partial<ModelInput>) => call<ModelEntry>('PUT', `/api/models/${id}`, patch),
   deleteModel: (id: string) => call('DELETE', `/api/models/${id}`),
   createMcpServer: (input: McpServerInput & { secrets?: Record<string, string> }) => call<McpServer>('POST', '/api/mcp-servers', input),
-  updateMcpServer: (id: string, patch: Partial<McpServerInput> & { secrets?: Record<string, string | null>; tools?: Record<string, boolean> }) =>
+  updateMcpServer: (id: string, patch: Partial<McpServerInput> & { secrets?: Record<string, string | null>; tools?: Record<string, McpToolMode> }) =>
     call<McpServer>('PUT', `/api/mcp-servers/${id}`, patch),
   deleteMcpServer: (id: string) => call('DELETE', `/api/mcp-servers/${id}`),
   checkMcpServer: (id: string) => call<{ tools: McpTool[] }>('POST', `/api/mcp-servers/${id}/check`),

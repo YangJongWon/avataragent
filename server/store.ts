@@ -136,6 +136,10 @@ function fillCatalog(state: PersistedState) {
   state.models ??= [];
   state.aiMode ??= 'env';
   state.mcpServers ??= [];
+  for (const tool of state.mcpServers.flatMap((server) => server.tools)) {
+    tool.mode ??= tool.enabled ? 'auto' : 'off';
+    delete tool.enabled;
+  }
   for (const company of DEFAULT_COMPANIES) {
     if (!state.companies.some((c) => c.id === company.id)) state.companies.push(structuredClone(company));
   }

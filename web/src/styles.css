@@ -1030,8 +1030,15 @@ p.plan-note {
   padding: 3px 0;
   border-bottom: 1px dashed #e4dccd;
 }
-.mcp-tools .check {
+.mcp-tool-row {
+  display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.mcp-tool-row select {
+  font: inherit;
+  font-size: 12px;
 }
 .mcp-error {
   color: var(--red);
@@ -1421,6 +1428,32 @@ p.plan-note {
 }
 .proposal li {
   margin: 2px 0;
+}
+.actions-box {
+  margin-top: 6px;
+  padding: 8px;
+  border: 2px dashed var(--red);
+  background: #fff;
+}
+.actions-box ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.actions-box li {
+  padding: 4px 0;
+  border-bottom: 1px dashed #e4dccd;
+}
+.actions-box li.off {
+  opacity: 0.55;
+}
+.actions-box pre {
+  margin: 2px 0 0;
+  max-height: 90px;
+  overflow: auto;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .context-menu.flip {

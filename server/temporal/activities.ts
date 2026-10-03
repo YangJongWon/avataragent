@@ -61,8 +61,8 @@ export function createTaskActivities(onSettled: () => void): TaskActivities {
     requestApproval: (taskId, stepId) => step(() => requestApproval(taskId, stepId)),
     applyChangeRequest: (taskId, stepId, comment) => step(() => applyChangeRequest(taskId, stepId, comment)),
     completeTask: (taskId, valueKrw) =>
-      step(() => {
-        completeTask(taskId, valueKrw);
+      step(async () => {
+        await completeTask(taskId, valueKrw);
         onSettled();
       }),
     failTask: (taskId, reason) =>

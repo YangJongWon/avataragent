@@ -1,4 +1,4 @@
-import type { McpServer } from './mcp.ts';
+import type { McpServer, PlannedAction } from './mcp.ts';
 import type { Company, ModelEntry } from './models.ts';
 import type { Skin } from './skins.ts';
 
@@ -166,6 +166,8 @@ export interface Task {
   clarifications: string[];
   userChangeRequests: string[];
   proposal: Proposal | null;
+  /** External tool calls proposed with the latest draft, run on approval. */
+  actions?: PlannedAction[];
   costKrw: number;
   costByAgent: Record<string, number>;
   value: ValueBreakdown | null;

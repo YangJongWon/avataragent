@@ -1,5 +1,15 @@
 import { useState } from 'react';
-import { MCP_ICONS, MCP_PRESETS, canEnableTool, type McpPreset, type McpServer, type McpTool, type McpTransport } from '../../../shared/mcp.ts';
+import {
+  MCP_ICONS,
+  MCP_PRESETS,
+  TOOL_MODE_LABEL,
+  allowedModes,
+  type McpPreset,
+  type McpServer,
+  type McpTool,
+  type McpToolMode,
+  type McpTransport,
+} from '../../../shared/mcp.ts';
 import type { Office, Snapshot } from '../../../shared/types.ts';
 import { api, type McpServerInput } from '../api.ts';
 
@@ -227,36 +237,43 @@ function McpForm({
 }
 
 function ToolList({ server, onError }: { server: McpServer } & Pick<Notify, 'onError'>) {
-  const toggle = async (tool: McpTool, enabled: boolean) => {
-    if (enabled && !tool.readOnly) {
+  const choose = async (tool: McpTool, mode: McpToolMode) => {
+    if (mode === 'auto' && !tool.readOnly) {
       const ok = window.confirm(
-        `${tool.name}은(는) 읽기 전용 표시가 없어요. 외부에 글을 쓰거나 보내는 도구일 수 있어요.\n직원들은 조사 단계에서만 도구를 쓰고 쓰기·발송은 하지 않도록 지시받지만, 직접 확인한 뒤 켜 주세요. 켤까요?`,
+        `${tool.name}은(는) 읽기 전용 표시가 없어요. 외부에 글을 쓰거나 보내는 도구일 수 있어요.\n조사 때 자동으로 쓰면 승인 없이 호출돼요. 쓰기 도구라면 "승인 후 실행"을 고르세요. 그래도 자동으로 쓸까요?`,
       );
       if (!ok) return;
     }
     try {
-      await api.updateMcpServer(server.id, { tools: { [tool.name]: enabled } });
+      await api.updateMcpServer(server.id, { tools: { [tool.name]: mode } });
     } catch (e) {
       onError(message(e));
     }
   };
 
   if (!server.tools.length) return <p className="muted small">아직 확인된 도구가 없어요. 연결 확인을 눌러 주세요.</p>;
-  const on = server.tools.filter((t) => t.enabled).length;
+  const auto = server.tools.filter((t) => t.mode === 'auto').length;
+  const approval = server.tools.filter((t) => t.mode === 'approval').length;
   return (
     <details className="found-models" open={server.tools.length <= 6}>
       <summary>
-        도구 {server.tools.length}개 · 직원이 쓸 수 있는 도구 {on}개
+        도구 {server.tools.length}개 · 조사 때 자동 {auto}개 · 승인 후 실행 {approval}개
       </summary>
       <ul className="mcp-tools">
         {server.tools.map((tool) => (
           <li key={tool.name}>
-            <label className="check" title={tool.description}>
-              <input type="checkbox" checked={tool.enabled} disabled={!canEnableTool(tool)} onChange={(e) => toggle(tool, e.target.checked)} />
+            <div className="mcp-tool-row" title={tool.description}>
+              <select value={tool.mode} onChange={(e) => choose(tool, e.target.value as McpToolMode)}>
+                {allowedModes(tool).map((mode) => (
+                  <option key={mode} value={mode}>
+                    {TOOL_MODE_LABEL[mode]}
+                  </option>
+                ))}
+              </select>
               <code>{tool.name}</code>
               {tool.readOnly && <span className="key-badge ok">읽기</span>}
-              {tool.destructive && <span className="key-badge warn">위험 · 사용 불가</span>}
-            </label>
+              {tool.destructive && <span className="key-badge warn">위험 · 승인 필요</span>}
+            </div>
             {tool.description && <div className="muted small ellipsis">{tool.description}</div>}
           </li>
         ))}

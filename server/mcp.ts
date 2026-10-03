@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { McpServer, McpTool } from '../shared/mcp.ts';
+import { allowedModes, type McpServer, type McpTool } from '../shared/mcp.ts';
 import { config } from './config.ts';
 import { mcpSecretsFor } from './secrets.ts';
 
@@ -118,18 +118,20 @@ export async function discoverTools(server: McpServer): Promise<McpTool[]> {
   try {
     conn = await connection(server);
     const { tools } = await withTimeout(conn.client.listTools(), config.mcpTimeoutMs, `${server.name} 도구 목록`);
-    return tools.map((tool) => {
+    return tools.map((tool): McpTool => {
       const before = server.tools.find((t) => t.name === tool.name);
       const readOnly = tool.annotations?.readOnlyHint === true;
       const destructive = tool.annotations?.destructiveHint === true && !readOnly;
-      return {
+      const found: McpTool = {
         name: tool.name,
         description: (tool.description ?? '').slice(0, 300),
         inputSchema: trimSchema(tool.inputSchema),
         readOnly,
         destructive,
-        enabled: destructive ? false : (before?.enabled ?? readOnly),
+        mode: readOnly ? 'auto' : 'off',
       };
+      if (before && allowedModes(found).includes(before.mode)) found.mode = before.mode;
+      return found;
     });
   } catch (error) {
     closeConnection(server.id);

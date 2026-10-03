@@ -3,6 +3,18 @@
 
 export type McpTransport = 'http' | 'stdio';
 
+/**
+ * off: never used. auto: agents may call it while researching.
+ * approval: agents may only propose a call; it runs after the user approves the task.
+ */
+export type McpToolMode = 'off' | 'auto' | 'approval';
+
+export const TOOL_MODE_LABEL: Record<McpToolMode, string> = {
+  off: '끔',
+  auto: '조사 때 자동',
+  approval: '승인 후 실행',
+};
+
 export interface McpTool {
   name: string;
   description: string;
@@ -10,10 +22,32 @@ export interface McpTool {
   inputSchema: Record<string, unknown>;
   /** The server marked this tool read-only (annotations.readOnlyHint). */
   readOnly: boolean;
-  /** The server marked this tool destructive (annotations.destructiveHint); such tools can never be enabled. */
+  /** The server marked this tool destructive (annotations.destructiveHint). */
   destructive: boolean;
-  /** Agents may call it during research. New tools start enabled only when marked read-only. */
+  /** New tools start as `auto` only when marked read-only, otherwise `off`. */
+  mode: McpToolMode;
+  /** Legacy on/off flag from before modes existed. */
+  enabled?: boolean;
+}
+
+/** A tool call proposed with the draft and run only after the user approves the task. */
+export interface PlannedAction {
+  id: string;
+  serverId: string;
+  serverName: string;
+  icon: string;
+  tool: string;
+  arguments: Record<string, unknown>;
+  /** What the call does, in the agent's words. */
+  summary: string;
+  /** The user may switch off single actions before approving. */
   enabled: boolean;
+  /**
+   * running is persisted before the call starts. An action found `running` after a restart is
+   * marked `unknown` instead of being called again, so external writes happen at most once.
+   */
+  status: 'proposed' | 'running' | 'done' | 'failed' | 'unknown' | 'skipped';
+  result?: string;
 }
 
 export interface McpSecretInfo {
@@ -107,8 +141,11 @@ export const MCP_PRESETS: McpPreset[] = [
 
 export const MCP_ICONS = ['🔎', '📝', '📧', '📅', '🐙', '🌐', '🗂️', '💬', '🧩', '🛠️'];
 
-/** Destructive tools stay off; other non-read tools are enabled only after the owner confirms in the UI. */
-export const canEnableTool = (tool: McpTool) => !tool.destructive;
+/** Read tools run freely; writes may wait for approval; destructive tools can only run after approval. */
+export const allowedModes = (tool: McpTool): McpToolMode[] =>
+  tool.readOnly ? ['off', 'auto'] : tool.destructive ? ['off', 'approval'] : ['off', 'auto', 'approval'];
+
+export const isToolMode = (value: unknown): value is McpToolMode => value === 'off' || value === 'auto' || value === 'approval';
 
 export const usableBy = (server: McpServer, officeId: string) =>
   server.enabled && (server.officeIds === 'all' || server.officeIds.includes(officeId));

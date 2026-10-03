@@ -15,7 +15,7 @@ import {
   type ModelEntry,
   type Tier,
 } from '../shared/models.ts';
-import { canEnableTool, type McpServer } from '../shared/mcp.ts';
+import { allowedModes, isToolMode, type McpServer } from '../shared/mcp.ts';
 import { isSkin } from '../shared/skins.ts';
 import { TEAMS } from '../shared/teams.ts';
 import type { AiMode, ServerMessage, ShareLink, ShareRole, TeamId, Viewer } from '../shared/types.ts';
@@ -23,7 +23,7 @@ import { canSeeEvent, ForbiddenError, snapshotFor } from './access.ts';
 import { listModels } from './ai.ts';
 import { authEnabled, authRouter, stillValid, viewerOf } from './auth.ts';
 import { config } from './config.ts';
-import { simulateInquiry, simulateMail } from './orchestrator.ts';
+import { setActionEnabled, simulateInquiry, simulateMail } from './orchestrator.ts';
 import { closeAllConnections, closeConnection, discoverTools } from './mcp.ts';
 import { apiKeyFor, dropMcpSecrets, setApiKey, setMcpSecrets } from './secrets.ts';
 import { store } from './store.ts';
@@ -168,6 +168,11 @@ app.post('/api/tasks/:id/approve', async (req, res) => {
   const valueKrw = req.body?.valueKrw;
   await workflowRuntime.approve(req.params.id, typeof valueKrw === 'number' && Number.isFinite(valueKrw) ? valueKrw : undefined);
   res.json({ ok: true });
+});
+
+app.put('/api/tasks/:id/actions/:actionId', (req, res) => {
+  guard(res, 'operate', officeOfTask(req.params.id));
+  res.json(setActionEnabled(req.params.id, req.params.actionId, Boolean(req.body?.enabled)));
 });
 
 app.post('/api/tasks/:id/request-changes', async (req, res) => {
@@ -433,9 +438,12 @@ function applyMcp(server: McpServer, body: Record<string, unknown>) {
   }
   if (body.tools !== undefined) {
     const choices = (body.tools ?? {}) as Record<string, unknown>;
-    server.tools = server.tools.map((tool) =>
-      tool.name in choices ? { ...tool, enabled: canEnableTool(tool) && Boolean(choices[tool.name]) } : tool,
-    );
+    server.tools = server.tools.map((tool) => {
+      if (!(tool.name in choices)) return tool;
+      const mode = choices[tool.name];
+      if (!isToolMode(mode) || !allowedModes(tool).includes(mode)) throw new Error(`${tool.name} 도구는 그 방식으로 쓸 수 없어요.`);
+      return { ...tool, mode };
+    });
   }
   if (!server.name) throw new Error('이름을 입력해 주세요.');
   if (server.transport === 'http') {

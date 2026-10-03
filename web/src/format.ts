@@ -53,7 +53,7 @@ export function eventLabel(event: OfficeEvent, agents: Map<string, Agent>) {
     case 'tool.completed':
       return `${who} 도구 사용 완료`;
     case 'mcp.called':
-      return `${who} ${p.icon ?? '🧩'} ${p.server} · ${p.tool} 호출`;
+      return `${who} ${p.icon ?? '🧩'} ${p.server} · ${p.tool} ${p.approved ? '승인된 외부 작업 실행' : '호출'}`;
     case 'mcp.result':
       return `${who} ${p.server} · ${p.tool} 결과 받음 (${p.chars}자)`;
     case 'mcp.failed':

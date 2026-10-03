@@ -3,7 +3,7 @@ import { splitDraft } from '../shared/draft.ts';
 import { taskTypeOf, TEAMS } from '../shared/teams.ts';
 import type { Agent, Artifact, Expression, Role, StepStatus, Task, TeamId, WorkflowStep, WorkflowStepInput } from '../shared/types.ts';
 import { MAX_LOOP, normalizePlan, parseLoop, remapLoops, STEP_KIND, templatePlan, validatePlan } from '../shared/workflow.ts';
-import { usableBy, type McpServer, type McpTool } from '../shared/mcp.ts';
+import { usableBy, type McpServer, type McpTool, type McpToolMode, type PlannedAction } from '../shared/mcp.ts';
 import { modelOf } from '../shared/models.ts';
 import { complete, costKrw, parseJson, type Purpose } from './ai.ts';
 import { config, ORGANIZATION_SAFETY_RULES } from './config.ts';
@@ -308,10 +308,15 @@ const MAX_TOOL_CALLS = 3;
 
 type OfficeTool = { server: McpServer; tool: McpTool; ref: string };
 
-const officeTools = (officeId: string): OfficeTool[] =>
+const officeTools = (officeId: string, mode: McpToolMode): OfficeTool[] =>
   store.data.mcpServers
     .filter((server) => usableBy(server, officeId))
-    .flatMap((server) => server.tools.filter((tool) => tool.enabled).map((tool) => ({ server, tool, ref: `${server.id}/${tool.name}` })));
+    .flatMap((server) => server.tools.filter((tool) => tool.mode === mode).map((tool) => ({ server, tool, ref: `${server.id}/${tool.name}` })));
+
+const toolList = (tools: OfficeTool[]) =>
+  tools.map(({ ref, server, tool }) => `- ${ref} (${server.name}): ${tool.description || '(설명 없음)'}\n  인자: ${JSON.stringify(tool.inputSchema)}`);
+
+const argsOf = (value: unknown) => (value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {});
 
 /** Offline demo: query the first tool that takes one string argument with the task title. */
 function mockToolCalls(tools: OfficeTool[], task: Task) {
@@ -327,7 +332,7 @@ function mockToolCalls(tools: OfficeTool[], task: Task) {
 
 /** Lets the agent pick up to MAX_TOOL_CALLS enabled MCP tool calls and returns their results for the prompt. */
 async function useTools(taskId: string, agent: Agent, context: string) {
-  const tools = officeTools(store.task(taskId).officeId);
+  const tools = officeTools(store.task(taskId).officeId, 'auto');
   if (!tools.length) return '';
   setAgent(agent, 'working', 'focus', '연결된 도구로 무엇을 찾아볼지 정하고 있어요.');
   const raw = await callAI(
@@ -338,7 +343,7 @@ async function useTools(taskId: string, agent: Agent, context: string) {
       context,
       '',
       '[쓸 수 있는 도구]',
-      ...tools.map(({ ref, server, tool }) => `- ${ref} (${server.name}): ${tool.description || '(설명 없음)'}\n  인자: ${JSON.stringify(tool.inputSchema)}`),
+      ...toolList(tools),
       '',
       `이 단계에 꼭 필요한 정보만 도구로 찾아라. 최대 ${MAX_TOOL_CALLS}번이고, 필요 없으면 빈 배열로 답한다.`,
       '외부에 글을 쓰거나, 보내거나, 지우는 호출은 하지 않는다.',
@@ -352,8 +357,7 @@ async function useTools(taskId: string, agent: Agent, context: string) {
   for (const call of (Array.isArray(parsed.calls) ? parsed.calls : []).slice(0, MAX_TOOL_CALLS)) {
     const picked = tools.find((t) => t.ref === call?.tool);
     if (!picked) continue;
-    const args =
-      call.arguments && typeof call.arguments === 'object' && !Array.isArray(call.arguments) ? (call.arguments as Record<string, unknown>) : {};
+    const args = argsOf(call.arguments);
     const payload = { server: picked.server.name, icon: picked.server.icon, tool: picked.tool.name };
     store.emit('mcp.called', { taskId, agentId: agent.id, payload: { ...payload, arguments: args } });
     setAgent(agent, 'working', 'focus', `${picked.server.icon} ${picked.server.name}에서 찾아보고 있어요.`);
@@ -714,8 +718,112 @@ function estimateValue(task: Task, itemCount: number) {
   };
 }
 
+const MAX_ACTIONS = 3;
+
+/** Offline demo: proposes one call to the first approval tool, filling string arguments from the task. */
+function mockActions(tools: OfficeTool[], task: Task, report: string) {
+  const picked = tools[0];
+  if (!picked) return [];
+  const props = (picked.tool.inputSchema.properties ?? {}) as Record<string, { type?: unknown }>;
+  const args: Record<string, string> = {};
+  for (const [key, prop] of Object.entries(props)) {
+    if (prop?.type !== 'string') continue;
+    args[key] = /title|subject|name|제목/i.test(key) ? task.title : report.slice(0, 300);
+  }
+  return [{ tool: picked.ref, arguments: args, summary: `${picked.server.name}에 "${task.title}" 결과를 반영해요.` }];
+}
+
+/** Lets the writer propose external tool calls that run only after the user approves the task. */
+async function planActions(taskId: string): Promise<PlannedAction[]> {
+  const task = store.task(taskId);
+  const tools = officeTools(task.officeId, 'approval');
+  if (!tools.length) return [];
+  const draftStepOf = task.plan.find((s) => s.kind === 'draft');
+  const writer = draftStepOf ? agentOfStep(task, draftStepOf) : agentOf(task, 'manager');
+  const report = splitDraft(latest(task, 'draft')?.content ?? '').body;
+  setAgent(writer, 'working', 'focus', '승인받으면 실행할 외부 작업을 정리하고 있어요.');
+  const raw = await callAI(
+    writer,
+    task,
+    'actions',
+    [
+      `[업무 제목] ${task.title}`,
+      `[최종 결과물]\n${report.slice(0, 4000)}`,
+      '',
+      '[승인 후 쓸 수 있는 도구]',
+      ...toolList(tools),
+      '',
+      `이 결과물을 실제로 반영하려면 어떤 도구 호출이 필요한지 제안해라. 최대 ${MAX_ACTIONS}개이고, 필요 없으면 빈 배열로 답한다.`,
+      '사용자가 승인해야만 실행되므로, 무엇을 하는지 summary에 한 문장으로 분명히 쓴다.',
+      'JSON으로만 답한다: {"actions": [{"tool": string (목록의 이름 그대로), "arguments": object, "summary": string}]}',
+    ].join('\n'),
+    () => JSON.stringify({ actions: mockActions(tools, store.task(taskId), report) }),
+    true,
+  );
+  const parsed = parseJson(raw, { actions: [] as { tool?: unknown; arguments?: unknown; summary?: unknown }[] });
+  const actions: PlannedAction[] = [];
+  for (const item of (Array.isArray(parsed.actions) ? parsed.actions : []).slice(0, MAX_ACTIONS)) {
+    const picked = tools.find((t) => t.ref === item?.tool);
+    if (!picked) continue;
+    actions.push({
+      id: `act_${randomUUID().slice(0, 8)}`,
+      serverId: picked.server.id,
+      serverName: picked.server.name,
+      icon: picked.server.icon,
+      tool: picked.tool.name,
+      arguments: argsOf(item.arguments),
+      summary: String(item.summary ?? '').slice(0, 200) || `${picked.server.name} ${picked.tool.name} 호출`,
+      enabled: true,
+      status: 'proposed',
+    });
+  }
+  return actions;
+}
+
+/**
+ * Runs the approved actions one by one, persisting `running` before each call. Done actions are
+ * skipped, and one left `running` by a crash becomes `unknown` rather than being sent twice.
+ */
+async function runActions(taskId: string) {
+  store.updateTask(taskId, (t) => {
+    for (const action of t.actions ?? []) if (action.status === 'running') action.status = 'unknown';
+  });
+  const manager = agentOf(store.task(taskId), 'manager');
+  for (const action of store.task(taskId).actions ?? []) {
+    if (action.status !== 'proposed') continue;
+    const set = (patch: Partial<PlannedAction>) =>
+      store.updateTask(taskId, (t) => {
+        const target = t.actions?.find((a) => a.id === action.id);
+        if (target) Object.assign(target, patch);
+      });
+    if (!action.enabled) {
+      set({ status: 'skipped', result: '사용자가 끔' });
+      continue;
+    }
+    const server = store.data.mcpServers.find((s) => s.id === action.serverId);
+    const tool = server?.tools.find((t) => t.name === action.tool);
+    if (!server || !usableBy(server, store.task(taskId).officeId) || tool?.mode !== 'approval') {
+      set({ status: 'skipped', result: '도구가 꺼졌거나 지워졌어요.' });
+      continue;
+    }
+    const payload = { server: server.name, icon: server.icon, tool: action.tool };
+    set({ status: 'running' });
+    store.emit('mcp.called', { taskId, agentId: manager.id, payload: { ...payload, arguments: action.arguments, approved: true } });
+    setAgent(manager, 'working', 'focus', `${server.icon} ${server.name}에 반영하고 있어요.`);
+    try {
+      const output = await callTool(server, action.tool, action.arguments);
+      set({ status: 'done', result: output.slice(0, 500) });
+      store.emit('mcp.result', { taskId, agentId: manager.id, payload: { ...payload, chars: output.length } });
+    } catch (error) {
+      const reason = (error instanceof Error ? error.message : String(error)).split('\n')[0].slice(0, 200);
+      set({ status: 'failed', result: reason });
+      store.emit('mcp.failed', { taskId, agentId: manager.id, payload: { ...payload, reason } });
+    }
+  }
+}
+
 /** Posts the result for the user's decision. A repeat call for the same step only restores the waiting state. */
-export function requestApproval(taskId: string, stepId: string) {
+export async function requestApproval(taskId: string, stepId: string) {
   const task = store.task(taskId);
   const step = stepById(task, stepId);
   const manager = agentOf(task, 'manager');
@@ -723,12 +831,14 @@ export function requestApproval(taskId: string, stepId: string) {
     setAgent(manager, 'awaiting_approval', 'normal', '결과물을 올렸어요. 사용자 승인을 기다리고 있어요.');
     return;
   }
+  const actions = await planActions(taskId);
   const { json } = splitDraft(latest(task, 'draft')?.content ?? '');
   setStep(taskId, step.id, 'awaiting');
   store.updateTask(taskId, (t) => {
     t.status = 'awaiting_approval';
     t.value = estimateValue(t, Math.max(1, t.inputIds.length));
     t.proposal = specOf(t).buildProposal(json, t);
+    t.actions = actions;
   });
   setAgent(manager, 'awaiting_approval', 'normal', '결과물을 올렸어요. 사용자 승인을 기다리고 있어요.');
   store.emit('approval.requested', {
@@ -876,6 +986,7 @@ export function applyChangeRequest(taskId: string, stepId: string, comment: stri
     stepById(t, stepId).status = 'rejected';
     for (let i = draftIndex; i < at; i++) t.plan[i].status = 'pending';
     t.proposal = null;
+    t.actions = [];
   });
   setAgent(manager, 'idle', 'normal', '수정 요청을 작성자에게 전달했어요.');
   store.emit('approval.denied', { taskId, agentId: manager.id, payload: { comment } });
@@ -887,19 +998,36 @@ export function applyChangeRequest(taskId: string, stepId: string, comment: stri
   return draftIndex;
 }
 
-/** Applies the approved result. A repeat call after completion does nothing. */
-export function completeTask(taskId: string, valueKrw?: number) {
-  const task = store.task(taskId);
-  if (task.status === 'completed') return;
-  const manager = agentOf(task, 'manager');
-  const approval = task.plan.find((s) => s.kind === 'approval')!;
-  setStep(taskId, approval.id, 'done');
-  store.emit('approval.granted', { taskId, agentId: manager.id, payload: {} });
-  recognizeValue(taskId, valueKrw);
-  const { json } = splitDraft(latest(task, 'draft')?.content ?? '');
-  const applied = specOf(task).onApprove(json, store.task(taskId));
-  store.emit('team.applied', { taskId, agentId: manager.id, payload: { summary: applied } });
-  finish(taskId, applied);
+const completing = new Set<string>();
+
+/** Applies the approved result and runs the approved actions. A repeat call after completion does nothing. */
+export async function completeTask(taskId: string, valueKrw?: number) {
+  if (store.task(taskId).status === 'completed' || completing.has(taskId)) return;
+  completing.add(taskId);
+  try {
+    await runActions(taskId);
+    const task = store.task(taskId);
+    const manager = agentOf(task, 'manager');
+    const approval = task.plan.find((s) => s.kind === 'approval')!;
+    setStep(taskId, approval.id, 'done');
+    store.emit('approval.granted', { taskId, agentId: manager.id, payload: {} });
+    recognizeValue(taskId, valueKrw);
+    const { json } = splitDraft(latest(task, 'draft')?.content ?? '');
+    const actions = store.task(taskId).actions ?? [];
+    const done = actions.filter((a) => a.status === 'done').length;
+    const missed = actions.filter((a) => a.status === 'failed' || a.status === 'unknown').length;
+    const applied = [
+      specOf(task).onApprove(json, store.task(taskId)),
+      done ? `외부 작업 ${done}건 실행` : '',
+      missed ? `외부 작업 ${missed}건 확인 필요` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    store.emit('team.applied', { taskId, agentId: manager.id, payload: { summary: applied } });
+    finish(taskId, applied);
+  } finally {
+    completing.delete(taskId);
+  }
 }
 
 export function failTask(taskId: string, reason: string) {
@@ -929,11 +1057,11 @@ async function runTask(taskId: string) {
       if (++runs > MAX_STEP_RUNS) throw new Error(tooManyRunsMessage);
       const step = store.task(taskId).plan[at];
       if (step.kind === 'approval') {
-        requestApproval(taskId, step.id);
+        await requestApproval(taskId, step.id);
         const decision = await approvalDecision(taskId);
         approvalWaiters.delete(taskId);
         if (decision.kind === 'approve') {
-          completeTask(taskId, decision.valueKrw);
+          await completeTask(taskId, decision.valueKrw);
           return;
         }
         at = applyChangeRequest(taskId, step.id, decision.comment);
@@ -1133,6 +1261,19 @@ export function requestChanges(taskId: string, comment: string) {
   if (!waiter) throw new Error('승인을 기다리는 업무가 아닙니다.');
   if (!comment.trim()) throw new Error('수정 요청 내용을 입력해 주세요.');
   waiter({ kind: 'changes', comment: comment.trim() });
+}
+
+/** Switches one proposed action on or off while the task waits for approval. Works for every runtime. */
+export function setActionEnabled(taskId: string, actionId: string, enabled: boolean) {
+  const task = store.task(taskId);
+  if (task.status !== 'awaiting_approval' || completing.has(taskId)) throw new Error('승인을 기다리는 업무가 아닙니다.');
+  const action = task.actions?.find((a) => a.id === actionId);
+  if (!action || action.status !== 'proposed') throw new Error('바꿀 수 없는 외부 작업이에요.');
+  store.updateTask(taskId, (t) => {
+    const target = t.actions?.find((a) => a.id === actionId);
+    if (target) target.enabled = enabled;
+  });
+  return store.task(taskId).actions?.find((a) => a.id === actionId);
 }
 
 export function setPaused(agentId: string, paused: boolean) {
