@@ -25,6 +25,7 @@ import { authEnabled, authRouter, stillValid, viewerOf } from './auth.ts';
 import { config } from './config.ts';
 import { setActionEnabled, simulateInquiry, simulateMail } from './orchestrator.ts';
 import { closeAllConnections, closeConnection, discoverTools } from './mcp.ts';
+import { finishLogin, logout, OAUTH_CALLBACK_PATH, startLogin } from './mcp-oauth.ts';
 import { apiKeyFor, dropMcpSecrets, setApiKey, setMcpSecrets } from './secrets.ts';
 import { store } from './store.ts';
 import { toStepInputs, workflowRuntime } from './workflow-runtime.ts';
@@ -429,6 +430,8 @@ function applyMcp(server: McpServer, body: Record<string, unknown>) {
     server.args = body.args.map((a) => String(a).slice(0, 300));
   }
   if (body.enabled !== undefined) server.enabled = Boolean(body.enabled);
+  if (body.oauth !== undefined) server.oauth = Boolean(body.oauth);
+  if (server.transport !== 'http') server.oauth = false;
   if (body.officeIds !== undefined) {
     if (body.officeIds === 'all') server.officeIds = 'all';
     else if (Array.isArray(body.officeIds)) {
@@ -512,7 +515,9 @@ app.put('/api/mcp-servers/:id', (req, res) => {
     server.transport !== before.transport ||
     server.url !== before.url ||
     server.command !== before.command ||
-    server.args.join('\n') !== before.args.join('\n');
+    server.args.join('\n') !== before.args.join('\n') ||
+    server.oauth !== before.oauth;
+  if (server.url !== before.url || !server.oauth) logout(server.id);
   if (reconnect || !server.enabled) closeConnection(server.id);
   store.emit('mcp.changed', { payload: { summary: `MCP 변경: ${server.name}` } });
   res.json(server);
@@ -526,20 +531,20 @@ app.delete('/api/mcp-servers/:id', (req, res) => {
   });
   closeConnection(server.id);
   dropMcpSecrets(server.id);
+  logout(server.id);
   store.emit('mcp.changed', { payload: { summary: `MCP 삭제: ${server.name}` } });
   res.json({ ok: true });
 });
 
-app.post('/api/mcp-servers/:id/check', async (req, res) => {
-  guard(res, 'owner');
-  const server = mcpById(req.params.id);
+/** Re-reads the server's tool list and records the outcome on the server card. */
+async function refreshTools(server: McpServer) {
   try {
     const tools = await discoverTools(server);
     store.mutate((s) => {
       const target = s.mcpServers.find((m) => m.id === server.id);
       if (target) Object.assign(target, { tools, checkedAt: new Date().toISOString(), lastError: null });
     });
-    res.json({ tools });
+    return tools;
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     store.mutate((s) => {
@@ -547,6 +552,55 @@ app.post('/api/mcp-servers/:id/check', async (req, res) => {
       if (target) Object.assign(target, { checkedAt: new Date().toISOString(), lastError: reason.slice(0, 500) });
     });
     throw new Error(`연결하지 못했어요: ${reason}`);
+  }
+}
+
+app.post('/api/mcp-servers/:id/check', async (req, res) => {
+  guard(res, 'owner');
+  res.json({ tools: await refreshTools(mcpById(req.params.id)) });
+});
+
+app.post('/api/mcp-servers/:id/login', async (req, res) => {
+  guard(res, 'owner');
+  const server = mcpById(req.params.id);
+  if (!server.oauth) throw new Error('OAuth 로그인을 쓰는 서버가 아니에요.');
+  const url = await startLogin(server, `${req.protocol}://${req.get('host')}`);
+  if (!url) {
+    closeConnection(server.id);
+    await refreshTools(server);
+  }
+  store.emit('mcp.changed', { payload: { summary: `MCP 로그인 시작: ${server.name}` } });
+  res.json({ url });
+});
+
+app.delete('/api/mcp-servers/:id/login', (req, res) => {
+  guard(res, 'owner');
+  const server = mcpById(req.params.id);
+  logout(server.id);
+  closeConnection(server.id);
+  store.emit('mcp.changed', { payload: { summary: `MCP 로그아웃: ${server.name}` } });
+  res.json({ ok: true });
+});
+
+const callbackPage = (title: string, detail: string) =>
+  `<!doctype html><meta charset="utf-8"><title>${title}</title><body style="font-family:sans-serif;padding:32px"><h2>${title}</h2><p>${detail}</p><p>이 창을 닫고 사무실로 돌아가세요.</p><script>setTimeout(()=>window.close(),3000)</script></body>`;
+
+const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+app.get(OAUTH_CALLBACK_PATH, async (req, res) => {
+  guard(res, 'owner');
+  const { code, state, error } = req.query;
+  try {
+    if (typeof error === 'string') throw new Error(`로그인이 취소됐어요 (${error}).`);
+    if (typeof code !== 'string' || typeof state !== 'string') throw new Error('로그인 응답이 올바르지 않아요.');
+    const serverId = await finishLogin(state, code, (id) => store.data.mcpServers.find((m) => m.id === id));
+    const server = mcpById(serverId);
+    closeConnection(serverId);
+    store.emit('mcp.changed', { payload: { summary: `MCP 로그인 완료: ${server.name}` } });
+    background(async () => void (await refreshTools(server)), `${server.name} 도구 확인`);
+    res.type('html').send(callbackPage('로그인 완료', `${escapeHtml(server.name)}에 연결했어요. 도구 목록을 불러오고 있어요.`));
+  } catch (e) {
+    res.status(400).type('html').send(callbackPage('로그인 실패', escapeHtml(e instanceof Error ? e.message : String(e))));
   }
 });
 

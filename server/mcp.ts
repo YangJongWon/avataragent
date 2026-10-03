@@ -1,9 +1,11 @@
+import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { allowedModes, type McpServer, type McpTool } from '../shared/mcp.ts';
 import { config } from './config.ts';
+import { oauthProvider } from './mcp-oauth.ts';
 import { mcpSecretsFor } from './secrets.ts';
 
 const CLIENT_INFO = { name: 'avataragent-office', version: '0.1.0' };
@@ -47,21 +49,25 @@ async function open(server: McpServer): Promise<Connection> {
   }
 
   const url = new URL(server.url);
-  const requestInit = { headers: secrets };
+  const options = { requestInit: { headers: secrets }, authProvider: server.oauth ? oauthProvider(server.id) : undefined };
   try {
     const client = new Client(CLIENT_INFO);
-    await client.connect(new StreamableHTTPClientTransport(url, { requestInit }));
+    await client.connect(new StreamableHTTPClientTransport(url, options));
     return { client, stderr: () => '' };
   } catch (streamableError) {
+    if (streamableError instanceof UnauthorizedError) throw new Error(LOGIN_NEEDED);
     const client = new Client(CLIENT_INFO);
     try {
-      await client.connect(new SSEClientTransport(url, { requestInit }));
-    } catch {
+      await client.connect(new SSEClientTransport(url, options));
+    } catch (sseError) {
+      if (sseError instanceof UnauthorizedError) throw new Error(LOGIN_NEEDED);
       throw streamableError;
     }
     return { client, stderr: () => '' };
   }
 }
+
+const LOGIN_NEEDED = '로그인이 필요해요. MCP 관리에서 로그인을 눌러 주세요.';
 
 async function connection(server: McpServer): Promise<Connection> {
   let pending = connections.get(server.id);
@@ -92,7 +98,7 @@ export function closeAllConnections() {
 }
 
 const describe = (error: unknown, conn?: Connection) => {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = error instanceof UnauthorizedError ? LOGIN_NEEDED : error instanceof Error ? error.message : String(error);
   const log = conn?.stderr().trim();
   return log ? `${message}\n${log.split('\n').slice(-3).join('\n')}` : message;
 };

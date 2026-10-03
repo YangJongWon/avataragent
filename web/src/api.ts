@@ -76,9 +76,11 @@ export const api = {
     call<McpServer>('PUT', `/api/mcp-servers/${id}`, patch),
   deleteMcpServer: (id: string) => call('DELETE', `/api/mcp-servers/${id}`),
   checkMcpServer: (id: string) => call<{ tools: McpTool[] }>('POST', `/api/mcp-servers/${id}/check`),
+  startMcpLogin: (id: string) => call<{ url: string | null }>('POST', `/api/mcp-servers/${id}/login`),
+  logoutMcp: (id: string) => call('DELETE', `/api/mcp-servers/${id}/login`),
 };
 
-export type McpServerInput = Pick<McpServer, 'name' | 'icon' | 'transport' | 'url' | 'command' | 'args' | 'enabled' | 'officeIds'>;
+export type McpServerInput = Pick<McpServer, 'name' | 'icon' | 'transport' | 'url' | 'command' | 'args' | 'enabled' | 'officeIds' | 'oauth'>;
 
 export type CompanyInput = Pick<Company, 'name' | 'hat' | 'color' | 'api' | 'baseUrl'>;
 export type ModelInput = Omit<ModelEntry, 'id' | 'builtin'>;

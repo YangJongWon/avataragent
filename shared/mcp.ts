@@ -73,6 +73,16 @@ export interface McpServer {
   lastError: string | null;
   /** Names of stored secrets, sent as env vars (stdio) or headers (http). Values never leave the server. */
   secrets?: McpSecretInfo[];
+  /** http only: sign in through the server's OAuth login instead of a fixed token. */
+  oauth?: boolean;
+  /** Snapshot-only OAuth state; tokens never leave the server. */
+  login?: McpLoginInfo;
+}
+
+export interface McpLoginInfo {
+  loggedIn: boolean;
+  /** Access token expiry (ms). Refreshed automatically when a refresh token exists. */
+  expiresAt: number | null;
 }
 
 export interface McpPreset {
@@ -83,6 +93,7 @@ export interface McpPreset {
   url?: string;
   command?: string;
   args?: string[];
+  oauth?: boolean;
   /** Secret names the user needs to fill, with where to get them. */
   secrets: { name: string; label: string; placeholder?: string; prefix?: string }[];
   note: string;
@@ -108,6 +119,16 @@ export const MCP_PRESETS: McpPreset[] = [
     args: ['-y', '@notionhq/notion-mcp-server'],
     secrets: [{ name: 'NOTION_TOKEN', label: 'Notion 통합 토큰', placeholder: 'ntn_…' }],
     note: 'notion.so/profile/integrations 에서 내부 통합을 만들고, 읽을 페이지에 그 통합을 연결해 주세요.',
+  },
+  {
+    id: 'notion-remote',
+    name: 'Notion (로그인)',
+    icon: '📝',
+    transport: 'http',
+    url: 'https://mcp.notion.com/mcp',
+    oauth: true,
+    secrets: [],
+    note: '저장한 뒤 로그인을 누르면 Notion 창에서 쓸 페이지를 고를 수 있어요. 토큰을 따로 만들 필요가 없어요.',
   },
   {
     id: 'github',

@@ -25,6 +25,33 @@ function StatusBadge({ server }: { server: McpServer }) {
   return <span className="key-badge ok">연결됨 · 도구 {server.tools.length}개</span>;
 }
 
+/**
+ * `popup` must be opened inside the click handler before any await, or the browser blocks it.
+ * The login page redirects back to the server, which loads the tools and updates the snapshot.
+ */
+async function login(server: McpServer, popup: Window | null, onNotice: Notify['onNotice']) {
+  try {
+    const { url } = await api.startMcpLogin(server.id);
+    if (!url) {
+      popup?.close();
+      onNotice(`${server.name}은(는) 이미 로그인돼 있어요.`);
+      return;
+    }
+    if (popup) popup.location.href = url;
+    else window.location.href = url;
+    onNotice(`${server.name} 로그인 창에서 허용을 눌러 주세요.`);
+  } catch (e) {
+    popup?.close();
+    throw e;
+  }
+}
+
+function LoginBadge({ server }: { server: McpServer }) {
+  if (!server.oauth) return null;
+  if (!server.login?.loggedIn) return <span className="key-badge warn">로그인 필요</span>;
+  return <span className="key-badge ok">🔐 로그인됨</span>;
+}
+
 const scopeLabel = (server: McpServer, offices: Office[]) =>
   server.officeIds === 'all'
     ? '모든 사무실'
@@ -41,7 +68,17 @@ function McpForm({
 }: { server: McpServer | null; preset: McpPreset | null; offices: Office[]; stdioAllowed: boolean; onDone: () => void } & Notify) {
   const [form, setForm] = useState<McpServerInput>(
     server
-      ? { name: server.name, icon: server.icon, transport: server.transport, url: server.url, command: server.command, args: server.args, enabled: server.enabled, officeIds: server.officeIds }
+      ? {
+          name: server.name,
+          icon: server.icon,
+          transport: server.transport,
+          url: server.url,
+          command: server.command,
+          args: server.args,
+          enabled: server.enabled,
+          officeIds: server.officeIds,
+          oauth: Boolean(server.oauth),
+        }
       : {
           name: preset && preset.id !== 'custom' ? preset.name : '',
           icon: preset?.icon ?? '🧩',
@@ -51,6 +88,7 @@ function McpForm({
           args: preset?.args ?? [],
           enabled: true,
           officeIds: 'all',
+          oauth: Boolean(preset?.oauth),
         },
   );
   const [secrets, setSecrets] = useState<SecretField[]>(() => {
@@ -80,11 +118,17 @@ function McpForm({
       if (!field.name.trim() || !value) continue;
       values[field.name.trim()] = field.prefix && !value.startsWith(field.prefix) ? field.prefix + value : value;
     }
+    const needsLogin = form.transport === 'http' && form.oauth && !(server?.login?.loggedIn && server.url === form.url);
+    const popup = needsLogin ? window.open('', '_blank') : null;
     setBusy(true);
     try {
       const saved = server ? await api.updateMcpServer(server.id, { ...form, secrets: values }) : await api.createMcpServer({ ...form, secrets: values });
-      onNotice(`${saved.name}을(를) 저장했어요. 연결을 확인하고 있어요…`);
       onDone();
+      if (needsLogin) {
+        await login(saved, popup, onNotice);
+        return;
+      }
+      onNotice(`${saved.name}을(를) 저장했어요. 연결을 확인하고 있어요…`);
       try {
         const { tools } = await api.checkMcpServer(saved.id);
         onNotice(`${saved.name} 연결 확인: 도구 ${tools.length}개`);
@@ -92,6 +136,7 @@ function McpForm({
         onError(message(e));
       }
     } catch (e) {
+      popup?.close();
       onError(message(e));
     } finally {
       setBusy(false);
@@ -165,6 +210,13 @@ function McpForm({
             />
           </label>
         </>
+      )}
+
+      {form.transport === 'http' && (
+        <label className="check">
+          <input type="checkbox" checked={Boolean(form.oauth)} onChange={(e) => set({ oauth: e.target.checked })} />
+          OAuth 로그인 사용 (저장하면 그 서비스의 로그인 창이 열려요)
+        </label>
       )}
 
       <div className="field">
@@ -300,6 +352,25 @@ export function McpTab({ snapshot, onError, onNotice }: { snapshot: Snapshot } &
     }
   };
 
+  const signIn = async (server: McpServer) => {
+    const popup = window.open('', '_blank');
+    try {
+      await login(server, popup, onNotice);
+    } catch (e) {
+      onError(message(e));
+    }
+  };
+
+  const signOut = async (server: McpServer) => {
+    if (!window.confirm(`${server.name} 로그인을 해제할까요? 저장된 토큰이 지워져요.`)) return;
+    try {
+      await api.logoutMcp(server.id);
+      onNotice(`${server.name} 로그인을 해제했어요.`);
+    } catch (e) {
+      onError(message(e));
+    }
+  };
+
   const toggle = async (server: McpServer) => {
     try {
       await api.updateMcpServer(server.id, { enabled: !server.enabled });
@@ -324,8 +395,8 @@ export function McpTab({ snapshot, onError, onNotice }: { snapshot: Snapshot } &
     <div className="page">
       <h2>MCP 관리</h2>
       <p className="muted">
-        검색, Notion, 메일 같은 외부 기능을 <b>MCP 서버</b>로 연결해요. 켜 둔 도구는 그 사무실 직원들이 <b>조사 단계</b>에서 필요할 때 불러
-        써요. 도구 호출과 결과는 업무 기록에 남아요.
+        검색, Notion, 메일 같은 외부 기능을 <b>MCP 서버</b>로 연결해요. 도구마다 <b>조사 때 자동</b>으로 쓸지, 메일 발송처럼{' '}
+        <b>승인 후 실행</b>할지 고를 수 있어요. 도구 호출과 결과는 업무 기록에 남아요.
       </p>
       {!stdioAllowed && (
         <p className="warn-line">
@@ -377,6 +448,7 @@ export function McpTab({ snapshot, onError, onNotice }: { snapshot: Snapshot } &
                 </div>
                 <div className="row wrap">
                   <StatusBadge server={server} />
+                  <LoginBadge server={server} />
                   {(server.secrets ?? []).map((s) => (
                     <span key={s.name} className="key-badge ok" title={s.name}>
                       🔑 {s.name} {s.hint}
@@ -394,6 +466,16 @@ export function McpTab({ snapshot, onError, onNotice }: { snapshot: Snapshot } &
                   <button className="pixel-btn small danger" onClick={() => remove(server)}>
                     삭제
                   </button>
+                  {server.oauth &&
+                    (server.login?.loggedIn ? (
+                      <button className="pixel-btn small" onClick={() => signOut(server)}>
+                        로그아웃
+                      </button>
+                    ) : (
+                      <button className="pixel-btn small primary" onClick={() => signIn(server)}>
+                        🔐 로그인
+                      </button>
+                    ))}
                   <button className="pixel-btn small" disabled={checking === server.id} onClick={() => check(server)}>
                     {checking === server.id ? '확인 중…' : '🔌 연결 확인'}
                   </button>

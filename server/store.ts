@@ -34,6 +34,7 @@ import type {
 import { reviewLoop, templatePlan } from '../shared/workflow.ts';
 import { config, ORGANIZATION_SAFETY_RULES, type ProviderName } from './config.ts';
 import { appendEvent, loadKv, loadRelationalState, maxSeq, recentEvents, saveRelationalState } from './db.ts';
+import { loginInfo } from './mcp-oauth.ts';
 import { keyInfo, mcpSecretInfo } from './secrets.ts';
 import { defaultInterests, initialInquiries, initialMails } from './seed.ts';
 
@@ -239,7 +240,7 @@ class Store {
       envProvider: config.provider,
       companies: s.companies.map((c) => ({ ...c, key: keyInfo(c) })),
       models: s.models,
-      mcpServers: s.mcpServers.map((m) => ({ ...m, secrets: mcpSecretInfo(m.id) })),
+      mcpServers: s.mcpServers.map((m) => ({ ...m, secrets: mcpSecretInfo(m.id), login: m.oauth ? loginInfo(m.id) : undefined })),
       mcpStdioAllowed: config.mcpAllowStdio,
       offices: s.offices,
       agents: s.agents,
