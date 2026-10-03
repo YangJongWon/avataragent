@@ -5,11 +5,21 @@ import { resolve } from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { can, type Action } from '../shared/access.ts';
-import { isModelId } from '../shared/models.ts';
+import {
+  API_KINDS,
+  isApiKind,
+  isColor,
+  isHatShape,
+  isModelId,
+  type Company,
+  type ModelEntry,
+  type Tier,
+} from '../shared/models.ts';
 import { isSkin } from '../shared/skins.ts';
 import { TEAMS } from '../shared/teams.ts';
-import type { ServerMessage, ShareLink, ShareRole, TeamId, Viewer } from '../shared/types.ts';
+import type { AiMode, ServerMessage, ShareLink, ShareRole, TeamId, Viewer } from '../shared/types.ts';
 import { canSeeEvent, ForbiddenError, snapshotFor } from './access.ts';
+import { listModels } from './ai.ts';
 import { authEnabled, authRouter, stillValid, viewerOf } from './auth.ts';
 import { config } from './config.ts';
 import {
@@ -18,6 +28,7 @@ import {
   simulateInquiry,
   simulateMail,
 } from './orchestrator.ts';
+import { apiKeyFor, setApiKey } from './secrets.ts';
 import { store } from './store.ts';
 import { workflowRuntime } from './workflow-runtime.ts';
 
@@ -212,6 +223,187 @@ app.put('/api/budget', (req, res) => {
   res.json(store.budget);
 });
 
+const AI_MODES: AiMode[] = ['env', 'mock', 'agents'];
+const MAX_COMPANIES = 20;
+const MAX_MODELS = 80;
+
+const text = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+const companyById = (id: string) => {
+  const company = store.data.companies.find((c) => c.id === id);
+  if (!company) throw new Error('알 수 없는 회사예요.');
+  return company;
+};
+const modelsInUse = (ids: string[]) => store.data.agents.filter((a) => ids.includes(a.model));
+
+function checkedBaseUrl(raw: unknown) {
+  const url = text(raw, 300).replace(/\/+$/, '');
+  if (!url) return '';
+  if (!/^https?:\/\/[^\s/]+/i.test(url)) throw new Error('API 주소는 http:// 또는 https:// 로 시작해야 해요.');
+  return url;
+}
+
+function applyCompany(company: Company, body: Record<string, unknown>) {
+  if (body.name !== undefined) company.name = text(body.name, 20) || company.name;
+  if (body.hat !== undefined) {
+    if (!isHatShape(body.hat)) throw new Error('모자 모양을 골라 주세요.');
+    company.hat = body.hat;
+  }
+  if (body.color !== undefined) {
+    if (!isColor(body.color)) throw new Error('모자 색은 #RRGGBB 형식이어야 해요.');
+    company.color = body.color.toLowerCase();
+  }
+  if (body.api !== undefined && body.api !== company.api) {
+    if (company.builtin) throw new Error('기본 회사의 API 종류는 바꿀 수 없어요.');
+    if (!isApiKind(body.api)) throw new Error('API 종류를 골라 주세요.');
+    company.api = body.api;
+  }
+  if (body.baseUrl !== undefined) company.baseUrl = checkedBaseUrl(body.baseUrl);
+  if (company.api === 'openai_compatible' && !company.baseUrl) throw new Error('OpenAI 호환 API는 주소(Base URL)가 필요해요.');
+}
+
+function applyModel(model: ModelEntry, body: Record<string, unknown>) {
+  if (body.vendor !== undefined) model.vendor = companyById(String(body.vendor)).id;
+  if (body.tier !== undefined) {
+    const tier = Number(body.tier);
+    if (![1, 2, 3].includes(tier)) throw new Error('등급은 1~3 중에서 골라 주세요.');
+    model.tier = tier as Tier;
+  }
+  if (body.label !== undefined) model.label = text(body.label, 30) || model.label;
+  if (body.apiModel !== undefined) model.apiModel = text(body.apiModel, 120);
+  for (const key of ['priceInPerMTokUsd', 'priceOutPerMTokUsd'] as const) {
+    if (body[key] === undefined) continue;
+    const price = Number(body[key]);
+    if (!Number.isFinite(price) || price < 0 || price > 10_000) throw new Error('단가는 0~10000 달러 사이로 입력해 주세요.');
+    model[key] = price;
+  }
+  if (!model.label) throw new Error('모델 이름을 입력해 주세요.');
+  if (!model.apiModel) throw new Error('API 모델 ID를 입력해 주세요.');
+}
+
+app.put('/api/ai-mode', (req, res) => {
+  guard(res, 'owner');
+  const mode = req.body?.mode;
+  if (!AI_MODES.includes(mode)) throw new Error('실행 방식을 골라 주세요.');
+  store.mutate((s) => {
+    s.aiMode = mode;
+  });
+  store.emit('catalog.changed', { payload: { summary: `AI 실행 방식 변경: ${store.provider}` } });
+  res.json({ provider: store.provider });
+});
+
+app.post('/api/companies', (req, res) => {
+  guard(res, 'owner');
+  if (store.data.companies.length >= MAX_COMPANIES) throw new Error(`회사는 ${MAX_COMPANIES}개까지 등록할 수 있어요.`);
+  const body = req.body ?? {};
+  const company: Company = { id: `co_${randomUUID().slice(0, 8)}`, name: '', hat: 'beret', color: '#c0392b', api: 'openai_compatible', baseUrl: '' };
+  applyCompany(company, { ...body, api: undefined });
+  if (!isApiKind(body.api)) throw new Error('API 종류를 골라 주세요.');
+  company.api = body.api;
+  applyCompany(company, { baseUrl: body.baseUrl });
+  if (!company.name) throw new Error('회사 이름을 입력해 주세요.');
+  store.mutate((s) => {
+    s.companies.push(company);
+  });
+  if (text(body.apiKey, 500)) setApiKey(company.id, text(body.apiKey, 500));
+  store.emit('catalog.changed', { payload: { summary: `회사 등록: ${company.name}` } });
+  res.json(company);
+});
+
+app.put('/api/companies/:id', (req, res) => {
+  guard(res, 'owner');
+  const company = structuredClone(companyById(req.params.id));
+  const body = req.body ?? {};
+  applyCompany(company, body);
+  store.mutate((s) => {
+    s.companies = s.companies.map((c) => (c.id === company.id ? company : c));
+  });
+  if (body.apiKey === null) setApiKey(company.id, null);
+  else if (text(body.apiKey, 500)) setApiKey(company.id, text(body.apiKey, 500));
+  store.emit('catalog.changed', { payload: { summary: `회사 정보 변경: ${company.name}` } });
+  res.json(company);
+});
+
+app.delete('/api/companies/:id', (req, res) => {
+  guard(res, 'owner');
+  const company = companyById(req.params.id);
+  if (company.builtin) throw new Error('기본 회사는 지울 수 없어요.');
+  const ids = store.data.models.filter((m) => m.vendor === company.id).map((m) => m.id);
+  const users = modelsInUse(ids);
+  if (users.length) throw new Error(`${users.map((a) => a.name).join(', ')} 직원이 이 회사 모델을 쓰고 있어요. 먼저 모델을 바꿔 주세요.`);
+  store.mutate((s) => {
+    s.companies = s.companies.filter((c) => c.id !== company.id);
+    s.models = s.models.filter((m) => m.vendor !== company.id);
+  });
+  setApiKey(company.id, null);
+  store.emit('catalog.changed', { payload: { summary: `회사 삭제: ${company.name}` } });
+  res.json({ ok: true });
+});
+
+app.post('/api/models/discover', async (req, res, next) => {
+  try {
+    guard(res, 'owner');
+    const body = req.body ?? {};
+    const saved = typeof body.companyId === 'string' ? companyById(body.companyId) : null;
+    const api = body.api ?? saved?.api;
+    if (!isApiKind(api)) throw new Error('API 종류를 골라 주세요.');
+    const baseUrl = body.baseUrl !== undefined ? checkedBaseUrl(body.baseUrl) : (saved?.baseUrl ?? '');
+    const key = text(body.apiKey, 500) || (saved && saved.api === api ? apiKeyFor(saved) : '');
+    const models = await listModels({ api, name: saved?.name ?? API_KINDS[api].name, key, baseUrl });
+    res.json({ models });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/models', (req, res) => {
+  guard(res, 'owner');
+  if (store.data.models.length >= MAX_MODELS) throw new Error(`모델은 ${MAX_MODELS}개까지 등록할 수 있어요.`);
+  const body = req.body ?? {};
+  if (body.vendor === undefined) throw new Error('회사를 골라 주세요.');
+  const model: ModelEntry = {
+    id: `m_${randomUUID().slice(0, 8)}`,
+    vendor: '',
+    tier: 2,
+    label: '',
+    apiModel: '',
+    priceInPerMTokUsd: 1,
+    priceOutPerMTokUsd: 4,
+  };
+  applyModel(model, body);
+  store.mutate((s) => {
+    s.models.push(model);
+  });
+  store.emit('catalog.changed', { payload: { summary: `모델 등록: ${model.label}` } });
+  res.json(model);
+});
+
+app.put('/api/models/:id', (req, res) => {
+  guard(res, 'owner');
+  const current = store.data.models.find((m) => m.id === req.params.id);
+  if (!current) throw new Error('알 수 없는 모델이에요.');
+  const model = structuredClone(current);
+  applyModel(model, req.body ?? {});
+  store.mutate((s) => {
+    s.models = s.models.map((m) => (m.id === model.id ? model : m));
+  });
+  store.emit('catalog.changed', { payload: { summary: `모델 정보 변경: ${model.label}` } });
+  res.json(model);
+});
+
+app.delete('/api/models/:id', (req, res) => {
+  guard(res, 'owner');
+  const model = store.data.models.find((m) => m.id === req.params.id);
+  if (!model) throw new Error('이미 지워진 모델이에요.');
+  if (model.builtin) throw new Error('기본 모델은 지울 수 없어요. 대신 API 모델 ID와 단가를 바꿀 수 있어요.');
+  const users = modelsInUse([model.id]);
+  if (users.length) throw new Error(`${users.map((a) => a.name).join(', ')} 직원이 이 모델을 쓰고 있어요. 먼저 모델을 바꿔 주세요.`);
+  store.mutate((s) => {
+    s.models = s.models.filter((m) => m.id !== model.id);
+  });
+  store.emit('catalog.changed', { payload: { summary: `모델 삭제: ${model.label}` } });
+  res.json({ ok: true });
+});
+
 const SHARE_ROLE_IDS: ShareRole[] = ['viewer', 'operator', 'manager'];
 const MAX_SHARES = 30;
 
@@ -303,7 +495,7 @@ setInterval(autoRunTick, config.autoRunIntervalSec * 1000);
 
 server.listen(config.port, () => {
   console.log(
-    `[office] server http://localhost:${config.port}  provider=${config.provider} model=${config.model || '(미설정)'}  password=${authEnabled() ? 'on' : 'off'}`,
+    `[office] server http://localhost:${config.port}  provider=${store.provider} model=${config.model || '(미설정)'}  password=${authEnabled() ? 'on' : 'off'}`,
   );
   workflowRuntime.start();
   workflowRuntime.drain();

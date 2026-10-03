@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { setCatalog, type ApiKind, type Company, type ModelEntry } from '../../shared/models.ts';
 import type {
+  AiMode,
   Interests,
   Office,
   OfficeEvent,
@@ -57,7 +59,19 @@ export const api = {
     call('PUT', `/api/agents/${agentId}`, patch),
   setPaused: (agentId: string, paused: boolean) => call('POST', `/api/agents/${agentId}/pause`, { paused }),
   updateBudget: (patch: { monthlyKrw?: number; hourlyRateKrw?: number }) => call('PUT', '/api/budget', patch),
+  setAiMode: (mode: AiMode) => call('PUT', '/api/ai-mode', { mode }),
+  createCompany: (input: CompanyInput & { apiKey?: string }) => call<Company>('POST', '/api/companies', input),
+  updateCompany: (id: string, patch: Partial<CompanyInput> & { apiKey?: string | null }) => call<Company>('PUT', `/api/companies/${id}`, patch),
+  deleteCompany: (id: string) => call('DELETE', `/api/companies/${id}`),
+  discoverModels: (input: { companyId?: string; api?: ApiKind; baseUrl?: string; apiKey?: string }) =>
+    call<{ models: string[] }>('POST', '/api/models/discover', input),
+  createModel: (input: ModelInput) => call<ModelEntry>('POST', '/api/models', input),
+  updateModel: (id: string, patch: Partial<ModelInput>) => call<ModelEntry>('PUT', `/api/models/${id}`, patch),
+  deleteModel: (id: string) => call('DELETE', `/api/models/${id}`),
 };
+
+export type CompanyInput = Pick<Company, 'name' | 'hat' | 'color' | 'api' | 'baseUrl'>;
+export type ModelInput = Omit<ModelEntry, 'id' | 'builtin'>;
 
 type EventListener = (event: OfficeEvent) => void;
 
@@ -91,6 +105,7 @@ export function useOffice() {
       socket.onmessage = (msg) => {
         const message = JSON.parse(msg.data) as ServerMessage;
         if (message.kind === 'snapshot') {
+          setCatalog(message.data.companies, message.data.models);
           setSnapshot(message.data);
           return;
         }

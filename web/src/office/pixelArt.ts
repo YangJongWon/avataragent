@@ -1,5 +1,5 @@
 import type { Graphics } from 'pixi.js';
-import type { Tier, Vendor } from '../../../shared/models.ts';
+import type { HatShape, Tier } from '../../../shared/models.ts';
 import type { Expression, Role, Skin } from '../../../shared/types.ts';
 
 export const S = 3;
@@ -252,64 +252,102 @@ const GOLD = '#f4c430';
 const GOLD_DARK = '#b8860b';
 
 // Top of each hat in pixel units; used to place the gem, glow and role tag.
-export const HAT_TOP: Record<Vendor, number> = { claude: -27, gpt: -26, grok: -27, gemini: -33 };
-const HAT_BAND: Record<Vendor, { x: number; y: number; w: number }> = {
-  claude: { x: -6, y: -22, w: 12 },
-  gpt: { x: -5, y: -23, w: 10 },
-  grok: { x: -6, y: -24, w: 12 },
-  gemini: { x: -5, y: -24, w: 10 },
+export const HAT_TOP: Record<HatShape, number> = { beanie: -27, cap: -26, helmet: -27, wizard: -33, beret: -26, tophat: -31, bandana: -26 };
+const HAT_BAND: Record<HatShape, { x: number; y: number; w: number }> = {
+  beanie: { x: -6, y: -22, w: 12 },
+  cap: { x: -5, y: -23, w: 10 },
+  helmet: { x: -6, y: -24, w: 12 },
+  wizard: { x: -5, y: -24, w: 10 },
+  beret: { x: -6, y: -23, w: 12 },
+  tophat: { x: -5, y: -25, w: 10 },
+  bandana: { x: -6, y: -23, w: 12 },
 };
 
-export function drawHat(g: Graphics, vendor: Vendor, tier: Tier) {
+const channel = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+/** Mixes toward white (amount > 0) or black (amount < 0). */
+function shade(hex: string, amount: number) {
+  const target = amount > 0 ? 255 : 0;
+  const t = Math.abs(amount);
+  return `#${[0, 1, 2]
+    .map((i) => Math.round(channel(hex, i) + (target - channel(hex, i)) * t).toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
+export function drawHat(g: Graphics, hat: HatShape, color: string, tier: Tier) {
   g.clear();
-  switch (vendor) {
-    case 'claude':
-      px(g, -6, -25, 12, 4, '#d97757');
-      px(g, -5, -26, 10, 1, '#d97757');
-      px(g, -6, -22, 12, 1, '#b85c3e');
+  switch (hat) {
+    case 'beanie':
+      px(g, -6, -25, 12, 4, color);
+      px(g, -5, -26, 10, 1, color);
+      px(g, -6, -22, 12, 1, shade(color, -0.2));
       px(g, -1, -24, 3, 1, '#fff3e8');
       px(g, 0, -25, 1, 3, '#fff3e8');
-      px(g, -1, -28, 2, 2, '#f0b49e');
+      px(g, -1, -28, 2, 2, shade(color, 0.45));
       break;
-    case 'gpt':
-      px(g, -5, -25, 10, 3, '#1f1f1f');
-      px(g, -4, -26, 8, 1, '#1f1f1f');
-      px(g, -5, -22, 10, 1, '#111111');
-      px(g, 3, -22, 6, 1, '#111111');
+    case 'cap':
+      px(g, -5, -25, 10, 3, color);
+      px(g, -4, -26, 8, 1, color);
+      px(g, -5, -22, 10, 1, shade(color, -0.4));
+      px(g, 3, -22, 6, 1, shade(color, -0.4));
       px(g, -1, -25, 2, 2, '#ffffff');
       px(g, -2, -24, 1, 1, '#ffffff');
       px(g, 1, -25, 1, 1, '#ffffff');
       break;
-    case 'grok':
-      px(g, -6, -26, 12, 5, '#2b2b2b');
-      px(g, -5, -27, 10, 1, '#2b2b2b');
+    case 'helmet':
+      px(g, -6, -26, 12, 5, color);
+      px(g, -5, -27, 10, 1, color);
       px(g, -6, -23, 12, 1, '#9fb3c8');
       px(g, -5, -22, 10, 1, '#5d6d7e');
       px(g, 1, -26, 1, 1, '#ffffff');
       px(g, 0, -25, 1, 1, '#ffffff');
       px(g, -1, -24, 1, 1, '#ffffff');
       break;
-    case 'gemini':
-      px(g, -7, -22, 14, 1, '#3b5bdb');
-      px(g, -5, -24, 10, 2, '#4c6ef5');
-      px(g, -4, -26, 8, 2, '#5c7cfa');
-      px(g, -3, -28, 6, 2, '#748ffc');
-      px(g, -2, -30, 4, 2, '#91a7ff');
-      px(g, -1, -32, 2, 2, '#a5b4fc');
-      px(g, 0, -33, 1, 1, '#c5cdfd');
+    case 'wizard':
+      px(g, -7, -22, 14, 1, shade(color, -0.15));
+      px(g, -5, -24, 10, 2, color);
+      px(g, -4, -26, 8, 2, shade(color, 0.1));
+      px(g, -3, -28, 6, 2, shade(color, 0.25));
+      px(g, -2, -30, 4, 2, shade(color, 0.4));
+      px(g, -1, -32, 2, 2, shade(color, 0.5));
+      px(g, 0, -33, 1, 1, shade(color, 0.65));
       px(g, -1, -27, 3, 1, '#fff6c2');
       px(g, 0, -28, 1, 3, '#fff6c2');
+      break;
+    case 'beret':
+      px(g, -6, -22, 12, 1, shade(color, -0.3));
+      px(g, -6, -24, 13, 2, color);
+      px(g, -5, -25, 11, 1, color);
+      px(g, -3, -25, 4, 1, shade(color, 0.25));
+      px(g, 0, -26, 1, 1, shade(color, -0.3));
+      break;
+    case 'tophat':
+      px(g, -7, -22, 14, 1, shade(color, -0.35));
+      px(g, -5, -30, 10, 8, color);
+      px(g, -5, -30, 10, 1, shade(color, 0.2));
+      px(g, -5, -23, 10, 1, '#f5f5f5');
+      px(g, 3, -29, 1, 5, shade(color, 0.15));
+      break;
+    case 'bandana':
+      px(g, -6, -25, 12, 3, color);
+      px(g, -5, -26, 10, 1, color);
+      px(g, -6, -22, 12, 1, shade(color, -0.25));
+      px(g, -3, -24, 1, 1, '#ffffff');
+      px(g, 2, -25, 1, 1, '#ffffff');
+      px(g, 0, -23, 1, 1, '#ffffff');
+      px(g, 4, -23, 1, 1, '#ffffff');
+      px(g, 6, -23, 2, 1, color);
+      px(g, 7, -22, 1, 2, shade(color, -0.25));
       break;
   }
 
   if (tier >= 2) {
-    const band = HAT_BAND[vendor];
+    const band = HAT_BAND[hat];
     px(g, band.x, band.y, band.w, 1, GOLD);
     px(g, band.x, band.y, 1, 1, GOLD_DARK);
     px(g, band.x + band.w - 1, band.y, 1, 1, GOLD_DARK);
   }
   if (tier === 3) {
-    const top = HAT_TOP[vendor];
+    const top = HAT_TOP[hat];
     px(g, -1, top - 1, 3, 1, GOLD);
     px(g, -1, top - 2, 1, 1, GOLD);
     px(g, 1, top - 2, 1, 1, GOLD);
@@ -318,9 +356,9 @@ export function drawHat(g: Graphics, vendor: Vendor, tier: Tier) {
   }
 }
 
-export function drawHatGlow(g: Graphics, vendor: Vendor) {
+export function drawHatGlow(g: Graphics, hat: HatShape) {
   g.clear();
-  const top = HAT_TOP[vendor] - 3;
+  const top = HAT_TOP[hat] - 3;
   const centerY = ((top - 22) / 2) * S;
   const ry = ((-22 - top) / 2 + 3) * S;
   g.ellipse(0, centerY, 10 * S, ry).fill({ color: '#fff3a0', alpha: 0.35 });

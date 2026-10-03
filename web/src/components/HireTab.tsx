@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MODELS, TIER_HAT, TIER_LABEL, VENDORS, type Tier, type Vendor } from '../../../shared/models.ts';
+import { allCompanies, allModels, HATS, TIER_HAT, TIER_LABEL, type Tier } from '../../../shared/models.ts';
 import { SKINS } from '../../../shared/skins.ts';
 import { TEAMS } from '../../../shared/teams.ts';
 import type { Agent, Office, Skin } from '../../../shared/types.ts';
@@ -47,9 +47,9 @@ function AgentEditor({
       <label className="field">
         모델 (모자 모양 = 회사, 장식 = 등급)
         <select value={model} onChange={(e) => setModel(e.target.value)}>
-          {(Object.keys(VENDORS) as Vendor[]).map((vendor) => (
-            <optgroup key={vendor} label={`${VENDORS[vendor].name} · ${VENDORS[vendor].hat}`}>
-              {MODELS.filter((m) => m.vendor === vendor).map((m) => (
+          {allCompanies().map((company) => (
+            <optgroup key={company.id} label={`${company.name} · ${HATS[company.hat].name}`}>
+              {allModels().filter((m) => m.vendor === company.id).map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label} · {TIER_LABEL[m.tier]} · ${m.priceInPerMTokUsd}/${m.priceOutPerMTokUsd} per 1M tok
                 </option>
@@ -93,7 +93,8 @@ export function HireTab({
   agents,
   onError,
   onNotice,
-}: { office: Office; agents: Agent[]; onError: (m: string) => void; onNotice: (m: string) => void }) {
+  onManageModels,
+}: { office: Office; agents: Agent[]; onError: (m: string) => void; onNotice: (m: string) => void; onManageModels: () => void }) {
   const team = TEAMS[office.team];
   return (
     <div className="page">
@@ -105,9 +106,9 @@ export function HireTab({
         <div>
           <b>모자 모양 = AI 회사</b>
           <ul>
-            {(Object.keys(VENDORS) as Vendor[]).map((v) => (
-              <li key={v}>
-                {VENDORS[v].name}: {VENDORS[v].hat}
+            {allCompanies().map((c) => (
+              <li key={c.id}>
+                {c.name}: {HATS[c.hat].name}
               </li>
             ))}
           </ul>
@@ -123,7 +124,11 @@ export function HireTab({
           </ul>
         </div>
         <p className="muted">
-          AI_PROVIDER=agents 이면 직원마다 자기 모델 회사의 API로 호출해요. mock 모드에서는 모델 가격으로 비용을 계산하고, 등급이 높을수록 검토 점수가 올라가요.
+          "직원별 실제 AI" 방식이면 직원마다 자기 모델 회사의 API로 호출해요. 시뮬레이션에서는 모델 가격으로 비용을 계산하고, 등급이 높을수록 검토 점수가
+          올라가요.{' '}
+          <button className="link-btn" type="button" onClick={onManageModels}>
+            모델·API 키 등록하러 가기 →
+          </button>
         </p>
       </div>
       <div className="hire-grid">

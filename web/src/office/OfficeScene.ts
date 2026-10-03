@@ -3,7 +3,7 @@ import { TEAMS, type TeamMeta } from '../../../shared/teams.ts';
 import { currentStepLabel, planProgress } from '../../../shared/workflow.ts';
 import { type Agent, type OfficeEvent, type Role, type Skin, type Snapshot, type TeamId } from '../../../shared/types.ts';
 import { krw } from '../format.ts';
-import { modelOf, type Tier } from '../../../shared/models.ts';
+import { companyOf, modelOf, type HatShape, type Tier } from '../../../shared/models.ts';
 import { drawBody, drawFace, drawHat, drawHatGlow, HAT_TOP, S } from './pixelArt.ts';
 import { loadPinkGirl, type SpriteSkin } from './skinSprites.ts';
 
@@ -80,6 +80,7 @@ class CharacterView {
   expression: Agent['expression'] | null = null;
   status: Agent['status'] = 'idle';
   modelId: string | null = null;
+  hatShape: HatShape = 'beanie';
   skin: Skin | null = null;
   tier: Tier = 1;
   hatOffset = 0;
@@ -168,15 +169,18 @@ class CharacterView {
       const drawn = agent.skin === 'pinkgirl' && !this.girl ? 'bishoujo' : agent.skin;
       drawFace(this.face, agent.role, agent.expression, drawn);
     }
-    if (agent.model !== this.modelId || skinChanged) {
-      this.modelId = agent.model;
-      const model = modelOf(agent.model);
+    const model = modelOf(agent.model);
+    const company = companyOf(model.vendor);
+    const hatKey = `${company.hat}:${company.color}:${model.tier}`;
+    if (hatKey !== this.modelId || skinChanged) {
+      this.modelId = hatKey;
       this.tier = model.tier;
-      drawHat(this.hat, model.vendor, model.tier);
-      if (model.tier === 3) drawHatGlow(this.glow, model.vendor);
+      this.hatShape = company.hat;
+      drawHat(this.hat, company.hat, company.color, model.tier);
+      if (model.tier === 3) drawHatGlow(this.glow, company.hat);
       else this.glow.clear();
       this.sparkles.clear();
-      const tagY = (HAT_TOP[model.vendor] - (model.tier === 3 ? 9 : 6)) * S + this.hatOffset;
+      const tagY = (HAT_TOP[company.hat] - (model.tier === 3 ? 9 : 6)) * S + this.hatOffset;
       this.roleTag.y = tagY;
       this.iconY = tagY - 22;
     }
@@ -281,8 +285,7 @@ class CharacterView {
 
   private updateAura() {
     this.glow.alpha = 0.55 + Math.sin(this.phase * 3) * 0.35;
-    const vendor = modelOf(this.agent.model).vendor;
-    const cy = (HAT_TOP[vendor] - 22) * 0.5 * S;
+    const cy = (HAT_TOP[this.hatShape] - 22) * 0.5 * S;
     this.sparkles.clear();
     for (let i = 0; i < 3; i++) {
       const a = this.phase * 1.8 + (i * Math.PI * 2) / 3;

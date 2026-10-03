@@ -77,6 +77,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\office.ps1 start
 
 - 짧은 비밀번호는 테스트용으로만 쓴다. 주소를 남에게 알려 주거나 실제 AI 키를 쓸 때는 긴 비밀번호로 바꾼다.
 - `.env`의 `AI_PROVIDER`가 `mock`이면 AI 비용이 나가지 않는다. 실제 모델로 바꾸면 외부에서 등록한 업무에도 비용이 나간다.
+- 화면의 **모델 관리** 탭에서 실행 방식을 바꾸면 `.env`보다 우선한다. "직원별 실제 AI"를 고르면 다음 AI 호출부터 실제 비용이 나간다.
+- 모델 관리에서 등록한 API 키는 `data/office.db`에 저장된다. `data/` 폴더를 백업하거나 옮길 때 키도 함께 간다는 점에 주의한다.
 - 테스트가 끝나면 `public-off`로 외부 공개를 끈다.
 - 이 앱은 Tailscale Funnel의 8443 포트로 공개한다. 포트 없는 기본 주소는 다른 서비스가 쓸 수 있으므로 건드리지 않는다.
 

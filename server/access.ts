@@ -32,10 +32,11 @@ export function snapshotFor(viewer: Viewer): Snapshot {
   const officeIds = new Set(offices.map((o) => o.id));
   const hasTeam = (team: string) => offices.some((o) => o.team === team);
   const everything = seesEverything(viewer);
-  const { shares: _shares, publicUrl: _publicUrl, ...rest } = full;
+  const { shares: _shares, publicUrl: _publicUrl, aiMode: _aiMode, envProvider: _envProvider, ...rest } = full;
   return {
     ...rest,
     viewer,
+    companies: full.companies.map(({ key: _key, baseUrl: _baseUrl, ...company }) => ({ ...company, baseUrl: '' })),
     offices,
     agents: full.agents.filter((a) => officeIds.has(a.officeId)),
     tasks: full.tasks.filter((t) => officeIds.has(t.officeId)),

@@ -1,4 +1,8 @@
+import type { Company, ModelEntry } from './models.ts';
 import type { Skin } from './skins.ts';
+
+/** 'env' follows AI_PROVIDER in .env; the others override it from the model settings page. */
+export type AiMode = 'env' | 'mock' | 'agents';
 
 export type Role = 'manager' | 'researcher' | 'writer' | 'reviewer';
 
@@ -270,6 +274,12 @@ export interface Snapshot {
   companyName: string;
   provider: string;
   model: string;
+  /** Owner only. */
+  aiMode?: AiMode;
+  /** Owner only: AI_PROVIDER from .env. */
+  envProvider?: string;
+  companies: Company[];
+  models: ModelEntry[];
   offices: Office[];
   agents: Agent[];
   tasks: Task[];

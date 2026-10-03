@@ -1,10 +1,10 @@
-import { modelOf, TIER_LABEL, VENDORS } from '../../shared/models.ts';
+import { companyOf, modelOf, TIER_LABEL } from '../../shared/models.ts';
 import { TEAMS } from '../../shared/teams.ts';
 import type { Agent, Office, OfficeEvent, TaskStatus } from '../../shared/types.ts';
 
 export function modelLabel(id: string) {
   const m = modelOf(id);
-  return `${m.label} · ${TIER_LABEL[m.tier]} (${VENDORS[m.vendor].name})`;
+  return `${m.label} · ${TIER_LABEL[m.tier]} (${companyOf(m.vendor).name})`;
 }
 
 export function krw(value: number) {
@@ -114,6 +114,8 @@ export function eventLabel(event: OfficeEvent, agents: Map<string, Agent>) {
       return `공유 링크 생성: ${p.name}`;
     case 'share.revoked':
       return `공유 링크 취소: ${p.name}`;
+    case 'catalog.changed':
+      return `모델 관리 · ${p.summary}`;
     default:
       return event.type;
   }

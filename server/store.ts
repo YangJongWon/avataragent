@@ -1,9 +1,18 @@
 import { randomUUID } from 'node:crypto';
-import { DEFAULT_MODEL_BY_ROLE, isModelId } from '../shared/models.ts';
+import {
+  DEFAULT_COMPANIES,
+  DEFAULT_MODEL_BY_ROLE,
+  DEFAULT_MODELS,
+  isModelId,
+  setCatalog,
+  type Company,
+  type ModelEntry,
+} from '../shared/models.ts';
 import { isSkin } from '../shared/skins.ts';
 import { TEAM_ORDER, TEAMS } from '../shared/teams.ts';
 import type {
   Agent,
+  AiMode,
   Budget,
   CalendarEvent,
   Inquiry,
@@ -22,8 +31,9 @@ import type {
   TeamId,
 } from '../shared/types.ts';
 import { reviewLoop, templatePlan } from '../shared/workflow.ts';
-import { config, ORGANIZATION_SAFETY_RULES } from './config.ts';
+import { config, ORGANIZATION_SAFETY_RULES, type ProviderName } from './config.ts';
 import { appendEvent, loadKv, loadRelationalState, maxSeq, recentEvents, saveRelationalState } from './db.ts';
+import { keyInfo } from './secrets.ts';
 import { defaultInterests, initialInquiries, initialMails } from './seed.ts';
 
 const PROJECT_ID = 'company_alpha';
@@ -44,6 +54,9 @@ export interface PersistedState {
   interests: Interests;
   recommendations: Recommendation[];
   shares: ShareLink[];
+  companies: Company[];
+  models: ModelEntry[];
+  aiMode: AiMode;
 }
 
 function defaultOffices(): Office[] {
@@ -109,7 +122,22 @@ function fresh(): PersistedState {
     interests: defaultInterests(),
     recommendations: [],
     shares: [],
+    companies: structuredClone(DEFAULT_COMPANIES),
+    models: structuredClone(DEFAULT_MODELS),
+    aiMode: 'env',
   };
+}
+
+function fillCatalog(state: PersistedState) {
+  state.companies ??= [];
+  state.models ??= [];
+  state.aiMode ??= 'env';
+  for (const company of DEFAULT_COMPANIES) {
+    if (!state.companies.some((c) => c.id === company.id)) state.companies.push(structuredClone(company));
+  }
+  for (const model of DEFAULT_MODELS) {
+    if (!state.models.some((m) => m.id === model.id)) state.models.push(structuredClone(model));
+  }
 }
 
 type LegacyStepId = 'intake' | 'research' | 'write' | 'review' | 'approval';
@@ -149,6 +177,7 @@ function load(): PersistedState {
     saved.version = STATE_VERSION;
   }
   if (saved.version !== STATE_VERSION) return fresh();
+  fillCatalog(saved);
   for (const task of saved.tasks) {
     for (const step of task.plan) {
       if (step.loop === undefined) step.loop = step.kind === 'review' ? reviewLoop(task.plan) : null;
@@ -166,6 +195,7 @@ class Store {
   private snapshotScheduled = false;
 
   constructor() {
+    setCatalog(this.state.companies, this.state.models);
     for (const agent of this.state.agents) {
       if (!isModelId(agent.model)) agent.model = DEFAULT_MODEL_BY_ROLE[agent.role];
       if (!isSkin(agent.skin)) agent.skin = 'pixel';
@@ -182,15 +212,25 @@ class Store {
     return () => this.listeners.delete(listener);
   }
 
+  /** AI_PROVIDER from .env unless the model settings page overrides it. */
+  get provider(): ProviderName {
+    return this.state.aiMode === 'env' ? config.provider : this.state.aiMode;
+  }
+
   snapshot(): Snapshot {
     const s = this.state;
+    const provider = this.provider;
     return {
       viewer: { kind: 'owner' },
       shares: s.shares,
       publicUrl: config.publicUrl || undefined,
       companyName: '알파 AI 컴퍼니',
-      provider: config.provider,
-      model: config.provider === 'mock' || config.provider === 'agents' ? '직원별 모델' : config.model,
+      provider,
+      model: provider === 'mock' || provider === 'agents' ? '직원별 모델' : config.model,
+      aiMode: s.aiMode,
+      envProvider: config.provider,
+      companies: s.companies.map((c) => ({ ...c, key: keyInfo(c) })),
+      models: s.models,
       offices: s.offices,
       agents: s.agents,
       tasks: s.tasks,
@@ -333,6 +373,7 @@ class Store {
   }
 
   private changed() {
+    setCatalog(this.state.companies, this.state.models);
     this.persist();
     if (this.snapshotScheduled) return;
     this.snapshotScheduled = true;

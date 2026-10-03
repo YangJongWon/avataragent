@@ -26,7 +26,8 @@ AI 직원들이 픽셀 사무실에서 실제로 일하는 모습을 보면서 �
   - 사무실 전체 또는 일부를 QR·링크로 공유할 수 있고, 권한은 보기·운영·관리 중에서 고릅니다.
 - **AI 제공자**
   - API 키 없이 돌아가는 mock 모드가 있습니다.
-  - OpenAI·Anthropic·Gemini·xAI를 지원하며, 직원마다 다른 모델을 쓸 수도 있습니다.
+  - OpenAI·Anthropic·Gemini·xAI와 OpenAI 호환 API(DeepSeek·Ollama 등)를 지원하며, 직원마다 다른 모델을 쓸 수 있습니다.
+  - **모델 관리** 탭에서 회사(모자 모양·색)와 API 키, 모델(등급 장식·단가)을 등록하고 실행 방식을 바로 바꿀 수 있습니다.
 
 ## 기술 스택
 
@@ -47,7 +48,7 @@ cp .env.example .env   # Windows PowerShell: Copy-Item .env.example .env
 ```
 
 `.env`는 기본값(`AI_PROVIDER=mock`)으로 두면 API 키 없이 시뮬레이션으로 돌아갑니다.
-실제 모델을 쓰려면 `AI_PROVIDER`와 해당 API 키를 채우세요.
+실제 모델을 쓰려면 화면의 **모델 관리** 탭에서 API 키를 등록하고 "직원별 실제 AI"를 고르거나, `.env`의 `AI_PROVIDER`와 API 키를 채우세요.
 
 ### 개발 모드
 

@@ -1,5 +1,7 @@
-import { VENDORS, type ModelEntry, type VendorProvider } from '../shared/models.ts';
+import { API_KINDS, companyOf, type ApiKind, type ModelEntry } from '../shared/models.ts';
 import { config } from './config.ts';
+import { apiKeyFor } from './secrets.ts';
+import { store } from './store.ts';
 
 export type Purpose = 'plan' | 'brief' | 'research' | 'clarify' | 'draft' | 'review' | 'check';
 
@@ -18,7 +20,7 @@ export interface CompletionResult {
   outputTokens: number;
 }
 
-const usesAgentPricing = () => config.provider === 'mock' || config.provider === 'agents';
+const usesAgentPricing = () => store.provider === 'mock' || store.provider === 'agents';
 
 export function costKrw(result: CompletionResult, model: ModelEntry) {
   const [priceIn, priceOut] = usesAgentPricing()
@@ -28,15 +30,26 @@ export function costKrw(result: CompletionResult, model: ModelEntry) {
   return Math.round(usd * config.usdKrw * 100) / 100;
 }
 
+interface Endpoint {
+  api: ApiKind;
+  name: string;
+  key: string;
+  baseUrl: string;
+}
+
 export async function complete(req: CompletionRequest): Promise<CompletionResult> {
-  if (config.provider === 'mock') return mock(req);
-  const provider = config.provider === 'agents' ? VENDORS[req.model.vendor].provider : config.provider;
-  const model = config.provider === 'agents' ? req.model.apiModel : config.model;
-  if (config.provider !== 'agents' && !config.model) {
-    throw new Error('AI_MODEL이 비어 있습니다. .env 파일에 모델 ID를 입력하거나 AI_PROVIDER=agents를 쓰세요.');
+  const provider = store.provider;
+  if (provider === 'mock') return mock(req);
+  if (provider === 'agents') {
+    const company = companyOf(req.model.vendor);
+    const endpoint = { api: company.api, name: company.name, key: apiKeyFor(company), baseUrl: company.baseUrl };
+    return withRetry(() => callProvider(endpoint, req.model.apiModel, req), req.json);
   }
-  if (config.provider === 'agents' || model) return withRetry(() => callProvider(provider, model, req), req.json);
-  throw new Error('AI 모델 설정을 확인해 주세요.');
+  if (!config.model) {
+    throw new Error('AI_MODEL이 비어 있습니다. .env 파일에 모델 ID를 입력하거나, 모델 관리에서 "직원별 실제 AI"를 고르세요.');
+  }
+  const endpoint = { api: provider, name: API_KINDS[provider].name, key: config.keys[provider], baseUrl: '' };
+  return withRetry(() => callProvider(endpoint, config.model, req), req.json);
 }
 
 class ProviderRequestError extends Error {
@@ -77,17 +90,43 @@ async function withRetry(run: () => Promise<CompletionResult>, requireJson = fal
   throw lastError;
 }
 
-function callProvider(provider: VendorProvider, model: string, req: CompletionRequest) {
-  switch (provider) {
+const baseOf = (endpoint: Pick<Endpoint, 'api' | 'baseUrl'>) => {
+  const base = (endpoint.api === 'openai_compatible' ? endpoint.baseUrl : API_KINDS[endpoint.api].base) ?? '';
+  if (!base) throw new Error('OpenAI 호환 API는 주소(Base URL)가 필요해요. 모델 관리에서 입력해 주세요.');
+  return base.replace(/\/+$/, '');
+};
+
+function callProvider(endpoint: Endpoint, model: string, req: CompletionRequest) {
+  switch (endpoint.api) {
     case 'openai':
-      return openaiCompatible('https://api.openai.com/v1/chat/completions', config.keys.openai, 'OpenAI', model, req);
     case 'xai':
-      return openaiCompatible('https://api.x.ai/v1/chat/completions', config.keys.xai, 'xAI (Grok)', model, req);
+    case 'openai_compatible':
+      return openaiCompatible(endpoint, model, req);
     case 'anthropic':
-      return anthropic(model, req);
+      return anthropic(endpoint, model, req);
     case 'gemini':
-      return gemini(model, req);
+      return gemini(endpoint, model, req);
   }
+}
+
+/** Lists model ids the key can use; also serves as a connection test that costs no tokens. */
+export async function listModels(endpoint: Endpoint): Promise<string[]> {
+  if (endpoint.api !== 'openai_compatible') requireKey(endpoint.key, endpoint.name);
+  const base = baseOf(endpoint);
+  let ids: string[];
+  if (endpoint.api === 'anthropic') {
+    const data = await requestJson('GET', `${base}/models?limit=1000`, anthropicHeaders(endpoint.key));
+    ids = (data.data ?? []).map((m: { id: string }) => m.id);
+  } else if (endpoint.api === 'gemini') {
+    const data = await requestJson('GET', `${base}/models?pageSize=1000`, { 'x-goog-api-key': endpoint.key });
+    ids = (data.models ?? [])
+      .filter((m: { supportedGenerationMethods?: string[] }) => m.supportedGenerationMethods?.includes('generateContent') ?? true)
+      .map((m: { name: string }) => m.name.replace(/^models\//, ''));
+  } else {
+    const data = await requestJson('GET', `${base}/models`, endpoint.key ? { authorization: `Bearer ${endpoint.key}` } : {});
+    ids = (data.data ?? data.models ?? []).map((m: { id?: string; name?: string }) => m.id ?? m.name ?? '');
+  }
+  return [...new Set(ids.filter(Boolean))].sort();
 }
 
 export function parseJson<T>(text: string, fallback: T): T {
@@ -102,17 +141,19 @@ export function parseJson<T>(text: string, fallback: T): T {
 }
 
 function requireKey(key: string, name: string) {
-  if (!key) throw new Error(`${name} API 키가 없습니다. .env 파일을 확인해 주세요.`);
+  if (!key) throw new Error(`${name} API 키가 없습니다. 모델 관리에서 키를 등록하거나 .env 파일을 확인해 주세요.`);
 }
 
-async function postJson(url: string, headers: Record<string, string>, body: unknown) {
+const postJson = (url: string, headers: Record<string, string>, body: unknown) => requestJson('POST', url, headers, body);
+
+async function requestJson(method: 'GET' | 'POST', url: string, headers: Record<string, string>, body?: unknown) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.aiTimeoutMs);
   try {
     const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', ...headers },
-      body: JSON.stringify(body),
+      method,
+      headers: body === undefined ? headers : { 'content-type': 'application/json', ...headers },
+      body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller.signal,
     });
     const text = await res.text();
@@ -134,11 +175,11 @@ async function postJson(url: string, headers: Record<string, string>, body: unkn
   }
 }
 
-async function openaiCompatible(url: string, key: string, name: string, model: string, req: CompletionRequest): Promise<CompletionResult> {
-  requireKey(key, name);
+async function openaiCompatible(endpoint: Endpoint, model: string, req: CompletionRequest): Promise<CompletionResult> {
+  if (endpoint.api !== 'openai_compatible') requireKey(endpoint.key, endpoint.name);
   const data = await postJson(
-    url,
-    { authorization: `Bearer ${key}` },
+    `${baseOf(endpoint)}/chat/completions`,
+    endpoint.key ? { authorization: `Bearer ${endpoint.key}` } : {},
     {
       model,
       messages: [
@@ -155,11 +196,13 @@ async function openaiCompatible(url: string, key: string, name: string, model: s
   };
 }
 
-async function anthropic(model: string, req: CompletionRequest): Promise<CompletionResult> {
-  requireKey(config.keys.anthropic, 'Anthropic');
+const anthropicHeaders = (key: string) => ({ 'x-api-key': key, 'anthropic-version': '2023-06-01' });
+
+async function anthropic(endpoint: Endpoint, model: string, req: CompletionRequest): Promise<CompletionResult> {
+  requireKey(endpoint.key, endpoint.name);
   const data = await postJson(
-    'https://api.anthropic.com/v1/messages',
-    { 'x-api-key': config.keys.anthropic, 'anthropic-version': '2023-06-01' },
+    `${baseOf(endpoint)}/messages`,
+    anthropicHeaders(endpoint.key),
     {
       model,
       max_tokens: 4096,
@@ -174,12 +217,12 @@ async function anthropic(model: string, req: CompletionRequest): Promise<Complet
   return { text, inputTokens: data.usage?.input_tokens ?? 0, outputTokens: data.usage?.output_tokens ?? 0 };
 }
 
-async function gemini(model: string, req: CompletionRequest): Promise<CompletionResult> {
-  requireKey(config.keys.gemini, 'Gemini');
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+async function gemini(endpoint: Endpoint, model: string, req: CompletionRequest): Promise<CompletionResult> {
+  requireKey(endpoint.key, endpoint.name);
+  const url = `${baseOf(endpoint)}/models/${encodeURIComponent(model)}:generateContent`;
   const data = await postJson(
     url,
-    { 'x-goog-api-key': config.keys.gemini },
+    { 'x-goog-api-key': endpoint.key },
     {
       systemInstruction: { parts: [{ text: req.system }] },
       contents: [{ role: 'user', parts: [{ text: req.user }] }],
