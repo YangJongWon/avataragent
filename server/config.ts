@@ -15,6 +15,12 @@ export type ProviderName = 'mock' | 'agents' | 'openai' | 'anthropic' | 'gemini'
 
 const provider = (process.env.AI_PROVIDER ?? 'mock').toLowerCase() as ProviderName;
 
+function tenantId(raw: string | undefined) {
+  const id = raw?.trim() || 'default';
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new Error('TENANT_ID는 영문, 숫자, -, _ 로 64자 이내여야 합니다.');
+  return id;
+}
+
 export const config = {
   port: num('PORT', 8787),
   provider,
@@ -38,6 +44,8 @@ export const config = {
   aiRetryBaseMs: num('AI_RETRY_BASE_MS', 750),
   dataDir: process.env.DATA_DIR || 'data',
   databaseUrl: process.env.DATABASE_URL?.trim() || '',
+  /** Every stored row belongs to this tenant; servers with different tenants can share one database. */
+  tenantId: tenantId(process.env.TENANT_ID),
   accessPassword: process.env.ACCESS_PASSWORD ?? '',
   publicUrl: (process.env.PUBLIC_URL ?? '').replace(/\/+$/, ''),
   /** stdio MCP servers run commands on this PC, so registering them must be switched on explicitly. */

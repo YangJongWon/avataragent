@@ -197,7 +197,15 @@ npm.cmd run storage:migrate
 
 다른 SQLite 파일은 `$env:SQLITE_PATH='D:\backup\office.db'`로 지정한다. 이관 성공 후 `.env`에 `DATABASE_URL`을 저장한다. 설정하지 않으면 기존 `data/office.db`를 계속 사용한다.
 
-`GET /api/health`에서 저장소 종류, 저장 큐 오류, 실행기 종류를 확인할 수 있다. 프로세스 정상 종료 시 대기 중인 PostgreSQL 쓰기를 모두 비운다.
+`GET /api/health`에서 저장소 종류, tenant, 저장 큐 오류, tenant 잠금, 쓰기 충돌 횟수, 실행기 종류를 확인할 수 있다. 프로세스 정상 종료 시 대기 중인 PostgreSQL 쓰기를 모두 비운다.
+
+### tenant와 여러 서버
+
+- 모든 데이터는 `.env`의 `TENANT_ID`(기본 `default`, 영문·숫자·`-`·`_`) 아래에 저장된다. 회사마다 다른 `TENANT_ID`로 서버를 띄우면 같은 PostgreSQL을 함께 써도 서로의 데이터(설정·API 키 포함)를 보지 못한다.
+- 같은 `TENANT_ID`로는 서버 하나만 켤 수 있다. 두 번째 서버는 30초 기다린 뒤 "다른 서버가 이미 tenant … 의 데이터를 쓰고 있습니다"로 종료된다. 방금 강제로 끈 서버의 연결이 남아 있으면 그 사이 풀린다.
+- 저장은 바뀐 행만 버전을 확인하며 쓴다. DB를 직접 고치는 등 다른 쓰기와 부딪히면 서버는 자기 저장을 버리고 DB 내용을 다시 읽는다(`/api/health`의 `conflicts`).
+- 예전 구조의 `data/office.db`나 PostgreSQL은 새 버전으로 처음 켤 때 자동으로 옮겨진다. 옮기기 전에 백업해 두면 안전하다(SQLite는 서버를 끈 뒤 `data/office.db*` 파일 복사).
+- `storage:migrate`는 `TENANT_ID`의 데이터만 옮기며, 대상 PostgreSQL에 그 tenant 데이터가 이미 있으면 멈춘다.
 
 기본은 서버 프로세스 안에서 업무를 돌리는 로컬 실행기다. Temporal 실행기로 바꾸면 업무마다 Temporal Workflow가 만들어지고, 서버가 꺼졌다 켜져도 Temporal 실행 이력에서 이어서 진행한다.
 

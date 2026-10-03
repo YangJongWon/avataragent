@@ -13,7 +13,12 @@
 - `npm run storage:migrate`로 실제 SQLite 데이터(사무실 5개, 직원 20명, 업무 10개, 이벤트 233개)를 PostgreSQL로 이관했다.
 - 업무 단계(`workflow_steps`), 산출물(`artifacts`), AI 호출(`ai_calls`), 비용(`cost_entries`)을 별도 원장으로 저장한다.
 - `/api/health`에서 저장소 백엔드와 비동기 저장 오류를 확인하며, 정상 종료 시 저장 큐를 비운다.
-- 아직 다중 API 인스턴스 동시 쓰기와 tenant 격리는 구현하지 않았다. PostgreSQL 저장은 기존 동기식 Store 호환을 위해 직렬 큐에서 전체 상태 스냅샷을 트랜잭션 교체한다. 다음 단계는 행 단위 upsert/낙관적 잠금과 `tenant_id` 도입이다.
+- 저장 구조 버전 2: 모든 테이블의 기본키에 `tenant_id`를 넣었다. 서버는 `TENANT_ID`(기본 `default`)의 행만 읽고 쓰며, kv(API 키·OAuth)도 tenant별로 나뉜다.
+  - 전체 스냅샷 교체를 없앴다. 마지막으로 저장한 행과 비교해 바뀐 행만 INSERT/UPDATE/DELETE 한다. 상태 배열 순서는 `pos` 열에 두고, 순서만 바뀐 행은 버전을 올리지 않고 위치만 고친다.
+  - 낙관적 잠금: 행마다 `version`이 있고 UPDATE/DELETE는 마지막으로 본 버전일 때만 성공한다. 한 행이라도 어긋나면 그 저장 전체를 되돌리고 저장소 상태를 다시 읽어 Store를 바꾼다(저장소가 이김). 횟수와 마지막 충돌은 `/api/health`의 `storage.conflicts`, `lastConflict`에 나온다.
+  - 다중 서버: PostgreSQL에서는 tenant마다 세션 advisory lock을 잡아 tenant당 쓰기 서버를 하나로 제한한다. 같은 tenant 서버를 하나 더 켜면 30초 동안 기다린 뒤 거부되고, 다른 tenant 서버들은 같은 DB를 함께 쓴다. 스키마 이관은 별도 advisory lock 안에서 한 서버만 한다.
+  - 버전 1 저장소(SQLite·PostgreSQL)는 시작할 때 자동으로 옮긴다. 기존 행은 현재 `TENANT_ID`로 들어가고, 원장 테이블이 없던 파일은 비용 이벤트로 `ai_calls`·`cost_entries`를 채운다. 실제 운영 SQLite 사본과 개발 PostgreSQL에서 사무실 5·직원 20·업무 10·이벤트 233·단계 50·AI 호출 45개가 순서 그대로 옮겨지는 것을 확인했다.
+  - 남은 한계: 같은 tenant를 여러 서버가 동시에 처리하는 active-active는 아니다(Store가 메모리 상태를 들고 있음). 한 프로세스가 여러 tenant를 서비스하는 것도 아니다. SQLite는 tenant 잠금이 없어 한 파일을 한 서버만 쓴다고 가정한다. 외래 키는 버전 2에서 빼고 앱의 행 비교가 자식 행(단계·산출물)을 함께 지운다.
 
 ### 2026-10-04 백엔드 기반 개선
 

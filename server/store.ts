@@ -33,7 +33,7 @@ import type {
 } from '../shared/types.ts';
 import { reviewLoop, templatePlan } from '../shared/workflow.ts';
 import { config, ORGANIZATION_SAFETY_RULES, type ProviderName } from './config.ts';
-import { appendEvent, loadKv, loadRelationalState, maxSeq, recentEvents, saveRelationalState } from './db.ts';
+import { appendEvent, loadKv, loadRelationalState, maxSeq, onStorageConflict, recentEvents, saveRelationalState } from './db.ts';
 import { loginInfo } from './mcp-oauth.ts';
 import { keyInfo, mcpSecretInfo } from './secrets.ts';
 import { defaultInterests, initialInquiries, initialMails } from './seed.ts';
@@ -186,6 +186,10 @@ function load(): PersistedState {
     saved.version = STATE_VERSION;
   }
   if (saved.version !== STATE_VERSION) return fresh();
+  return normalize(saved);
+}
+
+function normalize(saved: PersistedState) {
   fillCatalog(saved);
   for (const task of saved.tasks) {
     for (const step of task.plan) {
@@ -204,6 +208,10 @@ class Store {
   private snapshotScheduled = false;
 
   constructor() {
+    onStorageConflict((state) => {
+      this.state = normalize(state as unknown as PersistedState);
+      this.changed();
+    });
     setCatalog(this.state.companies, this.state.models);
     for (const agent of this.state.agents) {
       if (!isModelId(agent.model)) agent.model = DEFAULT_MODEL_BY_ROLE[agent.role];
