@@ -119,9 +119,10 @@ export function deckFromDoc(doc: DocSpec): DeckSpec {
     for (const items of chunk(doc.summary, BULLETS_PER_SLIDE)) slides.push({ title: '핵심 요약', block: { type: 'bullets', items } });
   }
   let section = doc.title;
+  let sub = '';
   let pending: string[] = [];
   const flush = () => {
-    for (const items of chunk(pending, BULLETS_PER_SLIDE)) slides.push({ title: section, block: { type: 'bullets', items } });
+    for (const items of chunk(pending, BULLETS_PER_SLIDE)) slides.push({ title: sub || section, block: { type: 'bullets', items } });
     pending = [];
   };
   for (const block of doc.blocks) {
@@ -129,9 +130,11 @@ export function deckFromDoc(doc: DocSpec): DeckSpec {
       case 'heading':
         flush();
         section = block.text;
+        sub = '';
         break;
       case 'subheading':
-        pending.push(`▸ ${block.text}`);
+        flush();
+        sub = block.text;
         break;
       case 'paragraph':
         pending.push(block.text.length > 180 ? `${block.text.slice(0, 177)}…` : block.text);

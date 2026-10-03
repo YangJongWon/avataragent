@@ -1,6 +1,6 @@
 import PptxGenJS from 'pptxgenjs';
 import type { DeckSpec } from '../../shared/design.ts';
-import { fitDeck, SLIDE, type PlannedSlide } from './fit.ts';
+import { bulletsHeight, fitDeck, heightFor, linesFor, SLIDE, type PlannedSlide } from './fit.ts';
 import type { Theme } from './theme.ts';
 
 type Pptx = InstanceType<typeof PptxGenJS>;
@@ -58,11 +58,15 @@ function body(pptx: Pptx, slide: PSlide, s: PlannedSlide, theme: Theme) {
     }
     case 'callout': {
       const color = b.tone === 'good' ? theme.good : b.tone === 'warn' ? theme.warn : theme.accent;
-      slide.addShape(pptx.ShapeType.roundRect, { x: X + 0.6, y: TOP + 0.4, w: CW - 1.2, h: 4.0, fill: { color: theme.soft }, line: { color: theme.soft }, rectRadius: 0.2 });
-      circle(pptx, slide, X + 1.0, TOP + 0.8, 0.7, b.tone === 'warn' ? '!' : '✓', color, 'FFFFFF', theme);
+      const textW = CW - 3.2;
+      const textH = heightFor(linesFor(b.text, textW, pt), pt) + (b.title ? heightFor(1, pt - 2) + 0.12 : 0);
+      const h = Math.min(CH - 0.4, Math.max(1.9, textH + 1.0));
+      const y = TOP + 0.3;
+      slide.addShape(pptx.ShapeType.roundRect, { x: X + 0.6, y, w: CW - 1.2, h, fill: { color: theme.soft }, line: { color: theme.soft }, rectRadius: 0.2 });
+      circle(pptx, slide, X + 1.1, y + h / 2 - 0.4, 0.8, b.tone === 'warn' ? '!' : '✓', color, 'FFFFFF', theme);
       slide.addText(
         [...(b.title ? [{ text: b.title, options: { bold: true, color, fontSize: pt - 2, breakLine: true } }] : []), { text: b.text, options: { fontSize: pt, color: theme.ink } }],
-        { ...text, x: X + 2.0, y: TOP + 0.7, w: CW - 2.8, h: 3.4, valign: 'middle', paraSpaceAfter: 8 },
+        { ...text, x: X + 2.3, y, w: textW, h, valign: 'middle', margin: 0, paraSpaceAfter: 8 },
       );
       return;
     }
@@ -80,7 +84,19 @@ function body(pptx: Pptx, slide: PSlide, s: PlannedSlide, theme: Theme) {
           columns.map((c) => ({ text: c, options: { bold: true, color: 'FFFFFF', fill: { color: theme.accent } } })),
           ...rows.map((r, ri) => columns.map((_, i) => ({ text: r[i] ?? '', options: ri % 2 ? { fill: { color: 'F6F7F9' } } : {} }))),
         ],
-        { x: X, y: TOP, w: CW, colW: columns.map(() => CW / columns.length), fontFace: f, fontSize: pt, color: theme.ink, border: { type: 'solid', pt: 0.5, color: 'E5E7EB' }, valign: 'middle', autoPage: false },
+        {
+          x: X,
+          y: TOP,
+          w: CW,
+          colW: columns.map(() => CW / columns.length),
+          ...(pt >= 18 ? { rowH: Math.min(0.75, CH / (rows.length + 1)) } : {}),
+          fontFace: f,
+          fontSize: pt,
+          color: theme.ink,
+          border: { type: 'solid', pt: 0.5, color: 'E5E7EB' },
+          valign: 'middle',
+          autoPage: false,
+        },
       );
       return;
     }
@@ -109,6 +125,7 @@ function body(pptx: Pptx, slide: PSlide, s: PlannedSlide, theme: Theme) {
           valAxisLabelFontFace: f,
           valAxisLabelFontSize: 12,
           valAxisLabelColor: theme.muted,
+          valAxisLabelFormatCode: '#,##0',
           dataLabelFontFace: f,
           dataLabelFontSize: 13,
           dataLabelColor: theme.ink,
@@ -138,16 +155,18 @@ function body(pptx: Pptx, slide: PSlide, s: PlannedSlide, theme: Theme) {
     }
     case 'compare': {
       const w = (CW - 1.2) / 2;
+      const listH = Math.max(bulletsHeight(b.left.items, pt, w - 0.9), bulletsHeight(b.right.items, pt, w - 0.9));
+      const h = Math.min(CH - 0.2, Math.max(2.8, listH + 1.7));
       [b.left, b.right].forEach((side, i) => {
         const x = X + i * (w + 1.2);
-        slide.addShape(pptx.ShapeType.roundRect, { x, y: TOP, w, h: CH - 0.2, fill: { color: i ? theme.soft : 'F6F7F9' }, line: { color: i ? theme.soft : 'F6F7F9' }, rectRadius: 0.15 });
+        slide.addShape(pptx.ShapeType.roundRect, { x, y: TOP, w, h, fill: { color: i ? theme.soft : 'F6F7F9' }, line: { color: i ? theme.soft : 'F6F7F9' }, rectRadius: 0.15 });
         slide.addText(side.title, { ...text, x: x + 0.3, y: TOP + 0.25, w: w - 0.6, h: 0.7, fontFace: theme.headFont, fontSize: 22, bold: true, color: i ? theme.accent : theme.ink });
         slide.addText(
           side.items.map((t, j) => ({ text: t, options: { bullet: { code: '25CF' }, paraSpaceAfter: 8, breakLine: j < side.items.length - 1 } })),
-          { ...text, x: x + 0.3, y: TOP + 1.1, w: w - 0.6, h: CH - 1.5, fontSize: pt, valign: 'top' },
+          { ...text, x: x + 0.3, y: TOP + 1.1, w: w - 0.6, h: h - 1.4, fontSize: pt, valign: 'top' },
         );
       });
-      circle(pptx, slide, X + w + 0.25, TOP + CH / 2 - 0.45, 0.7, 'VS', theme.dark, 'FFFFFF', theme);
+      circle(pptx, slide, X + w + 0.25, TOP + h / 2 - 0.35, 0.7, 'VS', theme.dark, 'FFFFFF', theme);
       return;
     }
   }

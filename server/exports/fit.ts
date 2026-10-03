@@ -36,7 +36,7 @@ export interface FitResult {
 const ROW_GAP = 0.25;
 const TABLE_PAD = 0.12;
 
-function bulletsHeight(items: string[], pt: number, width: number) {
+export function bulletsHeight(items: string[], pt: number, width: number) {
   return items.reduce((h, t) => h + heightFor(linesFor(t, width, pt), pt) + (pt * 0.6) / 72, 0);
 }
 
@@ -93,7 +93,7 @@ export function fitDeck(deck: DeckSpec): FitResult {
     }
     if (b.type === 'table') {
       const cols = b.table.columns.length;
-      const pt = cols > 5 || b.table.rows.length > 6 ? 12 : 14;
+      const pt = b.table.rows.length <= 6 && cols <= 5 ? 18 : cols > 5 || b.table.rows.length > 10 ? 12 : 14;
       const header = tableRowHeight(b.table.columns, cols, pt);
       const parts: string[][][] = [[]];
       let h = header;
