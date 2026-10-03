@@ -46,6 +46,8 @@
 | 서버 끄기 | `npm run office -- stop` |
 | 서버 다시 켜기 | `npm run office -- restart` |
 | 코드 수정 후 갱신 (설치 + 빌드 + 다시 켜기) | `npm run office -- update` |
+| 새 버전 받아 갱신 (git pull 또는 GitHub ZIP + update) | `npm run office -- upgrade` |
+| 꺼져 있으면 켜고 브라우저로 열기 | `npm run office -- open` |
 | 현재 상태 보기 (서버, Tailscale 주소, 외부 공개 여부) | `npm run office -- status` |
 | 외부 공개 켜기 | `npm run office -- public-on` |
 | 외부 공개 끄기 | `npm run office -- public-off` |
@@ -94,6 +96,14 @@ npm run dev
 - 화면: http://localhost:5173 (저장하면 바로 반영)
 - 비밀번호가 설정되어 있으면 개발 모드에서도 로그인 화면이 나온다.
 - 끝나면 `Ctrl+C`로 끄고, 다시 운영 서버를 켤 때는 `npm run office -- update`를 실행한다.
+
+## 처음 설치 (다른 PC)
+
+프로그래밍을 모르는 사람에게는 README의 "쉽게 설치하기"를 안내한다. `설치.cmd`(또는 `scripts\get.ps1` 한 줄 명령)가 Node.js 설치(winget), `npm install`, `.env` 생성(비밀번호 질문), 빌드, 바탕화면 바로가기, 첫 실행까지 한다.
+
+- `upgrade`는 git으로 받은 폴더에서는 `git pull --ff-only`를 하고, 고친 파일이 있으면 멈춘다. ZIP으로 받은 폴더에서는 GitHub의 main ZIP을 받아 덮어쓰며 `.env`, `data`, `logs`, `node_modules`는 건드리지 않는다.
+- `.env`의 `PORT`를 바꾸면 `office` 스크립트도 그 포트를 쓴다.
+- `stop`은 포트를 연 서버뿐 아니라 그 위의 tsx·npm 실행기까지 함께 끈다.
 
 ## 문제가 생겼을 때
 
