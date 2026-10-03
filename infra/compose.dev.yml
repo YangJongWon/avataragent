@@ -1,0 +1,66 @@
+name: avataragent-dev
+
+services:
+  app-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: avataragent
+      POSTGRES_USER: avataragent
+      POSTGRES_PASSWORD: avataragent_dev
+    ports:
+      - "55432:5432"
+    volumes:
+      - app-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U avataragent -d avataragent"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  temporal-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+    volumes:
+      - temporal-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  temporal:
+    # Development-only automatic schema setup. Production uses temporalio/server
+    # with schemas managed separately, as recommended by Temporal.
+    image: temporalio/auto-setup:1.29.1
+    depends_on:
+      temporal-postgres:
+        condition: service_healthy
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: temporal
+      POSTGRES_SEEDS: temporal-postgres
+    ports:
+      - "7233:7233"
+    healthcheck:
+      test: ["CMD-SHELL", "temporal operator cluster health --address $$(hostname -i):7233"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  temporal-ui:
+    image: temporalio/ui:2.42.1
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    ports:
+      - "8233:8080"
+
+volumes:
+  app-postgres-data:
+  temporal-postgres-data:

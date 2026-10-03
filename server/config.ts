@@ -37,6 +37,7 @@ export const config = {
   aiMaxRetries: Math.max(0, Math.min(5, Math.round(num('AI_MAX_RETRIES', 2)))),
   aiRetryBaseMs: num('AI_RETRY_BASE_MS', 750),
   dataDir: process.env.DATA_DIR || 'data',
+  databaseUrl: process.env.DATABASE_URL?.trim() || '',
   accessPassword: process.env.ACCESS_PASSWORD ?? '',
   publicUrl: (process.env.PUBLIC_URL ?? '').replace(/\/+$/, ''),
   /** stdio MCP servers run commands on this PC, so registering them must be switched on explicitly. */

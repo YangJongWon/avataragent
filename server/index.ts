@@ -23,6 +23,7 @@ import { canSeeEvent, ForbiddenError, snapshotFor } from './access.ts';
 import { listModels } from './ai.ts';
 import { authEnabled, authRouter, stillValid, viewerOf } from './auth.ts';
 import { config } from './config.ts';
+import { closeStorage, storageInfo } from './db.ts';
 import { setActionEnabled, simulateInquiry, simulateMail } from './orchestrator.ts';
 import { closeAllConnections, closeConnection, discoverTools } from './mcp.ts';
 import { finishLogin, logout, OAUTH_CALLBACK_PATH, startLogin } from './mcp-oauth.ts';
@@ -50,6 +51,11 @@ const teamOffice = (res: Response, team: TeamId) =>
 
 app.get('/api/state', (_req, res) => {
   res.json(snapshotFor(viewerOfRes(res)));
+});
+
+app.get('/api/health', (_req, res) => {
+  const storage = storageInfo();
+  res.status(storage.healthy ? 200 : 503).json({ ok: storage.healthy, storage, workflowRuntime: config.workflowRuntime });
 });
 
 app.post('/api/tasks', async (req, res) => {
@@ -731,6 +737,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     closeAllConnections();
     workflowRuntime
       .stop()
+      .then(() => closeStorage())
       .catch((error) => console.error('[office] 실행기 종료 실패:', error))
       .finally(() => process.exit(0));
   });

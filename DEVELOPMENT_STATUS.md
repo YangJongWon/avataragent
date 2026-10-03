@@ -5,6 +5,16 @@
 
 업데이트: 2026-10-04
 
+### 2026-10-04 durable runtime / PostgreSQL 실제 검증
+
+- `infra/compose.dev.yml`에 앱 PostgreSQL, Temporal PostgreSQL, Temporal Server, Temporal UI 개발 구성을 추가했다.
+- Windows 내장 임시 서버에 의존하지 않는 외부 Temporal 계약 테스트를 추가했고 WorkflowRuntime 계약 10개를 실제 서버에서 통과했다.
+- `DATABASE_URL`이 있으면 PostgreSQL을 기준 저장소로 선택하고, 없으면 SQLite를 유지한다.
+- `npm run storage:migrate`로 실제 SQLite 데이터(사무실 5개, 직원 20명, 업무 10개, 이벤트 233개)를 PostgreSQL로 이관했다.
+- 업무 단계(`workflow_steps`), 산출물(`artifacts`), AI 호출(`ai_calls`), 비용(`cost_entries`)을 별도 원장으로 저장한다.
+- `/api/health`에서 저장소 백엔드와 비동기 저장 오류를 확인하며, 정상 종료 시 저장 큐를 비운다.
+- 아직 다중 API 인스턴스 동시 쓰기와 tenant 격리는 구현하지 않았다. PostgreSQL 저장은 기존 동기식 Store 호환을 위해 직렬 큐에서 전체 상태 스냅샷을 트랜잭션 교체한다. 다음 단계는 행 단위 upsert/낙관적 잠금과 `tenant_id` 도입이다.
+
 ### 2026-10-04 백엔드 기반 개선
 
 - 범용성과 장기 보수성을 위해 Temporal을 상용 내구성 실행 계층으로 채택했다. LangGraph는 복잡한 에이전트 그래프가 필요한 Activity 안에서만 선택적으로 사용한다.

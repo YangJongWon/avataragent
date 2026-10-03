@@ -104,7 +104,6 @@ npm run dev
 - `upgrade`는 git으로 받은 폴더에서는 `git pull --ff-only`를 하고, 고친 파일이 있으면 멈춘다. ZIP으로 받은 폴더에서는 GitHub의 main ZIP을 받아 덮어쓰며 `.env`, `data`, `logs`, `node_modules`는 건드리지 않는다.
 - `.env`의 `PORT`를 바꾸면 `office` 스크립트도 그 포트를 쓴다.
 - `stop`은 포트를 연 서버뿐 아니라 그 위의 tsx·npm 실행기까지 함께 끈다.
-
 ## 문제가 생겼을 때
 
 | 증상 | 확인할 것 |
@@ -166,6 +165,32 @@ New-NetFirewallRule -DisplayName "avataragent 8787 (Tailscale)" -Direction Inbou
 
 ## 업무 실행기 (local / Temporal)
 
+### 로컬 개발 인프라
+
+Docker Desktop을 켠 뒤 `npm.cmd run infra:up`으로 앱용 PostgreSQL, Temporal, Temporal UI를 함께 시작한다.
+
+- 앱 DB: `postgresql://avataragent:avataragent_dev@localhost:55432/avataragent`
+- Temporal: `localhost:7233`
+- Temporal UI: `http://localhost:8233`
+- 종료: `npm.cmd run infra:down` (볼륨은 보존됨)
+
+`infra/compose.dev.yml`은 개발 전용이다. Temporal의 `auto-setup` 이미지는 운영 배포에 사용하지 않는다. 운영에서는 관리형 Temporal Cloud 또는 스키마를 별도로 관리하는 `temporalio/server` 구성을 사용한다.
+
+### PostgreSQL 전환
+
+1. 앱을 정상 종료한다.
+2. PostgreSQL에 빈 데이터베이스를 만든다.
+3. 아래 명령으로 기존 SQLite를 한 번 이관한다.
+
+```powershell
+$env:DATABASE_URL='postgresql://avataragent:avataragent_dev@localhost:55432/avataragent'
+npm.cmd run storage:migrate
+```
+
+다른 SQLite 파일은 `$env:SQLITE_PATH='D:\backup\office.db'`로 지정한다. 이관 성공 후 `.env`에 `DATABASE_URL`을 저장한다. 설정하지 않으면 기존 `data/office.db`를 계속 사용한다.
+
+`GET /api/health`에서 저장소 종류, 저장 큐 오류, 실행기 종류를 확인할 수 있다. 프로세스 정상 종료 시 대기 중인 PostgreSQL 쓰기를 모두 비운다.
+
 기본은 서버 프로세스 안에서 업무를 돌리는 로컬 실행기다. Temporal 실행기로 바꾸면 업무마다 Temporal Workflow가 만들어지고, 서버가 꺼졌다 켜져도 Temporal 실행 이력에서 이어서 진행한다.
 
 1. Temporal 서버를 켠다. 개인 테스트는 Temporal CLI의 개발 서버로 충분하다: `temporal server start-dev` (기본 주소 `localhost:7233`, 웹 UI `http://localhost:8233`).
@@ -179,6 +204,8 @@ New-NetFirewallRule -DisplayName "avataragent 8787 (Tailscale)" -Direction Inbou
 
 | 검사 | 명령 |
 |---|---|
-| 자동 테스트 | `npm test` (Temporal 테스트는 개발 서버를 처음 한 번 내려받는다. 못 받는 환경에서는 `SKIP_TEMPORAL_TESTS=1`) |
+| 일반 테스트 | `npm.cmd run test:unit` |
+| Temporal 통합 테스트 | `npm.cmd run infra:up` 후 `npm.cmd run test:temporal` |
+| 전체 테스트 | `npm test` (내장 Temporal 개발 서버를 쓸 수 있는 환경) |
 | 타입 검사 | `npm run typecheck` |
 | 프로덕션 빌드 | `npm run build` |

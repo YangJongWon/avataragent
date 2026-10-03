@@ -11,6 +11,13 @@ test('상태를 관계형 테이블에 저장하고 연속 저장할 수 있다'
   process.env.AI_PROVIDER = 'mock';
 
   const { store } = await import('../server/store.ts');
+  const { recordTask } = await import('../server/orchestrator.ts');
+  const task = recordTask({ officeId: 'office_dev', title: '원장 테스트' });
+  store.emit('cost.recorded', {
+    taskId: task.id,
+    agentId: store.data.agents.find((agent) => agent.officeId === 'office_dev')!.id,
+    payload: { amountKrw: 12.5, inputTokens: 100, outputTokens: 20, purpose: 'draft' },
+  });
   store.mutate(() => {});
   store.mutate(() => {});
 
@@ -20,6 +27,8 @@ test('상태를 관계형 테이블에 저장하고 연속 저장할 수 있다'
   assert.equal(count('agents'), store.data.agents.length);
   assert.equal(count('tasks'), store.data.tasks.length);
   assert.ok(count('state_meta') >= 1);
+  assert.equal(count('workflow_steps'), task.plan.length);
+  assert.equal(count('ai_calls'), 1);
+  assert.equal(count('cost_entries'), 1);
   db.close();
 });
-
