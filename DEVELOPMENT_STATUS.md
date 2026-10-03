@@ -9,13 +9,20 @@
 
 - 범용성과 장기 보수성을 위해 Temporal을 상용 내구성 실행 계층으로 채택했다. LangGraph는 복잡한 에이전트 그래프가 필요한 Activity 안에서만 선택적으로 사용한다.
 - HTTP API와 기존 오케스트레이터 사이에 `WorkflowRuntime` 인터페이스를 추가했다. 현재 LocalRuntime을 사용하며 Temporal Worker와 Signal 전환이 끝나면 TemporalRuntime을 기본값으로 바꾼다.
-- 공식 Temporal TypeScript SDK 의존성을 설치했다. 아직 실제 Temporal Worker와 기존 업무 단계 Activity 변환은 진행 중이다.
+  - API는 업무 실행을 모두 `workflowRuntime`으로만 요청한다. 자동 확인(`tick`)과 직원 일시정지(`pauseAgent`)도 경계 안으로 옮겼고, 메일·문의 시뮬레이션은 데이터만 만든다.
+  - 인터페이스는 자체 입력·출력 타입(`CreateTaskInput`, `PlanDraftInput`, `PlanDraft`)을 쓰고 모든 메서드가 `Promise`를 돌려준다. 요청 본문의 단계 모양은 `toStepInputs`로 경계에서 검사한다.
+  - `tests/workflow-runtime.test.ts` 계약 테스트가 생성·대기·취소·여정 변경·도움 응답·수정 요청·승인·일시정지·자동 확인을 LocalRuntime에 대해 검증한다. TemporalRuntime이 준비되면 같은 테스트를 그대로 돌린다.
+- `WORKFLOW_RUNTIME=temporal`로 켜는 TemporalRuntime 골격을 추가했다(`server/temporal/`).
+  - 시작된 업무마다 Temporal Workflow 하나를 만들고, 도움 응답과 승인·수정 요청은 Signal로 전달한다. 사무실당 한 업무 규칙은 기존 대기열(`drainQueues`)을 그대로 쓴다.
+  - Workflow는 여정 순서·루프·승인 대기만 결정적으로 다루고, AI 호출과 저장은 Activity(`TaskActivities`)로 분리했다.
+  - Worker는 지금은 API 프로세스 안에서 돈다. Activity가 메모리 상태와 SQLite 파일을 공유하기 때문이며, 저장소가 트랜잭션 기반으로 바뀌면(ADR-002) 별도 프로세스로 뺄 수 있다.
+  - 남은 일: 단계 실행 Activity(`runStep`, `requestApproval`, `recordChangeRequest`, `completeTask`)를 오케스트레이터 단계 함수와 연결, AI 여정 설계, 일시정지 시 Activity heartbeat 대기, 기존 LocalRuntime 실행 중 업무의 이전, `@temporalio/testing`으로 계약 테스트 실행.
 - 단일 `kv.state` 저장을 사무실, 직원, 업무, 메일, 일정, 문의, 발송함, 추천, 공유 링크와 메타데이터 관계형 테이블로 분리했다.
 - 기존 `kv.state` 데이터는 최초 실행 시 새 테이블로 자동 이전된다. SQLite는 WAL 모드와 외래키를 사용하며 한 번의 트랜잭션으로 상태를 저장한다.
 - 서버 재시작 시 실행 중인 업무를 더 이상 즉시 실패 처리하지 않는다. 현재 단계부터 재개하고, 승인 대기와 도움 요청 대기를 복원한다.
 - AI HTTP 호출에 제한시간, 재시도, 지수 백오프와 재시도 가능 상태 코드 판별을 추가했다.
 - JSON 응답이 필요한 호출은 실제 JSON 객체인지 검사하고 형식이 잘못되면 재시도한다.
-- `npm test`를 추가했고 관계형 저장과 워크플로 검증 테스트가 동작한다.
+- `npm test`를 추가했고 관계형 저장, 워크플로 검증, WorkflowRuntime 계약 테스트가 동작한다.
 
 현재 LocalRuntime의 복구 보장은 at-least-once 방식이다. AI 응답을 받은 직후 체크포인트 저장 전에 서버가 종료되면 같은 단계를 다시 호출할 수 있다. Temporal 전환과 별개로 외부 쓰기 도구에는 멱등 키가 필요하다.
 

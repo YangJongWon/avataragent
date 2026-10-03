@@ -53,8 +53,11 @@ export async function complete(req: CompletionRequest): Promise<CompletionResult
 }
 
 class ProviderRequestError extends Error {
-  constructor(message: string, readonly retryable: boolean) {
+  readonly retryable: boolean;
+
+  constructor(message: string, retryable: boolean) {
     super(message);
+    this.retryable = retryable;
   }
 }
 

@@ -39,6 +39,12 @@ export const config = {
   dataDir: process.env.DATA_DIR || 'data',
   accessPassword: process.env.ACCESS_PASSWORD ?? '',
   publicUrl: (process.env.PUBLIC_URL ?? '').replace(/\/+$/, ''),
+  workflowRuntime: process.env.WORKFLOW_RUNTIME === 'temporal' ? ('temporal' as const) : ('local' as const),
+  temporal: {
+    address: process.env.TEMPORAL_ADDRESS || 'localhost:7233',
+    namespace: process.env.TEMPORAL_NAMESPACE || 'default',
+    taskQueue: process.env.TEMPORAL_TASK_QUEUE || 'avataragent-tasks',
+  },
 };
 
 export const ORGANIZATION_SAFETY_RULES = [

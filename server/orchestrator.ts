@@ -804,6 +804,11 @@ function canStart(officeId: string) {
 }
 
 function startTask(taskId: string) {
+  if (claimTask(taskId)) void runTask(taskId);
+}
+
+/** Marks a queued task running and gathers its inputs; false when it was skipped for lack of input. */
+export function claimTask(taskId: string) {
   const task = store.task(taskId);
   const team = store.office(task.officeId).team;
   const spec = TEAM_SPECS[team];
@@ -821,17 +826,18 @@ function startTask(taskId: string) {
       t.failureReason = `${TEAMS[team].inputLabel}이(가) 없어서 건너뛰었어요.`;
     });
     store.emit('task.failed', { taskId, payload: { reason: store.task(taskId).failureReason } });
-    setTimeout(drainQueues, 500);
-    return;
+    return false;
   }
-  void runTask(taskId);
+  return true;
 }
 
-export function drainQueues() {
+export function drainQueues(start: (taskId: string) => void = (taskId) => void runTask(taskId)) {
   for (const office of store.data.offices) {
-    if (!canStart(office.id)) continue;
-    const next = queuedOf(office.id)[0];
-    if (next) startTask(next.id);
+    while (canStart(office.id)) {
+      const next = queuedOf(office.id)[0];
+      if (!next) break;
+      if (claimTask(next.id)) start(next.id);
+    }
   }
 }
 
@@ -868,7 +874,7 @@ function checkedPlan(officeId: string, steps: unknown) {
   return inputs;
 }
 
-export function createTask(input: {
+type TaskInput = {
   officeId: string;
   title?: string;
   description?: string;
@@ -876,7 +882,16 @@ export function createTask(input: {
   planMode?: Task['planMode'];
   steps?: unknown;
   planNote?: string;
-}) {
+};
+
+export function createTask(input: TaskInput) {
+  const task = recordTask(input);
+  if (canStart(task.officeId) && queuedOf(task.officeId).length === 1) startTask(task.id);
+  return store.task(task.id);
+}
+
+/** Validates and stores a queued task without starting it. */
+export function recordTask(input: TaskInput) {
   const office = store.office(input.officeId);
   if (queuedOf(office.id).length >= MAX_QUEUE) throw new Error(`${office.name}의 대기 업무가 ${MAX_QUEUE}건이 넘었어요. 몇 개 끝낸 뒤 추가해 주세요.`);
 
@@ -921,7 +936,6 @@ export function createTask(input: {
     agentId: agentOf(task, 'manager').id,
     payload: { title: task.title, officeId: office.id, queued: !startsNow, planMode },
   });
-  if (startsNow) startTask(task.id);
   return store.task(task.id);
 }
 
@@ -973,7 +987,6 @@ export function simulateMail() {
     s.mailbox = s.mailbox.slice(0, 100);
   });
   store.emit('mail.received', { agentId: store.agentByRole('office_hr', 'researcher').id, payload: { subject: mail.subject } });
-  autoRunTick();
   return mail;
 }
 
@@ -984,22 +997,25 @@ export function simulateInquiry() {
     s.inquiries = s.inquiries.slice(0, 100);
   });
   store.emit('inquiry.received', { agentId: store.agentByRole('office_support', 'researcher').id, payload: { subject: inquiry.subject } });
-  autoRunTick();
   return inquiry;
 }
 
+/** Offices with auto-run that are idle and have unprocessed input waiting. */
+export function autoRunOffices() {
+  return store.data.offices.filter((office) => {
+    if (!office.autoRun || !canStart(office.id) || queuedOf(office.id).length > 0) return false;
+    if (office.team === 'hr') return store.data.mailbox.some((m) => !m.processed);
+    if (office.team === 'support') return store.data.inquiries.some((q) => q.status === 'new');
+    return false;
+  });
+}
+
+export const AUTO_RUN_DESCRIPTION = '자동 확인으로 시작된 업무';
+
 export function autoRunTick() {
-  for (const office of store.data.offices) {
-    if (!office.autoRun || !canStart(office.id) || queuedOf(office.id).length > 0) continue;
-    const pending =
-      office.team === 'hr'
-        ? store.data.mailbox.some((m) => !m.processed)
-        : office.team === 'support'
-          ? store.data.inquiries.some((q) => q.status === 'new')
-          : false;
-    if (!pending) continue;
+  for (const office of autoRunOffices()) {
     try {
-      createTask({ officeId: office.id, description: '자동 확인으로 시작된 업무' });
+      createTask({ officeId: office.id, description: AUTO_RUN_DESCRIPTION });
     } catch (error) {
       console.warn(`[auto-run] ${office.name}:`, error instanceof Error ? error.message : error);
     }

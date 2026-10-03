@@ -22,15 +22,10 @@ import { canSeeEvent, ForbiddenError, snapshotFor } from './access.ts';
 import { listModels } from './ai.ts';
 import { authEnabled, authRouter, stillValid, viewerOf } from './auth.ts';
 import { config } from './config.ts';
-import {
-  autoRunTick,
-  setPaused,
-  simulateInquiry,
-  simulateMail,
-} from './orchestrator.ts';
+import { simulateInquiry, simulateMail } from './orchestrator.ts';
 import { apiKeyFor, setApiKey } from './secrets.ts';
 import { store } from './store.ts';
-import { workflowRuntime } from './workflow-runtime.ts';
+import { toStepInputs, workflowRuntime } from './workflow-runtime.ts';
 
 const app = express();
 app.set('trust proxy', 'loopback');
@@ -54,43 +49,39 @@ app.get('/api/state', (_req, res) => {
   res.json(snapshotFor(viewerOfRes(res)));
 });
 
-app.post('/api/tasks', (req, res) => {
+app.post('/api/tasks', async (req, res) => {
   const { officeId, title, description, taskType, planMode, steps, planNote } = req.body ?? {};
   if (typeof officeId !== 'string') throw new Error('사무실을 선택해 주세요.');
   guard(res, 'operate', officeId);
   res.json(
-    workflowRuntime.createTask({
+    await workflowRuntime.createTask({
       officeId,
       title: typeof title === 'string' ? title : undefined,
       description: typeof description === 'string' ? description : undefined,
       taskType: typeof taskType === 'string' ? taskType : undefined,
-      planMode,
-      steps,
+      planMode: planMode === 'custom' || planMode === 'ai' ? planMode : 'template',
+      steps: planMode === 'custom' ? toStepInputs(steps) : undefined,
       planNote: typeof planNote === 'string' ? planNote : undefined,
     }),
   );
 });
 
-app.post('/api/offices/:id/plan-preview', async (req, res, next) => {
-  try {
-    guard(res, 'operate', req.params.id);
-    const { title, description, taskType } = req.body ?? {};
-    res.json(
-      await workflowRuntime.designPlan({
-        officeId: req.params.id,
-        title: String(title ?? ''),
-        description: String(description ?? ''),
-        taskType: String(taskType ?? ''),
-      }),
-    );
-  } catch (error) {
-    next(error);
-  }
+app.post('/api/offices/:id/plan-preview', async (req, res) => {
+  guard(res, 'operate', req.params.id);
+  const { title, description, taskType } = req.body ?? {};
+  res.json(
+    await workflowRuntime.designPlan({
+      officeId: req.params.id,
+      title: String(title ?? ''),
+      description: String(description ?? ''),
+      taskType: String(taskType ?? ''),
+    }),
+  );
 });
 
-app.put('/api/tasks/:id/plan', (req, res) => {
+app.put('/api/tasks/:id/plan', async (req, res) => {
   guard(res, 'operate', officeOfTask(req.params.id));
-  res.json(workflowRuntime.updatePlan(req.params.id, req.body?.steps));
+  res.json(await workflowRuntime.updatePlan(req.params.id, toStepInputs(req.body?.steps)));
 });
 
 app.post('/api/offices', (req, res) => {
@@ -116,7 +107,7 @@ app.delete('/api/offices/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-app.put('/api/offices/:id', (req, res) => {
+app.put('/api/offices/:id', async (req, res) => {
   guard(res, 'manage', req.params.id);
   const { autoRun, budgetKrw } = req.body ?? {};
   if (budgetKrw !== undefined) guard(res, 'owner');
@@ -126,18 +117,22 @@ app.put('/api/offices/:id', (req, res) => {
     else if (typeof budgetKrw === 'number' && budgetKrw >= 0) o.budgetKrw = Math.round(budgetKrw);
   });
   store.emit('office.updated', { payload: { officeId: req.params.id, autoRun, budgetKrw } });
-  autoRunTick();
+  await workflowRuntime.tick();
   res.json(store.office(req.params.id));
 });
 
-app.post('/api/sim/mail', (_req, res) => {
+app.post('/api/sim/mail', async (_req, res) => {
   if (!teamOffice(res, 'hr')) guard(res, 'owner');
-  res.json(simulateMail());
+  const mail = simulateMail();
+  await workflowRuntime.tick();
+  res.json(mail);
 });
 
-app.post('/api/sim/inquiry', (_req, res) => {
+app.post('/api/sim/inquiry', async (_req, res) => {
   if (!teamOffice(res, 'support')) guard(res, 'owner');
-  res.json(simulateInquiry());
+  const inquiry = simulateInquiry();
+  await workflowRuntime.tick();
+  res.json(inquiry);
 });
 
 app.put('/api/interests', (req, res) => {
@@ -153,29 +148,29 @@ app.put('/api/interests', (req, res) => {
   res.json(store.data.interests);
 });
 
-app.post('/api/tasks/:id/cancel', (req, res) => {
+app.post('/api/tasks/:id/cancel', async (req, res) => {
   guard(res, 'operate', officeOfTask(req.params.id));
-  workflowRuntime.cancelTask(req.params.id);
+  await workflowRuntime.cancelTask(req.params.id);
   res.json({ ok: true });
 });
 
-app.post('/api/tasks/:id/help', (req, res) => {
+app.post('/api/tasks/:id/help', async (req, res) => {
   guard(res, 'operate', officeOfTask(req.params.id));
   const answer = req.body?.answer;
-  workflowRuntime.answerHelp(req.params.id, typeof answer === 'string' && answer.trim() ? answer : null);
+  await workflowRuntime.answerHelp(req.params.id, typeof answer === 'string' && answer.trim() ? answer : null);
   res.json({ ok: true });
 });
 
-app.post('/api/tasks/:id/approve', (req, res) => {
+app.post('/api/tasks/:id/approve', async (req, res) => {
   guard(res, 'operate', officeOfTask(req.params.id));
   const valueKrw = req.body?.valueKrw;
-  workflowRuntime.approve(req.params.id, typeof valueKrw === 'number' && Number.isFinite(valueKrw) ? valueKrw : undefined);
+  await workflowRuntime.approve(req.params.id, typeof valueKrw === 'number' && Number.isFinite(valueKrw) ? valueKrw : undefined);
   res.json({ ok: true });
 });
 
-app.post('/api/tasks/:id/request-changes', (req, res) => {
+app.post('/api/tasks/:id/request-changes', async (req, res) => {
   guard(res, 'operate', officeOfTask(req.params.id));
-  workflowRuntime.requestChanges(req.params.id, String(req.body?.comment ?? ''));
+  await workflowRuntime.requestChanges(req.params.id, String(req.body?.comment ?? ''));
   res.json({ ok: true });
 });
 
@@ -204,9 +199,9 @@ app.put('/api/agents/:id', (req, res) => {
   res.json(store.agent(req.params.id));
 });
 
-app.post('/api/agents/:id/pause', (req, res) => {
+app.post('/api/agents/:id/pause', async (req, res) => {
   guard(res, 'manage', officeOfAgent(req.params.id));
-  setPaused(req.params.id, Boolean(req.body?.paused));
+  await workflowRuntime.pauseAgent(req.params.id, Boolean(req.body?.paused));
   res.json({ ok: true });
 });
 
@@ -491,12 +486,18 @@ wss.on('connection', (socket, req) => {
   });
 });
 
-setInterval(autoRunTick, config.autoRunIntervalSec * 1000);
+function background(job: () => Promise<void>, label: string): void {
+  job().catch((error) => console.error(`[office] ${label} 실패:`, error));
+}
+
+setInterval(() => background(() => workflowRuntime.tick(), '자동 확인'), config.autoRunIntervalSec * 1000);
 
 server.listen(config.port, () => {
   console.log(
     `[office] server http://localhost:${config.port}  provider=${store.provider} model=${config.model || '(미설정)'}  password=${authEnabled() ? 'on' : 'off'}`,
   );
-  workflowRuntime.start();
-  workflowRuntime.drain();
+  background(async () => {
+    await workflowRuntime.start();
+    await workflowRuntime.drain();
+  }, '작업 복구');
 });

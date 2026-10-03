@@ -1,45 +1,86 @@
-import type { Task } from '../shared/types.ts';
+import type { PlanMode, Task, WorkflowStepInput } from '../shared/types.ts';
+import { config } from './config.ts';
 import {
   answerHelp,
   approve,
+  autoRunTick,
   cancelTask,
   createTask,
   designPlan,
   drainQueues,
   requestChanges,
   resumeActiveTasks,
+  setPaused,
   updatePlan,
 } from './orchestrator.ts';
 
-export interface WorkflowRuntime {
-  createTask(input: Parameters<typeof createTask>[0]): Task;
-  designPlan(input: Parameters<typeof designPlan>[0]): ReturnType<typeof designPlan>;
-  updatePlan(taskId: string, steps: unknown): Task;
-  cancelTask(taskId: string): void;
-  answerHelp(taskId: string, answer: string | null): void;
-  approve(taskId: string, valueKrw?: number): void;
-  requestChanges(taskId: string, comment: string): void;
-  start(): void;
-  drain(): void;
+export interface CreateTaskInput {
+  officeId: string;
+  title?: string;
+  description?: string;
+  taskType?: string;
+  planMode?: PlanMode;
+  steps?: WorkflowStepInput[];
+  planNote?: string;
+}
+
+export interface PlanDraftInput {
+  officeId: string;
+  title: string;
+  description: string;
+  taskType: string;
+}
+
+export interface PlanDraft {
+  steps: WorkflowStepInput[];
+  note: string;
 }
 
 /**
- * Migration runtime backed by the original in-process orchestrator.
- * HTTP/UI code depends only on WorkflowRuntime so Temporal can replace this
- * implementation without changing the product-facing API.
+ * Everything the API may ask of task execution. Every call is async so a durable
+ * engine (Temporal: workflow start, signals, schedules) can implement it as-is.
  */
+export interface WorkflowRuntime {
+  createTask(input: CreateTaskInput): Promise<Task>;
+  designPlan(input: PlanDraftInput): Promise<PlanDraft>;
+  updatePlan(taskId: string, steps: WorkflowStepInput[]): Promise<Task>;
+  cancelTask(taskId: string): Promise<void>;
+  answerHelp(taskId: string, answer: string | null): Promise<void>;
+  approve(taskId: string, valueKrw?: number): Promise<void>;
+  requestChanges(taskId: string, comment: string): Promise<void>;
+  pauseAgent(agentId: string, paused: boolean): Promise<void>;
+  /** Starts tasks that offices with auto-run should pick up now. */
+  tick(): Promise<void>;
+  /** Resumes interrupted tasks after a restart. */
+  start(): Promise<void>;
+  /** Starts the next queued task in every idle office. */
+  drain(): Promise<void>;
+}
+
+/** Shape check for request bodies; plan rules (order, agents, loops) are enforced by the runtime. */
+export function toStepInputs(raw: unknown): WorkflowStepInput[] {
+  if (!Array.isArray(raw) || raw.some((s) => typeof s !== 'object' || s === null)) {
+    throw new Error('업무 여정 형식이 올바르지 않아요.');
+  }
+  return raw as WorkflowStepInput[];
+}
+
+/** Migration runtime backed by the original in-process orchestrator. */
 export const localWorkflowRuntime: WorkflowRuntime = {
-  createTask,
-  designPlan,
-  updatePlan,
-  cancelTask,
-  answerHelp,
-  approve,
-  requestChanges,
-  start: resumeActiveTasks,
-  drain: drainQueues,
+  createTask: async (input) => createTask(input),
+  designPlan: (input) => designPlan(input),
+  updatePlan: async (taskId, steps) => updatePlan(taskId, steps),
+  cancelTask: async (taskId) => cancelTask(taskId),
+  answerHelp: async (taskId, answer) => answerHelp(taskId, answer),
+  approve: async (taskId, valueKrw) => approve(taskId, valueKrw),
+  requestChanges: async (taskId, comment) => requestChanges(taskId, comment),
+  pauseAgent: async (agentId, paused) => setPaused(agentId, paused),
+  tick: async () => autoRunTick(),
+  start: async () => resumeActiveTasks(),
+  drain: async () => drainQueues(),
 };
 
-// TemporalRuntime will become the production default after the worker,
-// signal mapping and legacy-run migration are in place.
-export const workflowRuntime = localWorkflowRuntime;
+// WORKFLOW_RUNTIME=temporal opts into the TemporalRuntime skeleton; its step activities
+// are not connected yet, so local stays the default.
+export const workflowRuntime: WorkflowRuntime =
+  config.workflowRuntime === 'temporal' ? (await import('./temporal/runtime.ts')).createTemporalRuntime() : localWorkflowRuntime;
