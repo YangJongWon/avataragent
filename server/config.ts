@@ -1,0 +1,46 @@
+try {
+  process.loadEnvFile('.env');
+} catch {
+  // .env is optional; defaults below run the mock provider.
+}
+
+const num = (key: string, fallback: number) => {
+  const raw = process.env[key];
+  const value = raw === undefined || raw === '' ? NaN : Number(raw);
+  return Number.isFinite(value) ? value : fallback;
+};
+
+// 'agents' routes each agent to its own model family; the others send every call to AI_MODEL.
+export type ProviderName = 'mock' | 'agents' | 'openai' | 'anthropic' | 'gemini' | 'xai';
+
+const provider = (process.env.AI_PROVIDER ?? 'mock').toLowerCase() as ProviderName;
+
+export const config = {
+  port: num('PORT', 8787),
+  provider,
+  model: process.env.AI_MODEL || '',
+  keys: {
+    openai: process.env.OPENAI_API_KEY ?? '',
+    anthropic: process.env.ANTHROPIC_API_KEY ?? '',
+    gemini: process.env.GEMINI_API_KEY ?? '',
+    xai: process.env.XAI_API_KEY ?? '',
+  },
+  priceInputPerMTokUsd: num('PRICE_INPUT_PER_MTOK_USD', 1),
+  priceOutputPerMTokUsd: num('PRICE_OUTPUT_PER_MTOK_USD', 4),
+  usdKrw: num('USD_KRW', 1400),
+  monthlyBudgetKrw: num('MONTHLY_BUDGET_KRW', 50000),
+  hourlyRateKrw: num('HOURLY_RATE_KRW', 30000),
+  helpTimeoutSec: num('HELP_TIMEOUT_SEC', 180),
+  mockDelayMs: num('MOCK_DELAY_MS', 2500),
+  autoRunIntervalSec: num('AUTO_RUN_INTERVAL_SEC', 30),
+  dataDir: process.env.DATA_DIR || 'data',
+  accessPassword: process.env.ACCESS_PASSWORD ?? '',
+  publicUrl: (process.env.PUBLIC_URL ?? '').replace(/\/+$/, ''),
+};
+
+export const ORGANIZATION_SAFETY_RULES = [
+  '사실과 추정을 구분해서 쓴다.',
+  '확인하지 못한 수치는 "추정" 또는 "확인 필요"로 표시한다.',
+  '개인정보, 비밀키, 내부 비밀 정보를 결과물에 포함하지 않는다.',
+  '외부로 메시지를 보내거나 게시하는 행동은 하지 않는다.',
+];
