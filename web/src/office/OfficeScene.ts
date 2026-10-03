@@ -384,9 +384,8 @@ export class OfficeScene {
       return;
     }
     const office = snapshot.offices.find((o) => o.id === this.officeId);
-    const officeBusy = snapshot.tasks.some(
-      (t) => t.officeId === this.officeId && ['running', 'awaiting_help', 'awaiting_approval'].includes(t.status),
-    );
+    // While the task waits on the user, only the agent who is waiting stays at the desk.
+    const officeBusy = snapshot.tasks.some((t) => t.officeId === this.officeId && t.status === 'running');
     for (const agent of snapshot.agents) {
       this.roleOf.set(agent.id, agent.role);
       const resting = !officeBusy && agent.status === 'idle' && agent.expression !== 'celebrate';
