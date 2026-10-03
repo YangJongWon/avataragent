@@ -104,6 +104,14 @@ npm run dev
 - `upgrade`는 git으로 받은 폴더에서는 `git pull --ff-only`를 하고, 고친 파일이 있으면 멈춘다. ZIP으로 받은 폴더에서는 GitHub의 main ZIP을 받아 덮어쓰며 `.env`, `data`, `logs`, `node_modules`는 건드리지 않는다.
 - `.env`의 `PORT`를 바꾸면 `office` 스크립트도 그 포트를 쓴다.
 - `stop`은 포트를 연 서버뿐 아니라 그 위의 tsx·npm 실행기까지 함께 끈다.
+
+macOS/Linux는 `scripts/get.sh`(한 줄 명령) 또는 `scripts/install.sh`가 같은 일을 한다. Node.js는 macOS에서 Homebrew가 있으면 Homebrew로, 없거나 Linux이면 nvm으로 홈 폴더에 설치한다. 실행 아이콘은 macOS는 바탕화면의 `.command` 파일, Linux는 `~/.local/share/applications`의 `.desktop` 파일이다.
+
+- `scripts/office.sh`는 `office.ps1`과 같은 명령(start, stop, restart, update, upgrade, open, status, public-on, public-off)을 지원한다.
+- 서버 PID는 `logs/server.pid`에 적는다. Linux는 `setsid`로 띄워 프로세스 그룹째, macOS는 자식 프로세스를 찾아 함께 끈다.
+- `upgrade`는 git 폴더면 `git pull --ff-only`, 아니면 GitHub main tar.gz를 받아 덮어쓴다. `.env`와 `data`는 건드리지 않는다.
+- Ubuntu 24.04 컨테이너(Node.js 없음)에서 설치, 켜기·다시 켜기·끄기, upgrade를 확인했다. macOS는 실제 기기에서 아직 확인하지 않았다.
+
 ## 문제가 생겼을 때
 
 | 증상 | 확인할 것 |

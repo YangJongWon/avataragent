@@ -81,6 +81,24 @@ AI 직원들이 픽셀 사무실에서 실제로 일하는 모습을 보면서 �
 - "포트를 다른 프로그램이 쓰고 있어요"가 나오면, 설치 폴더의 `.env` 파일을 메모장으로 열어 `PORT=8787`을 `PORT=8788`처럼 바꾸고 다시 켭니다.
 - 서버가 켜지지 않으면 설치 폴더의 `logs\server.err.log` 내용을 알려 주세요.
 - Windows 방화벽 창이 뜨면 **허용**을 누르세요. 같은 와이파이의 휴대폰에서 열 때 필요합니다.
+
+## 쉽게 설치하기 (macOS / Linux)
+
+1. **터미널**을 엽니다. macOS는 `Command+Space`로 Spotlight를 열고 `터미널`을 검색합니다.
+2. 아래 줄을 복사해 붙여 넣고 Enter를 누릅니다.
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/YangJongWon/avataragent/main/scripts/get.sh | bash
+   ```
+
+프로그램은 홈 폴더의 `avataragent`에 설치됩니다. Windows와 같은 순서로 Node.js, 부품, 설정 파일, 화면 만들기, 실행 아이콘, 첫 실행까지 알아서 합니다.
+
+- Node.js가 없으면 macOS는 Homebrew가 있을 때 Homebrew로, 그 밖에는 내 계정 폴더(nvm)에 설치합니다. 관리자 비밀번호는 필요 없습니다.
+- macOS는 바탕화면에 `AI 에이전트 오피스.command`(켜기), `… 끄기.command`, `… 업데이트.command`를 만듭니다. 더블클릭하면 터미널 창이 잠깐 열리며 실행됩니다.
+- Linux는 앱 목록(과 바탕화면)에 같은 이름의 아이콘 3개를 만듭니다.
+- ZIP으로 받았다면 macOS에서는 폴더의 `설치.command`를 오른쪽 클릭 → **열기**로 실행하고, Linux에서는 폴더에서 `bash scripts/install.sh`를 실행합니다.
+- 터미널에서 직접 다룰 때는 `scripts/office.sh start|stop|restart|status|update|upgrade`를 씁니다. 서버가 켜지지 않으면 `logs/server.err.log`를 확인하세요.
+
 ## 시작하기 (개발자용)
 
 Node.js 24 이상이 필요합니다.
@@ -135,7 +153,7 @@ npm run build
 shared/   화면·서버 공통 타입, 팀·업무 여정·권한 규칙
 server/   API, 실시간 이벤트, 업무 오케스트레이터, AI 호출, 저장소
 web/      React 화면과 픽셀 사무실(pixi.js)
-scripts/  운영 스크립트 (office.ps1), 설치 (install.ps1, get.ps1)
+scripts/  운영 스크립트 (office.ps1, office.sh), 설치 (install.ps1, get.ps1, install.sh, get.sh)
 ```
 
 ## 문서
