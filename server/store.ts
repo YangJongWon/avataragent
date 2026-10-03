@@ -10,7 +10,7 @@ import {
 } from '../shared/models.ts';
 import type { McpServer } from '../shared/mcp.ts';
 import { isSkin } from '../shared/skins.ts';
-import { TEAM_ORDER, TEAMS } from '../shared/teams.ts';
+import { MAX_STAFF_PER_OFFICE, TEAM_ORDER, TEAMS } from '../shared/teams.ts';
 import type {
   Agent,
   AiMode,
@@ -303,6 +303,37 @@ class Store {
   updateAgent(id: string, patch: Partial<Agent>) {
     Object.assign(this.agent(id), patch);
     this.changed();
+  }
+
+  hireAgent(officeId: string, role: Role, name?: string) {
+    const office = this.office(officeId);
+    const staff = this.state.agents.filter((a) => a.officeId === officeId);
+    if (staff.length >= MAX_STAFF_PER_OFFICE) throw new Error(`한 사무실에는 최대 ${MAX_STAFF_PER_OFFICE}명까지 일할 수 있어요.`);
+    const used = new Set(this.state.agents.map((a) => a.name));
+    const fallback = EXTRA_NAMES.find((n) => !used.has(n)) ?? `${TEAMS[office.team].roleTitles[role]} ${staff.length + 1}`;
+    const agent = newAgent(office, role, `agent_${office.id}_${role}_${randomUUID().slice(0, 6)}`, name?.trim().slice(0, 20) || fallback);
+    const last = this.state.agents.findLastIndex((a) => a.officeId === officeId);
+    this.state.agents.splice(last + 1, 0, agent);
+    this.changed();
+    return agent;
+  }
+
+  fireAgent(id: string) {
+    const agent = this.agent(id);
+    const peer = this.state.agents.find((a) => a.officeId === agent.officeId && a.role === agent.role && a.id !== id);
+    if (!peer) throw new Error('이 역할을 맡은 마지막 직원이라 내보낼 수 없어요. 같은 역할의 직원을 먼저 고용해 주세요.');
+    const tasks = this.state.tasks.filter((t) => t.officeId === agent.officeId);
+    const busy = tasks.some(
+      (t) => !['queued', 'completed', 'failed'].includes(t.status) && t.plan.some((s) => s.agentId === id && s.status !== 'done'),
+    );
+    if (busy) throw new Error(`${agent.name} 님이 진행 중인 업무를 맡고 있어요. 업무가 끝난 뒤에 내보낼 수 있어요.`);
+    for (const t of tasks) {
+      if (t.status !== 'queued') continue;
+      for (const s of t.plan) if (s.agentId === id) s.agentId = peer.id;
+    }
+    this.state.agents = this.state.agents.filter((a) => a.id !== id);
+    this.changed();
+    return agent;
   }
 
   addOffice(team: TeamId, name: string) {

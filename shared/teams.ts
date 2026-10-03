@@ -18,6 +18,9 @@ export interface TeamMeta {
 
 export const TEAM_ORDER: TeamId[] = ['dev', 'hr', 'mgmt', 'support', 'welfare'];
 
+/** The office scene has a desk for each of these; raise both together. */
+export const MAX_STAFF_PER_OFFICE = 8;
+
 export const TEAMS: Record<TeamId, TeamMeta> = {
   dev: {
     id: 'dev',

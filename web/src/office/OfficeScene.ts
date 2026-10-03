@@ -34,6 +34,20 @@ const LOUNGE: Record<Role, Point> = {
   reviewer: { x: 864, y: 162 },
 };
 
+// Seats for staff hired beyond the first person of each role, in fill order.
+const EXTRA_DESKS: Point[] = [
+  { x: 180, y: 190 },
+  { x: 620, y: 190 },
+  { x: 180, y: 395 },
+  { x: 620, y: 395 },
+];
+const EXTRA_LOUNGE: Point[] = [
+  { x: 842, y: 252 },
+  { x: 962, y: 252 },
+  { x: 846, y: 446 },
+  { x: 958, y: 446 },
+];
+
 const WORK_GLYPH: Record<Role, string> = { manager: '📋', researcher: '🔍', writer: '✏️', reviewer: '🧐' };
 const LOUNGE_GLYPH: Record<Role, string> = { manager: '☕', researcher: '📖', writer: '💧', reviewer: '☕' };
 
@@ -93,9 +107,11 @@ class CharacterView {
     roleTitle: string,
     startInLounge: boolean,
     private pinkGirl: SpriteSkin | null,
+    public home: Point,
+    public rest: Point,
   ) {
     this.place = startInLounge ? 'lounge' : 'desk';
-    this.pos = startInLounge ? { ...LOUNGE[agent.role] } : homeOf(agent.role);
+    this.pos = startInLounge ? { ...rest } : { ...home };
     if (pinkGirl) {
       this.girl = new Sprite(pinkGirl.idle);
       this.girl.anchor.set(0.5, 1);
@@ -198,7 +214,14 @@ class CharacterView {
     if (place === this.place) return;
     this.place = place;
     void this.walkTo(DOOR);
-    void this.walkTo(place === 'lounge' ? LOUNGE[this.agent.role] : homeOf(this.agent.role));
+    void this.walkTo(place === 'lounge' ? this.rest : this.home);
+  }
+
+  moveSeat(home: Point, rest: Point) {
+    if (home.x === this.home.x && home.y === this.home.y) return;
+    this.home = home;
+    this.rest = rest;
+    void this.walkTo(this.place === 'lounge' ? rest : home);
   }
 
   private updateIcon() {
@@ -312,6 +335,7 @@ export class OfficeScene {
   private roleOf = new Map<string, Role>();
   private charLayer = new Container();
   private deskLayer = new Container();
+  private extraDesks: Graphics[] = [];
   private fxLayer = new Container();
   private fxs: Fx[] = [];
   private boardTitle!: Text;
@@ -386,19 +410,40 @@ export class OfficeScene {
     const office = snapshot.offices.find((o) => o.id === this.officeId);
     // While the task waits on the user, only the agent who is waiting stays at the desk.
     const officeBusy = snapshot.tasks.some((t) => t.officeId === this.officeId && t.status === 'running');
+    const present = new Set(snapshot.agents.map((a) => a.id));
+    for (const [id, view] of this.chars) {
+      if (present.has(id)) continue;
+      view.root.destroy({ children: true });
+      this.chars.delete(id);
+    }
+    const seated = new Set<Role>();
+    let extra = 0;
     for (const agent of snapshot.agents) {
       this.roleOf.set(agent.id, agent.role);
+      let home: Point;
+      let rest: Point;
+      if (!seated.has(agent.role)) {
+        seated.add(agent.role);
+        home = homeOf(agent.role);
+        rest = LOUNGE[agent.role];
+      } else {
+        const i = Math.min(extra++, EXTRA_DESKS.length - 1);
+        home = { x: EXTRA_DESKS[i].x, y: EXTRA_DESKS[i].y + 4 };
+        rest = EXTRA_LOUNGE[i];
+      }
       const resting = !officeBusy && agent.status === 'idle' && agent.expression !== 'celebrate';
       const existing = this.chars.get(agent.id);
       if (existing) {
         existing.apply(agent);
+        existing.moveSeat(home, rest);
         existing.setPlace(resting ? 'lounge' : 'desk');
       } else {
-        const view = new CharacterView(agent, this.callbacks, this.team.roleTitles[agent.role], resting, this.pinkGirl);
+        const view = new CharacterView(agent, this.callbacks, this.team.roleTitles[agent.role], resting, this.pinkGirl, home, rest);
         this.chars.set(agent.id, view);
         this.charLayer.addChild(view.root);
       }
     }
+    this.extraDesks.forEach((g, i) => (g.visible = i < extra));
     this.updateBoard(snapshot);
     const profit = office ? office.valueKrw - office.spentKrw : 0;
     this.safeText.text = `이익 ${profit >= 0 ? '+' : ''}${krw(profit)}`;
@@ -427,7 +472,7 @@ export class OfficeScene {
           manager.setPlace('desk');
           void manager.walkTo(boardSpot).then(() => {
             this.paperFly({ x: boardSpot.x, y: BOARD.y + 40 }, { x: manager.pos.x, y: manager.pos.y - 40 }, '#ffe066');
-            return manager.walkTo(homeOf('manager'));
+            return manager.walkTo(manager.home);
           });
         }
         break;
@@ -442,7 +487,7 @@ export class OfficeScene {
         if (agentChar && p.tool === 'research') void agentChar.walkTo({ x: SHELF.x + 10, y: SHELF.y + SHELF.h + 40 });
         break;
       case 'tool.completed':
-        if (agentChar && agentChar.place === 'desk') void agentChar.walkTo(homeOf(agentChar.agent.role));
+        if (agentChar && agentChar.place === 'desk') void agentChar.walkTo(agentChar.home);
         break;
       case 'cost.recorded':
         if (agentChar) {
@@ -684,8 +729,8 @@ export class OfficeScene {
   }
 
   private buildDesks() {
-    for (const role of Object.keys(DESK) as Role[]) {
-      const { x, y } = DESK[role];
+    const spots = [...Object.values(DESK), ...EXTRA_DESKS];
+    spots.forEach(({ x, y }, i) => {
       const g = new Graphics();
       g.rect(x - 44, y - 4, 88, 10).fill('#c68642');
       g.rect(x - 44, y + 6, 88, 22).fill('#a0522d');
@@ -696,7 +741,11 @@ export class OfficeScene {
       g.rect(x + 30, y - 6, 4, 3).fill('#34495e');
       g.rect(x - 38, y - 8, 14, 4).fill('#fdfefe');
       this.deskLayer.addChild(g);
-    }
+      if (i >= 4) {
+        g.visible = false;
+        this.extraDesks.push(g);
+      }
+    });
 
     const lounge = new Graphics();
     lounge.rect(834, 324, 136, 22).fill('#4a7391');

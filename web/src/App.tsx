@@ -294,7 +294,7 @@ export function App() {
           {(
             [
               ['office', '사무실'],
-              ['hire', '직원 고용'],
+              ['hire', '직원 관리'],
               ['models', '모델 관리'],
               ['mcp', 'MCP 관리'],
               ['profit', '손익·결산'],

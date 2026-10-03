@@ -251,7 +251,7 @@ function ModelForm({
     try {
       if (model) await api.updateModel(model.id, form);
       else await api.createModel(form);
-      onNotice(model ? `${form.label} 정보를 저장했어요.` : `${form.label} 모델을 등록했어요. 직원 고용 탭에서 고를 수 있어요.`);
+      onNotice(model ? `${form.label} 정보를 저장했어요.` : `${form.label} 모델을 등록했어요. 직원 관리 탭에서 고를 수 있어요.`);
       onDone();
     } catch (e) {
       onError(message(e));
@@ -377,7 +377,7 @@ export function ModelsTab({ snapshot, onError, onNotice }: { snapshot: Snapshot 
     <div className="page">
       <h2>모델 관리</h2>
       <p className="muted">
-        회사를 등록하면 <b>모자 모양과 색</b>이 정해지고, 그 회사의 모델을 등록하면 <b>등급에 따라 장식</b>이 붙어요. 등록한 모델은 직원 고용
+        회사를 등록하면 <b>모자 모양과 색</b>이 정해지고, 그 회사의 모델을 등록하면 <b>등급에 따라 장식</b>이 붙어요. 등록한 모델은 직원 관리
         탭에서 직원에게 고를 수 있어요.
       </p>
 

@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { McpServer, McpTool, McpToolMode, PlannedAction } from '../../shared/mcp.ts';
 import { setCatalog, type ApiKind, type Company, type ModelEntry } from '../../shared/models.ts';
 import type {
+  Agent,
   AiMode,
   Interests,
   Office,
   OfficeEvent,
   PlanMode,
+  Role,
   ServerMessage,
   ShareLink,
   ShareRole,
@@ -60,6 +62,8 @@ export const api = {
     call<PlannedAction>('PUT', `/api/tasks/${taskId}/actions/${actionId}`, { enabled }),
   updateAgent: (agentId: string, patch: { name?: string; rules?: string; model?: string; skin?: Skin }) =>
     call('PUT', `/api/agents/${agentId}`, patch),
+  hireAgent: (officeId: string, body: { role: Role; name?: string }) => call<Agent>('POST', `/api/offices/${officeId}/agents`, body),
+  fireAgent: (agentId: string) => call('DELETE', `/api/agents/${agentId}`),
   setPaused: (agentId: string, paused: boolean) => call('POST', `/api/agents/${agentId}/pause`, { paused }),
   updateBudget: (patch: { monthlyKrw?: number; hourlyRateKrw?: number }) => call('PUT', '/api/budget', patch),
   setAiMode: (mode: AiMode) => call('PUT', '/api/ai-mode', { mode }),

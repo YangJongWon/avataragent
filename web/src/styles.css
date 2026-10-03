@@ -869,6 +869,47 @@ p.plan-note {
 }
 .hire-card {
   padding: 12px;
+  margin-bottom: 16px;
+}
+.staff-list,
+.staff-hire {
+  padding: 12px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.staff-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 2px solid transparent;
+}
+.staff-row.selected {
+  border-color: var(--primary);
+  background: rgba(0, 0, 0, 0.04);
+}
+.staff-pick {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.staff-pick > .role-chip,
+.staff-pick > b {
+  white-space: nowrap;
+}
+.staff-hire .row {
+  align-items: flex-end;
+  flex-wrap: wrap;
 }
 
 .link-btn {
@@ -896,6 +937,105 @@ p.plan-note {
 .hat-preview {
   image-rendering: pixelated;
   flex: none;
+}
+.char-preview {
+  image-rendering: pixelated;
+  display: block;
+  margin: 0 auto 8px;
+}
+.hire-stage {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  margin-bottom: 10px;
+  border: 3px solid var(--line);
+  background: #fdf6e3;
+}
+.hire-stage .char-preview {
+  margin: 0;
+  flex: none;
+}
+.hire-stage-info {
+  min-width: 0;
+}
+.hire-stage-name {
+  font-weight: 800;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.skin-option-art {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.skin-option-art .char-preview {
+  margin: 0;
+}
+.model-pick-group {
+  margin-top: 8px;
+}
+.model-pick-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.model-pick-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.model-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 2px solid #d8cdb8;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+}
+.model-pick:hover {
+  background: #fdebd0;
+}
+.model-pick.selected {
+  border-color: var(--primary);
+  background: #eef4ff;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.2);
+}
+.model-pick-label {
+  font-size: 12px;
+  font-weight: 700;
+}
+.cand-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+.cand {
+  padding: 4px;
+  border: 2px solid #d8cdb8;
+  background: #fff;
+  cursor: pointer;
+  line-height: 0;
+}
+.cand .char-preview {
+  margin: 0;
+}
+.cand:hover {
+  background: #fdebd0;
+}
+.cand.selected {
+  border-color: var(--primary);
+  background: #eef4ff;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.2);
 }
 .mode-options {
   display: grid;

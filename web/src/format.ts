@@ -96,6 +96,10 @@ export function eventLabel(event: OfficeEvent, agents: Map<string, Agent>) {
       return `${who} 재개`;
     case 'rule.changed':
       return `${who} 개인 규칙 변경`;
+    case 'agent.hired':
+      return `${String(p.name ?? who)} 입사`;
+    case 'agent.left':
+      return `${String(p.name ?? '')} 퇴사`;
     case 'budget.threshold_reached':
       return '월 예산 80% 사용 경고';
     case 'budget.exceeded':

@@ -207,6 +207,25 @@ app.put('/api/agents/:id', (req, res) => {
   res.json(store.agent(req.params.id));
 });
 
+app.post('/api/offices/:id/agents', (req, res) => {
+  guard(res, 'manage', req.params.id);
+  const { role, name, model, skin } = req.body ?? {};
+  if (!['manager', 'researcher', 'writer', 'reviewer'].includes(role)) throw new Error('알 수 없는 역할입니다.');
+  if (model !== undefined && !isModelId(model)) throw new Error('알 수 없는 모델입니다.');
+  if (skin !== undefined && !isSkin(skin)) throw new Error('알 수 없는 스킨입니다.');
+  const agent = store.hireAgent(req.params.id, role, typeof name === 'string' ? name : undefined);
+  if (model !== undefined || skin !== undefined) store.updateAgent(agent.id, { ...(model ? { model } : {}), ...(skin ? { skin } : {}) });
+  store.emit('agent.hired', { agentId: agent.id, payload: { name: agent.name, role } });
+  res.json(store.agent(agent.id));
+});
+
+app.delete('/api/agents/:id', (req, res) => {
+  guard(res, 'manage', officeOfAgent(req.params.id));
+  const agent = store.fireAgent(req.params.id);
+  store.emit('agent.left', { payload: { name: agent.name, role: agent.role, officeId: agent.officeId } });
+  res.json({ ok: true });
+});
+
 app.post('/api/agents/:id/pause', async (req, res) => {
   guard(res, 'manage', officeOfAgent(req.params.id));
   await workflowRuntime.pauseAgent(req.params.id, Boolean(req.body?.paused));
