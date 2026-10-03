@@ -66,6 +66,9 @@ function Open-Office {
 }
 
 function Update-Office {
+  # Under `npm run office`, the outer npm passes its settings as npm_config_* variables, and the nested
+  # `npm install` treats them as command-line flags (e.g. --allow-scripts, which project installs reject).
+  Get-ChildItem Env: | Where-Object { $_.Name -like 'npm_config_*' } | ForEach-Object { Remove-Item "Env:$($_.Name)" }
   Push-Location $Root
   try {
     & npm.cmd install --no-fund --no-audit
@@ -144,7 +147,10 @@ switch ($Command) {
   'start' { $null = Start-Office }
   'stop' { Stop-Office }
   'restart' { Stop-Office; Start-Sleep -Seconds 1; $null = Start-Office }
-  'update' { Update-Office }
+  'update' {
+    try { Update-Office }
+    catch { Write-Host "갱신하지 못했어요: $($_.Exception.Message)" -ForegroundColor Red; exit 1 }
+  }
   'open' { Open-Office }
   'upgrade' {
     try {
