@@ -9,6 +9,7 @@ import type {
   Agent,
   AiMode,
   ChatMessage,
+  ForwardMode,
   Member,
   Interests,
   Office,
@@ -65,6 +66,7 @@ export const api = {
     call<Member>('PUT', `/api/members/${memberId}`, patch),
   deleteMember: (memberId: string) => call('DELETE', `/api/members/${memberId}`),
   postChat: (body: { channel: string; text: string; taskId?: string }) => call<ChatMessage>('POST', '/api/chat', body),
+  forwardChat: (messageId: string, mode: ForwardMode) => call<ChatMessage>('POST', `/api/chat/${messageId}/forward`, { mode }),
   applyPlaybook: (officeId: string, body: { playbook: Playbook; includeModel: boolean; acceptWarnings: boolean }) =>
     call<{ changes: PlaybookChange[] }>('POST', `/api/offices/${officeId}/playbook`, body),
   applyImprovement: (officeId: string, id: string) => call('POST', `/api/offices/${officeId}/improvements`, { id }),

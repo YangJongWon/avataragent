@@ -13,7 +13,7 @@ const { store } = await import('../server/store.ts');
 const { createMember, updateMember, memberToken, publicMember } = await import('../server/members.ts');
 const { viewerOf, stillValid } = await import('../server/auth.ts');
 const { snapshotFor } = await import('../server/access.ts');
-const { chatNews, postChat } = await import('../server/chat.ts');
+const { chatNews, postChat, forwardChat } = await import('../server/chat.ts');
 const { can } = await import('../shared/access.ts');
 const { recordTask } = await import('../server/orchestrator.ts');
 
@@ -83,4 +83,49 @@ test('chat follows the plan and office scope, never reaches share links, and pos
   setPlan('business');
   postChat(leeViewer, { channel: 'office:office_hr', text: '인사팀끼리' });
   assert.throws(() => postChat(leeViewer, { channel: 'office:office_dev', text: '몰래' }), /글을 쓸 수 없어요/);
+});
+
+test('people choose which chat messages reach the AI staff, and how', async () => {
+  setPlan('team');
+  const owner = { kind: 'owner' } as const;
+  const calls: string[] = [];
+  const actions = {
+    answer: async (taskId: string, text: string) => void calls.push(`answer ${taskId} ${text}`),
+    changes: async (taskId: string, text: string) => void calls.push(`changes ${taskId} ${text}`),
+  };
+  const task = recordTask({ officeId: 'office_dev', title: '전달 업무' });
+  const park = createMember({ loginId: 'parkview', name: '박사원', password: 'password1', role: 'viewer', officeIds: ['office_dev'] });
+  const parkViewer = viewerOf(request(`office_member=${encodeURIComponent(memberToken(stored(park.id)))}`))!;
+
+  const note = postChat(parkViewer, { channel: `task:${task.id}`, text: '표로 정리해 주세요' });
+  await assert.rejects(forwardChat(parkViewer, note.id, 'note', actions), /권한이 없어요/, 'viewers can talk but not steer the AI');
+  await assert.rejects(forwardChat(owner, note.id, 'changes', actions), /그렇게 전달할 수 없어요/);
+  const forwarded = await forwardChat(owner, note.id, 'note', actions);
+  assert.equal(forwarded.forwarded?.mode, 'note');
+  assert.deepEqual(store.task(task.id).chatNotes?.map((n) => `${n.author}: ${n.text}`), ['박사원: 표로 정리해 주세요']);
+  await assert.rejects(forwardChat(owner, note.id, 'note', actions), /이미 AI 직원에게 전달/);
+
+  const plain = postChat(owner, { channel: 'company', text: '점심 뭐 먹죠' });
+  await assert.rejects(forwardChat(owner, plain.id, 'note', actions), /업무와 연결된 메시지만/);
+
+  store.updateTask(task.id, (t) => {
+    t.status = 'awaiting_help';
+    t.help = { id: 'h', agentId: 'agent', question: '어떤 형식?', options: [], assumption: '', deadline: Date.now() + 60_000 };
+  });
+  const reply = postChat(owner, { channel: 'company', text: '엑셀 형식이요', taskId: task.id });
+  await forwardChat(owner, reply.id, 'answer', actions);
+
+  store.updateTask(task.id, (t) => {
+    t.status = 'awaiting_approval';
+    t.help = null;
+  });
+  const fix = postChat(owner, { channel: `task:${task.id}`, text: '결론을 맨 위로' });
+  await forwardChat(owner, fix.id, 'changes', actions);
+  assert.deepEqual(calls, [`answer ${task.id} 소유자: 엑셀 형식이요`, `changes ${task.id} 소유자: 결론을 맨 위로`]);
+
+  store.updateTask(task.id, (t) => {
+    t.status = 'completed';
+  });
+  const late = postChat(owner, { channel: `task:${task.id}`, text: '늦은 의견' });
+  await assert.rejects(forwardChat(owner, late.id, 'note', actions), /그렇게 전달할 수 없어요/);
 });

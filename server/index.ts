@@ -28,7 +28,7 @@ import type { AiMode, ServerMessage, ShareLink, ShareRole, TeamId, Viewer } from
 import { canSeeEvent, ForbiddenError, snapshotFor } from './access.ts';
 import { listModels } from './ai.ts';
 import { authEnabled, authRouter, stillValid, viewerOf } from './auth.ts';
-import { chatNews, postChat, setAssignee } from './chat.ts';
+import { chatNews, forwardChat, postChat, setAssignee } from './chat.ts';
 import { config } from './config.ts';
 import { closeStorage, storageInfo } from './db.ts';
 import { createMember, deleteMember, updateMember } from './members.ts';
@@ -767,6 +767,17 @@ app.delete('/api/members/:id', (req, res) => {
 
 app.post('/api/chat', (req, res) => {
   res.json(postChat(viewerOfRes(res), req.body ?? {}));
+});
+
+app.post('/api/chat/:id/forward', async (req, res) => {
+  const mode = req.body?.mode;
+  if (mode !== 'note' && mode !== 'answer' && mode !== 'changes') throw new Error('전달 방식을 골라 주세요.');
+  res.json(
+    await forwardChat(viewerOfRes(res), req.params.id, mode, {
+      answer: (taskId, text) => workflowRuntime.answerHelp(taskId, text),
+      changes: (taskId, text) => workflowRuntime.requestChanges(taskId, text),
+    }),
+  );
 });
 
 app.put('/api/tasks/:id/assignee', (req, res) => {

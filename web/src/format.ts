@@ -136,6 +136,8 @@ export function eventLabel(event: OfficeEvent, agents: Map<string, Agent>) {
       return `플레이북 "${p.name}" 적용 (${p.changes}건 변경)`;
     case 'improvement.applied':
       return `${who} 📈 ${p.auto ? '자율 개선' : '개선 적용'}: ${p.reason}`;
+    case 'chat.forwarded':
+      return `💬 ${p.by}님이 대화를 ${p.label ?? ''} 전달: ${p.author}: ${p.text}`;
     case 'task.assignee_changed':
       return p.name ? `담당자 지정: ${p.name}` : '담당자 지정 해제';
     case 'plan.changed':

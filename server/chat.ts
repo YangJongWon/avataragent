@@ -1,11 +1,45 @@
 import { randomUUID } from 'node:crypto';
-import { canUseChannel, COMPANY_CHANNEL, MAX_CHAT_CHARS, MAX_CHAT_MESSAGES, officeChannel } from '../shared/chat.ts';
+import { can } from '../shared/access.ts';
+import { canReadMessage, canUseChannel, COMPANY_CHANNEL, FORWARDED_AS, forwardModes, MAX_CHAT_CHARS, MAX_CHAT_MESSAGES, MAX_CHAT_NOTES, officeChannel, taskOfMessage } from '../shared/chat.ts';
 import { planHas } from '../shared/plans.ts';
-import type { ChatMessage, OfficeEvent, Viewer } from '../shared/types.ts';
+import type { ChatMessage, ForwardMode, OfficeEvent, Viewer } from '../shared/types.ts';
 import { ForbiddenError } from './access.ts';
 import { store } from './store.ts';
 
 const officeOfTask = (taskId: string) => store.data.tasks.find((t) => t.id === taskId)?.officeId ?? null;
+
+export interface ForwardActions {
+  answer(taskId: string, text: string): Promise<void>;
+  changes(taskId: string, text: string): Promise<void>;
+}
+
+/** Hands a person's chat message to the AI staff of its task, the way the viewer chose. Each message goes over once. */
+export async function forwardChat(viewer: Viewer, messageId: string, mode: ForwardMode, actions: ForwardActions) {
+  const message = store.data.chat.find((m) => m.id === messageId);
+  if (!message || !canReadMessage(viewer, store.data.plan, message, officeOfTask)) throw new Error('메시지를 찾을 수 없어요.');
+  const taskId = taskOfMessage(message);
+  const task = taskId ? store.data.tasks.find((t) => t.id === taskId) : undefined;
+  if (!task) throw new Error('업무와 연결된 메시지만 AI 직원에게 전달할 수 있어요.');
+  if (!can(viewer, 'operate', task.officeId)) throw new ForbiddenError('이 업무를 처리할 권한이 없어요.');
+  if (message.forwarded) throw new Error('이미 AI 직원에게 전달한 메시지예요.');
+  if (!forwardModes(message, task).includes(mode)) throw new Error('지금 업무 상태에서는 그렇게 전달할 수 없어요.');
+
+  const text = `${message.author.name}: ${message.text.trim()}`;
+  if (mode === 'answer') await actions.answer(task.id, text);
+  else if (mode === 'changes') await actions.changes(task.id, text);
+  else {
+    store.updateTask(task.id, (t) => {
+      t.chatNotes = [...(t.chatNotes ?? []), { messageId, author: message.author.name, text: message.text.trim(), at: new Date().toISOString() }].slice(-MAX_CHAT_NOTES);
+    });
+  }
+  const by = authorOf(viewer).name;
+  store.mutate((s) => {
+    const target = s.chat.find((m) => m.id === messageId);
+    if (target) target.forwarded = { mode, taskId: task.id, by, at: new Date().toISOString() };
+  });
+  store.emit('chat.forwarded', { taskId: task.id, payload: { mode, label: FORWARDED_AS[mode], by, author: message.author.name, text: message.text.trim().slice(0, 200) } });
+  return store.data.chat.find((m) => m.id === messageId)!;
+}
 
 /** Business plan: names who is in charge of a task. The person must be able to see the task's office. */
 export function setAssignee(taskId: string, assigneeId: string | null) {

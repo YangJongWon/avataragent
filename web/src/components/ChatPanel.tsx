@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { COMPANY_CHANNEL, MAX_CHAT_CHARS, officeChannel, parseChannel } from '../../../shared/chat.ts';
+import { can } from '../../../shared/access.ts';
+import { COMPANY_CHANNEL, FORWARD_LABEL, FORWARDED_AS, forwardModes, MAX_CHAT_CHARS, officeChannel, parseChannel, taskOfMessage } from '../../../shared/chat.ts';
 import { planHas } from '../../../shared/plans.ts';
 import { TEAMS } from '../../../shared/teams.ts';
-import type { ChatMessage, Snapshot } from '../../../shared/types.ts';
+import type { ChatMessage, ForwardMode, Snapshot } from '../../../shared/types.ts';
 import { api } from '../api.ts';
 import { krw, TASK_STATUS_LABEL } from '../format.ts';
 
@@ -20,6 +21,7 @@ export function ChatPanel(props: {
   const { snapshot, channel } = props;
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [forwarding, setForwarding] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const officeChannels = planHas(snapshot.plan, 'officeChannels');
   const parsed = parseChannel(channel);
@@ -40,6 +42,18 @@ export function ChatPanel(props: {
     } catch (e) {
       props.onError(e instanceof Error ? e.message : String(e));
       return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const forward = async (messageId: string, mode: ForwardMode) => {
+    setBusy(true);
+    try {
+      await api.forwardChat(messageId, mode);
+      setForwarding(null);
+    } catch (e) {
+      props.onError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
@@ -95,6 +109,34 @@ export function ChatPanel(props: {
                 {m.author.name} · {new Date(m.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
               </div>
               {m.text && <div className="chat-text">{m.text}</div>}
+              {m.forwarded ? (
+                <div className="chat-forwarded small">
+                  🤖 {m.forwarded.by}님이 {FORWARDED_AS[m.forwarded.mode]} AI 직원에게 전달했어요
+                </div>
+              ) : (
+                (() => {
+                  const target = taskOfMessage(m);
+                  const targetTask = target ? taskOf(target) : undefined;
+                  const modes = targetTask && can(snapshot.viewer, 'operate', targetTask.officeId) ? forwardModes(m, targetTask) : [];
+                  if (!modes.length) return null;
+                  return forwarding === m.id ? (
+                    <div className="chat-forward-menu">
+                      {modes.map((mode) => (
+                        <button key={mode} className="pixel-btn small" disabled={busy} onClick={() => void forward(m.id, mode)}>
+                          {FORWARD_LABEL[mode]}
+                        </button>
+                      ))}
+                      <button className="link-btn small" onClick={() => setForwarding(null)}>
+                        취소
+                      </button>
+                    </div>
+                  ) : (
+                    <button className="link-btn small chat-forward" title={`"${targetTask!.title}" 업무의 AI 직원에게 전달`} onClick={() => setForwarding(m.id)}>
+                      🤖 AI 직원에게 전달
+                    </button>
+                  );
+                })()
+              )}
               {m.taskId && (
                 <button className="chat-task" disabled={!task} onClick={() => task && props.onOpenTask(task.id)}>
                   {task ? (
@@ -132,7 +174,7 @@ export function ChatPanel(props: {
           보내기
         </button>
       </div>
-      <p className="muted small chat-note">채팅 내용은 AI 직원에게 전달되지 않아요.</p>
+      <p className="muted small chat-note">채팅은 기본적으로 AI 직원이 보지 않아요. 업무와 연결된 메시지는 "🤖 AI 직원에게 전달"을 눌러 골라서 넘길 수 있어요.</p>
     </aside>
   );
 }

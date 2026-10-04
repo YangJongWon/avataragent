@@ -58,6 +58,9 @@ const lessonBlock = (task: Task, kind: 'draft' | 'research') => {
   return `${title}\n${lessons.map((l) => `- ${l}`).join('\n')}`;
 };
 
+const chatNoteBlock = (task: Task) =>
+  task.chatNotes?.length ? `[팀 대화에서 사용자가 전달한 메모 - 반영할 것]\n${task.chatNotes.map((n) => `- ${n.author}: ${n.text}`).join('\n')}` : '';
+
 function systemPrompt(agent: Agent) {
   const style = personalityOf(agent.personality);
   return [
@@ -454,6 +457,7 @@ async function researchStep(taskId: string, step: WorkflowStep, feedback?: strin
     `[작업 지시서]\n${latest(task, 'brief')?.content}`,
     `[처리할 자료]\n${task.inputText}`,
     earlier !== '(조사 단계 없음)' ? `[앞 단계 메모]\n${earlier}` : '',
+    chatNoteBlock(task),
     lessonBlock(task, 'research'),
     stepNote(step, feedback),
   ]
@@ -641,6 +645,7 @@ async function draftStep(taskId: string, step: WorkflowStep, attempt: number, cl
       attempt > 1 ? `[이전 초안]\n${latest(task, 'draft')?.content}` : '',
       lastReview && !lastReview.approved ? `[검수 반려 사유]\n${lastReview.reason}` : '',
       lastChange ? `[사용자 수정 요청]\n${lastChange}` : '',
+      chatNoteBlock(task),
       lessonBlock(task, 'draft'),
       stepNote(step, feedback),
       '',
@@ -693,9 +698,11 @@ async function reviewStep(taskId: string, step: WorkflowStep, attempt: number, r
       `[처리할 자료]\n${task.inputText}`,
       notes ? `[조사 메모]\n${notes}` : '',
       `[초안]\n${latest(task, 'draft')?.content}`,
+      chatNoteBlock(task),
       stepNote(step),
       '',
       spec.reviewAsk,
+      task.chatNotes?.length ? '사용자가 전달한 메모가 초안에 반영되지 않았으면 반려한다.' : '',
       step.instructions ? `추가 관점: ${step.instructions}` : '',
       step.loop ? `반려 조건: ${step.loop.when}` : '',
       notes

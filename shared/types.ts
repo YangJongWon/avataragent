@@ -174,6 +174,8 @@ export interface Task {
   help: HelpRequest | null;
   clarifications: string[];
   userChangeRequests: string[];
+  /** Chat messages people chose to hand to the AI staff; later research and drafts take them into account. */
+  chatNotes?: ChatNote[];
   proposal: Proposal | null;
   /** External tool calls proposed with the latest draft, run on approval. */
   actions?: PlannedAction[];
@@ -311,6 +313,18 @@ export interface ChatMessage {
   text: string;
   /** Shows the task as a card under the text. */
   taskId?: string;
+  at: string;
+  /** Set once the message was handed to the AI staff of a task. */
+  forwarded?: { mode: ForwardMode; taskId: string; by: string; at: string };
+}
+
+/** note: reference for the remaining steps, answer: reply to a help request, changes: change request on an awaiting draft. */
+export type ForwardMode = 'note' | 'answer' | 'changes';
+
+export interface ChatNote {
+  messageId: string;
+  author: string;
+  text: string;
   at: string;
 }
 

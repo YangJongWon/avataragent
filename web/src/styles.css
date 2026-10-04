@@ -1657,6 +1657,20 @@ p.plan-note {
   display: grid;
   gap: 6px;
 }
+.chat-forward {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+.chat-forward-menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.chat-forwarded {
+  margin-top: 2px;
+  color: #2d7d46;
+}
 .assignee {
   display: inline-flex;
   align-items: center;

@@ -317,10 +317,15 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
           ))}
 
         {tab === 'reviews' &&
-          (task.reviews.length || task.clarifications.length || task.userChangeRequests.length ? (
+          (task.reviews.length || task.clarifications.length || task.userChangeRequests.length || task.chatNotes?.length ? (
             <ul className="plain-list">
               {task.clarifications.map((c, i) => (
                 <li key={`c${i}`}>🤝 사용자가 정한 방향: {c}</li>
+              ))}
+              {(task.chatNotes ?? []).map((n) => (
+                <li key={n.messageId}>
+                  💬 대화에서 전달된 메모 · {n.author}: {n.text}
+                </li>
               ))}
               {task.reviews.map((r, i) => (
                 <li key={`r${i}`} className={r.approved ? 'ok' : 'ng'}>
