@@ -41,9 +41,9 @@ export async function forwardChat(viewer: Viewer, messageId: string, mode: Forwa
   return store.data.chat.find((m) => m.id === messageId)!;
 }
 
-/** Business plan: names who is in charge of a task. The person must be able to see the task's office. */
+/** Paid team plans: names who is in charge of a task. The person must be able to see the task's office. */
 export function setAssignee(taskId: string, assigneeId: string | null) {
-  if (!planHas(store.data.plan, 'assignees')) throw new Error('업무 담당자 지정은 비즈니스 플랜에서 쓸 수 있어요.');
+  if (!planHas(store.data.plan, 'assignees')) throw new Error('업무 담당자 지정은 팀 플랜부터 쓸 수 있어요.');
   const task = store.task(taskId);
   if (assigneeId !== null) {
     const person = assigneeId === 'owner' ? { officeIds: 'all' as const, disabled: false } : store.data.members.find((m) => m.id === assigneeId);

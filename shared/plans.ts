@@ -1,6 +1,6 @@
 export type Plan = 'personal' | 'team' | 'business';
 
-export type PlanFeature = 'members' | 'chat' | 'officeChannels' | 'assignees' | 'activityExport';
+export type PlanFeature = 'members' | 'chat' | 'projectLounge' | 'officeChannels' | 'assignees' | 'activityExport';
 
 export interface PlanMeta {
   id: Plan;
@@ -27,8 +27,8 @@ export const PLANS: PlanMeta[] = [
     id: 'team',
     emoji: '👥',
     label: '팀',
-    description: '구성원 계정으로 함께 일하고, 회사 전체 채팅과 업무별 대화를 써요.',
-    features: ['members', 'chat'],
+    description: '구성원과 업무를 나누고, 프로젝트 라운지에서 완성 과정과 기여를 함께 봐요.',
+    features: ['members', 'chat', 'projectLounge', 'assignees'],
     maxMembers: 10,
     priceKrw: 29_000,
   },
@@ -36,8 +36,8 @@ export const PLANS: PlanMeta[] = [
     id: 'business',
     emoji: '🏢',
     label: '비즈니스',
-    description: '팀 기능에 더해 사무실별 채널, 업무 담당자 지정, 활동 기록 내보내기를 써요.',
-    features: ['members', 'chat', 'officeChannels', 'assignees', 'activityExport'],
+    description: '팀 기능에 더해 사무실별 채널, 더 큰 조직과 활동 기록 내보내기를 써요.',
+    features: ['members', 'chat', 'projectLounge', 'officeChannels', 'assignees', 'activityExport'],
     maxMembers: 50,
     priceKrw: 99_000,
   },

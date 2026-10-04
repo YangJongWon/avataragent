@@ -6,6 +6,7 @@ import type { Plan } from './plans.ts';
 import type { BillingInfo } from './billing.ts';
 import type { Company, ModelEntry } from './models.ts';
 import type { Skin } from './skins.ts';
+import type { Language } from './i18n.ts';
 
 /** 'env' follows AI_PROVIDER in .env; the others override it from the model settings page. */
 export type AiMode = 'env' | 'mock' | 'agents';
@@ -370,6 +371,8 @@ export interface Snapshot {
   improvements: ImprovementLog[];
   safetyRules: string[];
   helpTimeoutSec: number;
+  /** Display language for the web UI. Owner only. */
+  language?: Language;
   seq: number;
 }
 

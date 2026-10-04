@@ -17,6 +17,7 @@ import { PerformanceTab } from './components/PerformanceTab.tsx';
 import { COMPANY_CHANNEL, taskChannel } from '../../shared/chat.ts';
 import { planHas } from '../../shared/plans.ts';
 import { ProfitTab } from './components/ProfitTab.tsx';
+import { ProjectLounge } from './components/ProjectLounge.tsx';
 import { ReportPanel } from './components/ReportPanel.tsx';
 import { OfficeTabMenu } from './components/OfficeTabMenu.tsx';
 import { ShareModal } from './components/ShareModal.tsx';
@@ -27,7 +28,7 @@ import { OfficeView } from './office/OfficeView.tsx';
 import { useDemoPlayback } from './demoPlayback.ts';
 import { useCompact } from './useCompact.ts';
 
-type Tab = 'office' | 'hire' | 'models' | 'mcp' | 'profit' | 'perf' | 'members';
+type Tab = 'office' | 'lounge' | 'hire' | 'models' | 'mcp' | 'profit' | 'perf' | 'members';
 type Dialog =
   | { kind: 'newTask' }
   | { kind: 'newOffice' }
@@ -393,6 +394,7 @@ export function App() {
           {(
             [
               ['office', '사무실'],
+              ['lounge', '프로젝트 라운지'],
               ['hire', '직원 관리'],
               ['models', '모델 관리'],
               ['mcp', 'MCP 관리'],
@@ -401,7 +403,7 @@ export function App() {
               ['members', '플랜·구성원'],
             ] as [Tab, string][]
           )
-            .filter(([id]) => isOwner || id === 'office')
+            .filter(([id]) => isOwner || id === 'office' || id === 'lounge')
             .map(([id, label]) => (
               <button key={id} className={`main-tab ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>
                 {label}
@@ -559,6 +561,15 @@ export function App() {
       )}
       {tab === 'hire' && (
         <HireTab key={office.id} office={office} agents={view.agents} onError={showError} onNotice={toast} onManageModels={() => setTab('models')} />
+      )}
+      {tab === 'lounge' && (
+        <ProjectLounge
+          snapshot={snapshot}
+          onOpenOffice={(id) => {
+            if (id === 'plan') setTab('members');
+            else switchOffice(id);
+          }}
+        />
       )}
       {tab === 'models' && <ModelsTab snapshot={snapshot} onError={showError} onNotice={toast} />}
       {tab === 'mcp' && <McpTab snapshot={snapshot} onError={showError} onNotice={toast} />}

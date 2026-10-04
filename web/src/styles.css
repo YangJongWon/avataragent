@@ -2659,3 +2659,137 @@ p.plan-note {
 .export-design .ok {
   color: var(--green, #2e7d4f);
 }
+
+/* Paid team space: project progress becomes a model the whole company can read. */
+.lounge-page {
+  min-height: calc(100dvh - 58px);
+  padding: 24px;
+  overflow: auto;
+  background: linear-gradient(#dceeff 0 42%, #f6e7c7 42% 100%);
+  color: #303042;
+}
+.lounge-hero,
+.contribution-board,
+.project-model-card {
+  border: 3px solid #3f4054;
+  box-shadow: 5px 5px 0 #3f4054;
+  background: #fffdf4;
+}
+.lounge-hero {
+  max-width: 1280px;
+  margin: 0 auto 22px;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.lounge-hero h1,
+.contribution-board h2,
+.project-model-card h2 { margin: 3px 0; }
+.lounge-hero p { margin: 5px 0 0; color: #666577; }
+.eyebrow { color: #6551a6; font-weight: 800; font-size: 12px; letter-spacing: .08em; }
+.lounge-overall {
+  flex: 0 0 104px;
+  height: 104px;
+  border: 5px solid #6551a6;
+  background: #eee9ff;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  transform: rotate(2deg);
+}
+.lounge-overall strong { font-size: 28px; }
+.lounge-overall span { font-size: 12px; }
+.project-model-grid {
+  max-width: 1280px;
+  margin: 0 auto 22px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px;
+}
+.project-model-card { padding: 14px; }
+.project-model-card > header,
+.project-model-card > footer,
+.contribution-board > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.model-kind { font-size: 12px; font-weight: 700; color: #686779; }
+.model-percent { font-size: 24px; color: #6551a6; }
+.project-model {
+  height: 210px;
+  margin: 12px 0;
+  position: relative;
+  overflow: hidden;
+  border: 2px solid #6b7690;
+  background: #294b72;
+  color: #d8f3ff;
+}
+.blueprint-grid {
+  position: absolute;
+  inset: 0;
+  opacity: .22;
+  background-image: linear-gradient(#bde7ff 1px, transparent 1px), linear-gradient(90deg, #bde7ff 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+.model-icon {
+  position: absolute;
+  left: 20px;
+  top: 24px;
+  font-size: 82px;
+  image-rendering: pixelated;
+  text-shadow: 4px 4px 0 #162c46;
+}
+.model-parts {
+  position: absolute;
+  right: 12px;
+  top: 14px;
+  bottom: 14px;
+  width: 45%;
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  font-size: 12px;
+}
+.model-parts span { opacity: .42; }
+.model-parts span.built { opacity: 1; color: #ffe680; font-weight: 800; }
+.model-progress { height: 12px; border: 2px solid #3f4054; background: #e2dfd4; margin-bottom: 12px; }
+.model-progress span { display: block; height: 100%; background: repeating-linear-gradient(135deg, #6acb89 0 8px, #54b875 8px 16px); }
+.project-model-card > footer { font-size: 12px; flex-wrap: wrap; }
+.project-model-card > footer button { margin-left: auto; }
+.contribution-board { max-width: 1280px; margin: 0 auto; padding: 18px; }
+.contribution-board > header { margin-bottom: 14px; }
+.contribution-list { display: grid; gap: 8px; }
+.contribution-row {
+  display: grid;
+  grid-template-columns: 38px minmax(150px, 1.5fr) minmax(90px, 2fr) 48px 80px;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 2px solid #d3cfbf;
+  background: #fff;
+}
+.contribution-row.mine { border-color: #8d75df; background: #f2eeff; }
+.person-avatar { font-size: 24px; }
+.person-work { display: flex; flex-direction: column; min-width: 0; }
+.person-work span { font-size: 12px; color: #6b6978; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.person-meter { height: 10px; background: #e2dfd4; border: 1px solid #777586; }
+.person-meter span { display: block; height: 100%; background: #8d75df; }
+.person-share { text-align: right; }
+.person-done { font-size: 12px; text-align: right; }
+.lounge-locked { display: grid; place-items: center; }
+.lounge-lock-card { max-width: 520px; padding: 30px; text-align: center; border: 3px solid #3f4054; box-shadow: 6px 6px 0 #3f4054; background: #fffdf4; }
+.lounge-lock-model { font-size: 80px; }
+
+@media (max-width: 700px) {
+  .lounge-page { padding: 12px; }
+  .lounge-hero { padding: 14px; }
+  .lounge-overall { flex-basis: 82px; height: 82px; }
+  .project-model-grid { grid-template-columns: 1fr; }
+  .contribution-row { grid-template-columns: 34px 1fr 44px; }
+  .person-meter { grid-column: 2 / 4; grid-row: 2; }
+  .person-done { display: none; }
+}

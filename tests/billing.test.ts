@@ -90,12 +90,12 @@ test('a failed payment keeps the plan through the grace period, then drops to pe
   assert.equal(snapshotFor({ kind: 'owner' }).billing?.provider, 'mock');
 });
 
-test('business plan assigns tasks to people who can see the office and exports activity', async () => {
+test('team plan assigns tasks and business plan also exports activity', async () => {
   const task = recordTask({ officeId: 'office_dev', title: '담당자 업무, "따옴표"' });
-  assert.throws(() => setAssignee(task.id, 'owner'), /비즈니스 플랜/);
+  assert.throws(() => setAssignee(task.id, 'owner'), /팀 플랜/);
   await assert.rejects(exportActivity('2020-01-01', '2099-12-31', 'csv'), /비즈니스 플랜/);
 
-  setPlan('business');
+  setPlan('team');
   const hr = createMember({ loginId: 'hrpark', name: '박인사', password: 'password1', role: 'operator', officeIds: ['office_hr'] });
   const dev = createMember({ loginId: 'devchoi', name: '최개발', password: 'password1', role: 'operator', officeIds: ['office_dev'] });
   assert.throws(() => setAssignee(task.id, hr.id), /볼 수 없어요/);
@@ -103,6 +103,9 @@ test('business plan assigns tasks to people who can see the office and exports a
   assert.equal(setAssignee(task.id, dev.id).assigneeId, dev.id);
   const devViewer = { kind: 'member', memberId: dev.id, name: dev.name, role: 'operator', officeIds: ['office_dev'] } as const;
   assert.deepEqual(snapshotFor(devViewer).people.map((p) => p.id).sort(), [dev.id, 'owner'].sort(), 'members only see people sharing an office');
+
+  await assert.rejects(exportActivity('2020-01-01', '2099-12-31', 'csv'), /비즈니스 플랜/);
+  setPlan('business');
 
   const today = new Date().toISOString().slice(0, 10);
   await assert.rejects(exportActivity(today, '2000-01-01', 'csv'), /늦어요/);

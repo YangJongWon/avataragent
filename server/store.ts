@@ -38,6 +38,7 @@ import type {
   TeamId,
 } from '../shared/types.ts';
 import { reviewLoop, templatePlan } from '../shared/workflow.ts';
+import { DEFAULT_LANGUAGE, isLanguage, type Language } from '../shared/i18n.ts';
 import { config, ORGANIZATION_SAFETY_RULES, type ProviderName } from './config.ts';
 import { appendEvent, loadKv, loadRelationalState, maxSeq, onStorageConflict, recentEvents, saveRelationalState } from './db.ts';
 import { loginInfo } from './mcp-oauth.ts';
@@ -72,6 +73,7 @@ export interface PersistedState {
   members: StoredMember[];
   chat: ChatMessage[];
   billing: { subscription: Subscription; invoices: Invoice[]; checkouts: Checkout[]; processedEvents: string[] };
+  language: Language;
 }
 
 const freshBilling = (): PersistedState['billing'] => ({ subscription: freeSubscription(config.billingProvider), invoices: [], checkouts: [], processedEvents: [] });
@@ -150,6 +152,7 @@ function fresh(): PersistedState {
     members: [],
     chat: [],
     billing: freshBilling(),
+    language: DEFAULT_LANGUAGE,
   };
 }
 
@@ -158,6 +161,8 @@ function fillCatalog(state: PersistedState) {
   state.models ??= [];
   state.aiMode ??= 'env';
   state.mcpServers ??= [];
+  // Added after v3 shipped, so old rows simply lack it. Do not bump STATE_VERSION for this.
+  if (!isLanguage(state.language)) state.language = DEFAULT_LANGUAGE;
   for (const tool of state.mcpServers.flatMap((server) => server.tools)) {
     tool.mode ??= tool.enabled ? 'auto' : 'off';
     delete tool.enabled;
@@ -301,6 +306,7 @@ class Store {
       chat: s.chat,
       safetyRules: ORGANIZATION_SAFETY_RULES,
       helpTimeoutSec: config.helpTimeoutSec,
+      language: s.language,
       seq: this.seq,
     };
   }
