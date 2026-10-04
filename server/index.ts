@@ -20,6 +20,7 @@ import { isExportFormat } from '../shared/design.ts';
 import { isPersonality } from '../shared/personality.ts';
 import { parsePlaybook, playbookChanges } from '../shared/playbook.ts';
 import { isPlan, planOf } from '../shared/plans.ts';
+import { isLanguage, type Language } from '../shared/i18n.ts';
 import { exportActivity } from './activity.ts';
 import { billingInfo, billingProvider, billingTick, cancelSubscription, completeMockCheckout, handleWebhook, resumeSubscription, startCheckout } from './billing.ts';
 import { isSkin } from '../shared/skins.ts';
@@ -781,6 +782,17 @@ app.put('/api/plan', (req, res) => {
   store.emit('plan.changed', { payload: { plan: req.body.plan } });
   closeRevokedSockets();
   res.json({ plan: store.data.plan });
+});
+
+app.put('/api/language', (req, res) => {
+  guard(res, 'owner');
+  if (!isLanguage(req.body?.language)) throw new Error('지원하지 않는 언어예요.');
+  store.mutate((s) => {
+    s.language = req.body.language as Language;
+  });
+  store.emit('language.changed', { payload: { language: req.body.language } });
+  closeRevokedSockets();
+  res.json({ language: store.data.language });
 });
 
 app.post('/api/members', (req, res) => {

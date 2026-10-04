@@ -371,7 +371,7 @@ export interface Snapshot {
   improvements: ImprovementLog[];
   safetyRules: string[];
   helpTimeoutSec: number;
-  /** Display language for the web UI. Owner only. */
+  /** Display language for the web UI. Tenant-wide, so shared viewers see it too. */
   language?: Language;
   seq: number;
 }
