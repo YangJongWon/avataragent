@@ -9,6 +9,7 @@ import {
   type ModelEntry,
 } from '../shared/models.ts';
 import type { McpServer } from '../shared/mcp.ts';
+import { MAX_PERF_RECORDS, type ImprovementLog, type PerfRecord } from '../shared/performance.ts';
 import { DEFAULT_PERSONALITY_BY_ROLE, isPersonality } from '../shared/personality.ts';
 import { isSkin } from '../shared/skins.ts';
 import { MAX_STAFF_PER_OFFICE, TEAM_ORDER, TEAMS } from '../shared/teams.ts';
@@ -61,6 +62,8 @@ export interface PersistedState {
   models: ModelEntry[];
   aiMode: AiMode;
   mcpServers: McpServer[];
+  performance: PerfRecord[];
+  improvements: ImprovementLog[];
 }
 
 function defaultOffices(): Office[] {
@@ -131,6 +134,8 @@ function fresh(): PersistedState {
     models: structuredClone(DEFAULT_MODELS),
     aiMode: 'env',
     mcpServers: [],
+    performance: [],
+    improvements: [],
   };
 }
 
@@ -193,6 +198,8 @@ function load(): PersistedState {
 
 function normalize(saved: PersistedState) {
   fillCatalog(saved);
+  saved.performance ??= [];
+  saved.improvements ??= [];
   for (const agent of saved.agents) {
     if (!isPersonality(agent.personality)) agent.personality = DEFAULT_PERSONALITY_BY_ROLE[agent.role];
   }
@@ -265,6 +272,8 @@ class Store {
       outbox: s.outbox,
       interests: s.interests,
       recommendations: s.recommendations,
+      performance: s.performance,
+      improvements: s.improvements,
       safetyRules: ORGANIZATION_SAFETY_RULES,
       helpTimeoutSec: config.helpTimeoutSec,
       seq: this.seq,
@@ -377,6 +386,8 @@ class Store {
     this.state.offices = this.state.offices.filter((o) => o.id !== id);
     this.state.agents = this.state.agents.filter((a) => a.officeId !== id);
     this.state.tasks = this.state.tasks.filter((t) => t.officeId !== id);
+    this.state.performance = this.state.performance.filter((r) => r.officeId !== id);
+    this.state.improvements = this.state.improvements.filter((i) => i.officeId !== id);
     this.changed();
   }
 
@@ -387,6 +398,17 @@ class Store {
 
   updateTask(id: string, mutate: (task: Task) => void) {
     mutate(this.task(id));
+    this.changed();
+  }
+
+  addPerf(record: PerfRecord) {
+    this.state.performance.unshift(record);
+    this.state.performance = this.state.performance.slice(0, MAX_PERF_RECORDS);
+    this.changed();
+  }
+
+  updatePerf(taskId: string, mutate: (record: PerfRecord) => void) {
+    for (const record of this.state.performance) if (record.taskId === taskId) mutate(record);
     this.changed();
   }
 

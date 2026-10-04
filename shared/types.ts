@@ -1,5 +1,6 @@
 import type { TaskDesigns } from './design.ts';
 import type { McpServer, PlannedAction } from './mcp.ts';
+import type { ImprovementLog, PerfRecord } from './performance.ts';
 import type { Personality } from './personality.ts';
 import type { Company, ModelEntry } from './models.ts';
 import type { Skin } from './skins.ts';
@@ -31,6 +32,8 @@ export interface Office {
   name: string;
   custom?: boolean;
   autoRun: boolean;
+  /** Applies safe improvement suggestions by itself after each completed task. */
+  autoImprove?: boolean;
   budgetKrw: number | null;
   spentKrw: number;
   valueKrw: number;
@@ -305,6 +308,8 @@ export interface Snapshot {
   outbox: OutboxReply[];
   interests: Interests;
   recommendations: Recommendation[];
+  performance: PerfRecord[];
+  improvements: ImprovementLog[];
   safetyRules: string[];
   helpTimeoutSec: number;
   seq: number;

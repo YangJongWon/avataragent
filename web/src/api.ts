@@ -48,8 +48,9 @@ export const api = {
   createShare: (input: { name: string; role: ShareRole; officeIds: string[] | 'all'; expiresInDays: number }) =>
     call<ShareLink>('POST', '/api/shares', input),
   deleteShare: (shareId: string) => call('DELETE', `/api/shares/${shareId}`),
-  updateOffice: (officeId: string, patch: { autoRun?: boolean; budgetKrw?: number | null }) =>
+  updateOffice: (officeId: string, patch: { autoRun?: boolean; autoImprove?: boolean; budgetKrw?: number | null }) =>
     call('PUT', `/api/offices/${officeId}`, patch),
+  applyImprovement: (officeId: string, id: string) => call('POST', `/api/offices/${officeId}/improvements`, { id }),
   createOffice: (input: { team: TeamId; name?: string }) => call<Office>('POST', '/api/offices', input),
   deleteOffice: (officeId: string) => call('DELETE', `/api/offices/${officeId}`),
   simulateMail: () => call('POST', '/api/sim/mail'),

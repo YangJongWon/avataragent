@@ -61,5 +61,7 @@ export function snapshotFor(viewer: Viewer): Snapshot {
     outbox: hasTeam('support') ? full.outbox : [],
     interests: hasTeam('welfare') ? full.interests : { keywords: [], region: '', note: '' },
     recommendations: hasTeam('welfare') ? full.recommendations : [],
+    performance: full.performance.filter((r) => officeIds.has(r.officeId)),
+    improvements: full.improvements.filter((i) => officeIds.has(i.officeId)),
   };
 }

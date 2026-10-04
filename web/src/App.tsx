@@ -11,6 +11,7 @@ import { HireTab } from './components/HireTab.tsx';
 import { AgentCardModal, HelpDialog, NewOfficeModal, NewTaskModal, PlanEditModal, RulesModal } from './components/Modals.tsx';
 import { McpTab } from './components/McpTab.tsx';
 import { ModelsTab } from './components/ModelsTab.tsx';
+import { PerformanceTab } from './components/PerformanceTab.tsx';
 import { ProfitTab } from './components/ProfitTab.tsx';
 import { ReportPanel } from './components/ReportPanel.tsx';
 import { OfficeTabMenu } from './components/OfficeTabMenu.tsx';
@@ -22,7 +23,7 @@ import { OfficeView } from './office/OfficeView.tsx';
 import { useDemoPlayback } from './demoPlayback.ts';
 import { useCompact } from './useCompact.ts';
 
-type Tab = 'office' | 'hire' | 'models' | 'mcp' | 'profit';
+type Tab = 'office' | 'hire' | 'models' | 'mcp' | 'profit' | 'perf';
 type Dialog =
   | { kind: 'newTask' }
   | { kind: 'newOffice' }
@@ -346,6 +347,7 @@ export function App() {
               ['models', '모델 관리'],
               ['mcp', 'MCP 관리'],
               ['profit', '손익·결산'],
+              ['perf', '성과·개선'],
             ] as [Tab, string][]
           )
             .filter(([id]) => isOwner || id === 'office')
@@ -507,6 +509,7 @@ export function App() {
       {demo && <DemoTour onClose={() => setDemo(false)} />}
       {showHelp && <HelpPanel tab={tab} officeId={office?.id} onClose={() => setShowHelp(false)} />}
       {tab === 'profit' && <ProfitTab snapshot={snapshot} onError={showError} onNotice={toast} />}
+      {tab === 'perf' && <PerformanceTab snapshot={snapshot} officeId={officeId} onError={showError} onNotice={toast} />}
 
       {dialog?.kind === 'newOffice' && (
         <NewOfficeModal

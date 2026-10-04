@@ -5,7 +5,17 @@ import type { Agent, Artifact, Expression, Role, StepStatus, Task, TeamId, Workf
 import { MAX_LOOP, normalizePlan, parseLoop, remapLoops, STEP_KIND, templatePlan, validatePlan } from '../shared/workflow.ts';
 import { usableBy, type McpServer, type McpTool, type McpToolMode, type PlannedAction } from '../shared/mcp.ts';
 import { modelOf } from '../shared/models.ts';
-import { personalityOf } from '../shared/personality.ts';
+import {
+  lessonsFor,
+  MAX_IMPROVEMENT_LOGS,
+  perfLines,
+  rankAgents,
+  researchOf,
+  suggestImprovements,
+  type Improvement,
+  type ResearchRecord,
+} from '../shared/performance.ts';
+import { personalityOf, type Personality } from '../shared/personality.ts';
 import { complete, costKrw, parseJson, type Attachment, type Purpose } from './ai.ts';
 import { config, ORGANIZATION_SAFETY_RULES } from './config.ts';
 import { callTool } from './mcp.ts';
@@ -26,6 +36,27 @@ const teamOf = (task: Task) => store.office(task.officeId).team;
 const specOf = (task: Task) => TEAM_SPECS[teamOf(task)];
 const agentOf = (task: Task, role: Role) => store.agentByRole(task.officeId, role);
 const officeAgents = (officeId: string) => store.data.agents.filter((a) => a.officeId === officeId);
+/** Office staff with each role's best performer first, so templates and the simulation pick them. */
+const rankedAgents = (officeId: string) => rankAgents(officeAgents(officeId), store.data.performance);
+const recordBase = (task: Task, step: WorkflowStep, agent: Agent, startedAt: number) => ({
+  id: `perf_${randomUUID().slice(0, 8)}`,
+  at: now(),
+  officeId: task.officeId,
+  taskId: task.id,
+  taskType: task.taskType,
+  stepId: step.id,
+  stepLabel: step.label,
+  agentId: agent.id,
+  model: agent.model,
+  personality: agent.personality,
+  durationMs: Date.now() - startedAt,
+});
+const lessonBlock = (task: Task, kind: 'draft' | 'research') => {
+  const lessons = lessonsFor(store.data.performance, task.officeId, task.taskType, kind, task.id);
+  if (!lessons.length) return '';
+  const title = kind === 'draft' ? '[지난 비슷한 업무에서 반려된 이유 - 같은 실수를 피할 것]' : '[지난 조사에서 지적된 점 - 같은 실수를 피할 것]';
+  return `${title}\n${lessons.map((l) => `- ${l}`).join('\n')}`;
+};
 
 function systemPrompt(agent: Agent) {
   const style = personalityOf(agent.personality);
@@ -172,7 +203,7 @@ const toSteps = (inputs: WorkflowStepInput[]): WorkflowStep[] =>
 
 function mockPlan(officeId: string, taskType: string, description: string) {
   const team = store.office(officeId).team;
-  const agents = officeAgents(officeId);
+  const agents = rankedAgents(officeId);
   let plan = templatePlan(team, taskType, agents);
   const pick = (role: Role) => agents.find((a) => a.role === role)?.id ?? null;
   const notes: string[] = [];
@@ -213,10 +244,11 @@ function mockPlan(officeId: string, taskType: string, description: string) {
 /** Asks the office manager to design the journey. Cost is charged to the task when there is one. */
 export async function designPlan(input: { officeId: string; title: string; description: string; taskType: string }, task: Task | null = null) {
   const office = store.office(input.officeId);
-  const agents = officeAgents(office.id);
+  const agents = rankedAgents(office.id);
   const manager = store.agentByRole(office.id, 'manager');
   const team = TEAMS[office.team];
   const template = templatePlan(office.team, input.taskType, agents);
+  const track = perfLines(agents, store.data.performance);
   const raw = await callAI(
     manager,
     task,
@@ -227,8 +259,9 @@ export async function designPlan(input: { officeId: string; title: string; descr
       input.description ? `요청 내용: ${input.description}` : '',
       '',
       '[우리 팀 직원]',
-      ...agents.map((a) => `- id=${a.id} | ${a.name} | ${team.roleTitles[a.role]} | 모델 ${modelOf(a.model).label}`),
+      ...agents.map((a) => `- id=${a.id} | ${a.name} | ${team.roleTitles[a.role]} | 모델 ${modelOf(a.model).label} | ${personalityOf(a.personality).label}`),
       '',
+      ...(track.length ? ['[지난 성과 - 같은 역할이 여럿이면 성과가 좋은 직원을 배정할 것]', ...track, ''] : []),
       '[단계 종류]',
       ...Object.entries(STEP_KIND).map(([kind, meta]) => `- ${kind}: ${meta.title}. ${meta.hint}`),
       '',
@@ -341,7 +374,7 @@ function mockToolCalls(tools: OfficeTool[], task: Task) {
 /** Lets the agent pick up to MAX_TOOL_CALLS enabled MCP tool calls and returns their results for the prompt. */
 async function useTools(taskId: string, agent: Agent, context: string) {
   const tools = officeTools(store.task(taskId).officeId, 'auto');
-  if (!tools.length) return '';
+  if (!tools.length) return { text: '', calls: 0, failures: 0 };
   setAgent(agent, 'working', 'focus', '연결된 도구로 무엇을 찾아볼지 정하고 있어요.');
   const raw = await callAI(
     agent,
@@ -362,6 +395,7 @@ async function useTools(taskId: string, agent: Agent, context: string) {
   );
   const parsed = parseJson(raw, { calls: [] as { tool?: unknown; arguments?: unknown }[] });
   const results: string[] = [];
+  let failures = 0;
   for (const call of (Array.isArray(parsed.calls) ? parsed.calls : []).slice(0, MAX_TOOL_CALLS)) {
     const picked = tools.find((t) => t.ref === call?.tool);
     if (!picked) continue;
@@ -369,9 +403,10 @@ async function useTools(taskId: string, agent: Agent, context: string) {
     setAgent(agent, 'working', 'focus', `${picked.server.icon} ${picked.server.name}에서 찾아보고 있어요.`);
     const result = await invokeTool(taskId, agent, picked.server, picked.tool.name, args, false);
     const label = `[${picked.server.name} · ${picked.tool.name}]`;
+    if (!result.ok) failures += 1;
     results.push(result.ok ? `${label} ${JSON.stringify(args)}\n${result.output}` : `${label} 실패: ${result.reason}`);
   }
-  return results.join('\n\n');
+  return { text: results.join('\n\n'), calls: results.length, failures };
 }
 
 /** Calls one MCP tool for a task, logging the call and counting it on the server and the task. */
@@ -409,6 +444,7 @@ async function researchStep(taskId: string, step: WorkflowStep, feedback?: strin
   const spec = specOf(task);
   const agent = agentOfStep(task, step);
   await waitIfPaused(agent);
+  const startedAt = Date.now();
   setStep(taskId, step.id, 'running');
   setAgent(agent, 'working', 'focus', `${step.label} 중이에요.`);
   store.emit('tool.started', { taskId, agentId: agent.id, payload: { tool: 'research', label: step.label } });
@@ -418,11 +454,13 @@ async function researchStep(taskId: string, step: WorkflowStep, feedback?: strin
     `[작업 지시서]\n${latest(task, 'brief')?.content}`,
     `[처리할 자료]\n${task.inputText}`,
     earlier !== '(조사 단계 없음)' ? `[앞 단계 메모]\n${earlier}` : '',
+    lessonBlock(task, 'research'),
     stepNote(step, feedback),
   ]
     .filter(Boolean)
     .join('\n\n');
-  const found = await useTools(taskId, agent, context);
+  const tooling = await useTools(taskId, agent, context);
+  const found = tooling.text;
   setAgent(agent, 'working', 'focus', `${step.label} 중이에요.`);
   const notes = await callAI(
     agent,
@@ -441,7 +479,15 @@ async function researchStep(taskId: string, step: WorkflowStep, feedback?: strin
       `## ${step.label}\n${spec.mock.research(store.task(taskId))}` +
       (found ? `\n\n### 연결된 도구에서 찾은 내용\n${found.slice(0, 1500)}` : ''),
   );
-  store.emit('tool.completed', { taskId, agentId: agent.id, payload: { tool: 'research' } });
+  const record: ResearchRecord = {
+    ...recordBase(store.task(taskId), step, store.agent(agent.id), startedAt),
+    kind: 'research',
+    toolCalls: tooling.calls,
+    toolFailures: tooling.failures,
+    accuracy: null,
+  };
+  store.addPerf(record);
+  store.emit('tool.completed', { taskId, agentId: agent.id, payload: { tool: 'research', durationMs: record.durationMs } });
   addArtifact(taskId, agent, step, 'research', step.label, notes);
   setStep(taskId, step.id, 'done');
 }
@@ -595,6 +641,7 @@ async function draftStep(taskId: string, step: WorkflowStep, attempt: number, cl
       attempt > 1 ? `[이전 초안]\n${latest(task, 'draft')?.content}` : '',
       lastReview && !lastReview.approved ? `[검수 반려 사유]\n${lastReview.reason}` : '',
       lastChange ? `[사용자 수정 요청]\n${lastChange}` : '',
+      lessonBlock(task, 'draft'),
       stepNote(step, feedback),
       '',
       spec.draftAsk,
@@ -608,6 +655,18 @@ async function draftStep(taskId: string, step: WorkflowStep, attempt: number, cl
   return true;
 }
 
+const MOCK_ACCURACY_BONUS: Record<Personality, number> = { careful: 10, critical: 5, balanced: 0, friendly: -2, creative: -6, fast: -12 };
+
+/** Offline demo: careful researchers on better models score higher, so the records and suggestions have something to show. */
+function mockResearchVerdict(records: ResearchRecord[]) {
+  const scores = records.map((r) => 68 + 6 * modelOf(r.model).tier + MOCK_ACCURACY_BONUS[r.personality]);
+  const accuracy = Math.max(0, Math.min(100, Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)));
+  return {
+    research_accuracy: accuracy,
+    research_note: accuracy < 70 ? '근거 없이 단정한 문장이 많고 수치의 출처가 빠져 있어요.' : '',
+  };
+}
+
 /** `returnTo` is the step a rejection sends the work back to; null means the review only leaves an opinion. */
 async function reviewStep(taskId: string, step: WorkflowStep, attempt: number, returnTo: WorkflowStep | null) {
   const task = store.task(taskId);
@@ -615,6 +674,7 @@ async function reviewStep(taskId: string, step: WorkflowStep, attempt: number, r
   const reviewer = agentOfStep(task, step);
   const writer = agentOfStep(task, returnTo ?? task.plan.find((s) => s.kind === 'draft')!);
   await waitIfPaused(reviewer);
+  const startedAt = Date.now();
   setStep(taskId, step.id, 'running');
   setAgent(reviewer, 'working', 'focus', `안경을 고쳐 쓰고 초안을 ${step.label}하고 있어요.`);
   store.emit('review.started', { taskId, agentId: reviewer.id, payload: { attempt, step: step.id } });
@@ -622,6 +682,8 @@ async function reviewStep(taskId: string, step: WorkflowStep, attempt: number, r
   const firstReview = task.plan.find((s) => s.kind === 'review')?.id === step.id;
   const mockReject = firstReview && spec.rejectFirstInMock && attempt === 1 && task.userChangeRequests.length === 0;
   const mockScore = 78 + 6 * modelOf(writer.model).tier;
+  const unscored = researchOf(store.data.performance).filter((r) => r.taskId === taskId && r.accuracy === null);
+  const notes = unscored.length ? researchNotes(task).slice(0, 2500) : '';
   const raw = await callAI(
     reviewer,
     task,
@@ -629,28 +691,60 @@ async function reviewStep(taskId: string, step: WorkflowStep, attempt: number, r
     [
       `[업무 제목] ${task.title}`,
       `[처리할 자료]\n${task.inputText}`,
+      notes ? `[조사 메모]\n${notes}` : '',
       `[초안]\n${latest(task, 'draft')?.content}`,
       stepNote(step),
       '',
       spec.reviewAsk,
       step.instructions ? `추가 관점: ${step.instructions}` : '',
       step.loop ? `반려 조건: ${step.loop.when}` : '',
-      'JSON으로만 답한다: {"approved": boolean, "score": number (0~100), "reason": string (구체적인 근거 한두 문장)}',
+      notes
+        ? 'JSON으로만 답한다: {"approved": boolean, "score": number (0~100), "reason": string (구체적인 근거 한두 문장), "research_accuracy": number (0~100, 조사 메모가 자료와 맞고 근거가 충실한 정도), "research_note": string (조사의 가장 큰 문제 한 문장, 없으면 빈 문자열)}'
+        : 'JSON으로만 답한다: {"approved": boolean, "score": number (0~100), "reason": string (구체적인 근거 한두 문장)}',
     ]
       .filter(Boolean)
       .join('\n'),
     () =>
-      JSON.stringify(
-        mockReject
+      JSON.stringify({
+        ...(mockReject
           ? { approved: false, score: 62, reason: spec.mock.rejectReason }
-          : { approved: true, score: mockScore, reason: '요청한 형식을 지켰고 내용이 자료와 맞습니다.' },
-      ),
+          : { approved: true, score: mockScore, reason: '요청한 형식을 지켰고 내용이 자료와 맞습니다.' }),
+        ...(notes ? mockResearchVerdict(unscored) : {}),
+      }),
     true,
   );
-  const parsed = parseJson(raw, { approved: true, score: 70, reason: '검수 결과를 해석하지 못해 기본 통과 처리했습니다.' });
+  const parsed = parseJson(raw, {
+    approved: true,
+    score: 70,
+    reason: '검수 결과를 해석하지 못해 기본 통과 처리했습니다.',
+    research_accuracy: null as number | null,
+    research_note: '',
+  });
   const score = Math.max(0, Math.min(100, Number(parsed.score) || 0));
   const approved = Boolean(parsed.approved);
   store.updateTask(taskId, (t) => t.reviews.push({ agentId: reviewer.id, approved, score, reason: parsed.reason, at: now() }));
+  const accuracy = Number(parsed.research_accuracy);
+  if (notes && parsed.research_accuracy !== null && Number.isFinite(accuracy)) {
+    const note = String(parsed.research_note ?? '').slice(0, 200);
+    store.updatePerf(taskId, (r) => {
+      if (r.kind === 'research' && r.accuracy === null) Object.assign(r, { accuracy: Math.max(0, Math.min(100, Math.round(accuracy))), accuracyNote: note });
+    });
+  }
+  const current = store.agent(reviewer.id);
+  const draftOwner = task.plan.find((s) => s.kind === 'draft');
+  const drafter = store.agent(draftOwner ? agentOfStep(task, draftOwner).id : writer.id);
+  store.addPerf({
+    ...recordBase(store.task(taskId), step, current, startedAt),
+    kind: 'review',
+    writerId: drafter.id,
+    writerModel: drafter.model,
+    writerPersonality: drafter.personality,
+    attempt,
+    approved,
+    score,
+    reason: String(parsed.reason ?? '').slice(0, 300),
+    userVerdict: null,
+  });
 
   if (approved) {
     setStep(taskId, step.id, 'done');
@@ -1000,6 +1094,7 @@ export function applyChangeRequest(taskId: string, stepId: string, comment: stri
   const draftIndex = task.plan.findIndex((s) => s.kind === 'draft');
   const manager = agentOf(task, 'manager');
   if (task.status !== 'awaiting_approval') return draftIndex;
+  setVerdict(taskId, 'changes');
   store.updateTask(taskId, (t) => {
     t.userChangeRequests.push(comment);
     t.status = 'running';
@@ -1019,6 +1114,45 @@ export function applyChangeRequest(taskId: string, stepId: string, comment: stri
   return draftIndex;
 }
 
+/** The user's decision closes this round's reviews; the next round's reviews start without a verdict. */
+function setVerdict(taskId: string, verdict: 'approved' | 'changes') {
+  store.updatePerf(taskId, (r) => {
+    if (r.kind === 'review' && r.userVerdict === null) r.userVerdict = verdict;
+  });
+}
+
+export function improvementsFor(officeId: string) {
+  const { performance, models, improvements } = store.data;
+  return suggestImprovements(officeId, officeAgents(officeId), performance, models, improvements);
+}
+
+function applyImprovementChange(item: Improvement, auto: boolean) {
+  store.updateAgent(item.agentId, item.field === 'personality' ? { personality: item.to as Personality } : { model: item.to });
+  store.mutate((s) => {
+    s.improvements.unshift({ ...item, appliedAt: now(), auto });
+    s.improvements = s.improvements.slice(0, MAX_IMPROVEMENT_LOGS);
+  });
+  const agent = store.agent(item.agentId);
+  const to = item.field === 'personality' ? personalityOf(item.to as Personality).label : modelOf(item.to).label;
+  setAgent(agent, 'idle', 'smile', `${auto ? '지난 성과를 보고' : '요청대로'} ${to}(으)로 바꿨어요.`);
+  store.emit('improvement.applied', { agentId: item.agentId, payload: { officeId: item.officeId, field: item.field, from: item.from, to: item.to, reason: item.reason, auto } });
+}
+
+/** Applies one current suggestion by id; throws when it no longer applies. */
+export function applyImprovement(officeId: string, id: string) {
+  const item = improvementsFor(officeId).find((i) => i.id === id);
+  if (!item) throw new Error('이미 반영됐거나 더 이상 맞지 않는 제안이에요.');
+  applyImprovementChange(item, false);
+  return item;
+}
+
+/** Applies the cost-neutral suggestions; model changes always wait for a person. */
+export function autoImproveOffice(officeId: string) {
+  const applied = improvementsFor(officeId).filter((i) => i.safe);
+  for (const item of applied) applyImprovementChange(item, true);
+  return applied;
+}
+
 const completing = new Set<string>();
 
 /** Applies the approved result and runs the approved actions. A repeat call after completion does nothing. */
@@ -1032,6 +1166,7 @@ export async function completeTask(taskId: string, valueKrw?: number) {
     const approval = task.plan.find((s) => s.kind === 'approval')!;
     setStep(taskId, approval.id, 'done');
     store.emit('approval.granted', { taskId, agentId: manager.id, payload: {} });
+    setVerdict(taskId, 'approved');
     recognizeValue(taskId, valueKrw);
     const { json } = splitDraft(latest(task, 'draft')?.content ?? '');
     const actions = store.task(taskId).actions ?? [];
@@ -1046,6 +1181,7 @@ export async function completeTask(taskId: string, valueKrw?: number) {
       .join(' · ');
     store.emit('team.applied', { taskId, agentId: manager.id, payload: { summary: applied } });
     finish(taskId, applied);
+    if (store.office(task.officeId).autoImprove) autoImproveOffice(task.officeId);
   } finally {
     completing.delete(taskId);
   }
@@ -1214,8 +1350,7 @@ export function recordTask(input: TaskInput) {
   const title = input.title?.trim() ?? '';
   const taskType = taskTypeOf(office.team, input.taskType ?? '').id;
   const planMode = input.planMode === 'ai' || input.planMode === 'custom' ? input.planMode : 'template';
-  const plan =
-    planMode === 'custom' ? checkedPlan(office.id, input.steps) : templatePlan(office.team, taskType, officeAgents(office.id));
+  const plan = planMode === 'custom' ? checkedPlan(office.id, input.steps) : templatePlan(office.team, taskType, rankedAgents(office.id));
   const task: Task = {
     id: `task_${randomUUID().slice(0, 8)}`,
     officeId: office.id,

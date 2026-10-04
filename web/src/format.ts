@@ -132,6 +132,8 @@ export function eventLabel(event: OfficeEvent, agents: Map<string, Agent>) {
       return `공유 링크 취소: ${p.name}`;
     case 'catalog.changed':
       return `모델 관리 · ${p.summary}`;
+    case 'improvement.applied':
+      return `${who} 📈 ${p.auto ? '자율 개선' : '개선 적용'}: ${p.reason}`;
     default:
       return event.type;
   }

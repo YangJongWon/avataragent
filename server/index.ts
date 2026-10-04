@@ -26,7 +26,7 @@ import { listModels } from './ai.ts';
 import { authEnabled, authRouter, stillValid, viewerOf } from './auth.ts';
 import { config } from './config.ts';
 import { closeStorage, storageInfo } from './db.ts';
-import { setActionEnabled, simulateInquiry, simulateMail } from './orchestrator.ts';
+import { applyImprovement, autoImproveOffice, setActionEnabled, simulateInquiry, simulateMail } from './orchestrator.ts';
 import { designReport, exportCapabilities } from './exports/designer.ts';
 import { answerHelp } from './help.ts';
 import { buildExport } from './exports/index.ts';
@@ -124,16 +124,23 @@ app.delete('/api/offices/:id', (req, res) => {
 
 app.put('/api/offices/:id', async (req, res) => {
   guard(res, 'manage', req.params.id);
-  const { autoRun, budgetKrw } = req.body ?? {};
+  const { autoRun, autoImprove, budgetKrw } = req.body ?? {};
   if (budgetKrw !== undefined) guard(res, 'owner');
   store.updateOffice(req.params.id, (o) => {
     if (typeof autoRun === 'boolean') o.autoRun = autoRun;
+    if (typeof autoImprove === 'boolean') o.autoImprove = autoImprove;
     if (budgetKrw === null) o.budgetKrw = null;
     else if (typeof budgetKrw === 'number' && budgetKrw >= 0) o.budgetKrw = Math.round(budgetKrw);
   });
-  store.emit('office.updated', { payload: { officeId: req.params.id, autoRun, budgetKrw } });
+  store.emit('office.updated', { payload: { officeId: req.params.id, autoRun, autoImprove, budgetKrw } });
+  if (autoImprove === true) autoImproveOffice(req.params.id);
   await workflowRuntime.tick();
   res.json(store.office(req.params.id));
+});
+
+app.post('/api/offices/:id/improvements', (req, res) => {
+  guard(res, 'manage', req.params.id);
+  res.json(applyImprovement(req.params.id, String(req.body?.id ?? '')));
 });
 
 app.post('/api/sim/mail', async (_req, res) => {
