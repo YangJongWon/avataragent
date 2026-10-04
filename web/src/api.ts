@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DesignKind, DesignReview, ExportFormat } from '../../shared/design.ts';
 import type { McpServer, McpTool, McpToolMode, PlannedAction } from '../../shared/mcp.ts';
-import { setCatalog, type ApiKind, type Company, type ModelEntry } from '../../shared/models.ts';
+import { setCatalog, type ApiKind, type Company, type ModelEntry, type Tier } from '../../shared/models.ts';
+import type { Personality } from '../../shared/personality.ts';
 import type {
   Agent,
   AiMode,
@@ -61,9 +62,10 @@ export const api = {
     call('POST', `/api/tasks/${taskId}/request-changes`, { comment }),
   setActionEnabled: (taskId: string, actionId: string, enabled: boolean) =>
     call<PlannedAction>('PUT', `/api/tasks/${taskId}/actions/${actionId}`, { enabled }),
-  updateAgent: (agentId: string, patch: { name?: string; rules?: string; model?: string; skin?: Skin }) =>
+  updateAgent: (agentId: string, patch: { name?: string; rules?: string; model?: string; skin?: Skin; personality?: Personality }) =>
     call('PUT', `/api/agents/${agentId}`, patch),
-  hireAgent: (officeId: string, body: { role: Role; name?: string }) => call<Agent>('POST', `/api/offices/${officeId}/agents`, body),
+  hireAgent: (officeId: string, body: { role: Role; name?: string; personality?: Personality }) =>
+    call<Agent>('POST', `/api/offices/${officeId}/agents`, body),
   fireAgent: (agentId: string) => call('DELETE', `/api/agents/${agentId}`),
   setPaused: (agentId: string, paused: boolean) => call('POST', `/api/agents/${agentId}/pause`, { paused }),
   updateBudget: (patch: { monthlyKrw?: number; hourlyRateKrw?: number }) => call('PUT', '/api/budget', patch),
@@ -73,6 +75,7 @@ export const api = {
   deleteCompany: (id: string) => call('DELETE', `/api/companies/${id}`),
   discoverModels: (input: { companyId?: string; api?: ApiKind; baseUrl?: string; apiKey?: string }) =>
     call<{ models: string[] }>('POST', '/api/models/discover', input),
+  adviseModel: (vendor: string, apiModel: string) => call<ModelAdvice>('POST', '/api/models/advise', { vendor, apiModel }),
   createModel: (input: ModelInput) => call<ModelEntry>('POST', '/api/models', input),
   updateModel: (id: string, patch: Partial<ModelInput>) => call<ModelEntry>('PUT', `/api/models/${id}`, patch),
   deleteModel: (id: string) => call('DELETE', `/api/models/${id}`),
@@ -124,6 +127,16 @@ export interface HelpAnswer {
 
 export type CompanyInput = Pick<Company, 'name' | 'hat' | 'color' | 'api' | 'baseUrl'>;
 export type ModelInput = Omit<ModelEntry, 'id' | 'builtin'>;
+
+export interface ModelAdvice {
+  label: string;
+  tier: Tier;
+  priceInPerMTokUsd: number;
+  priceOutPerMTokUsd: number;
+  source: 'ai' | 'table' | 'guess';
+  note: string;
+  reference?: { priceInPerMTokUsd: number; priceOutPerMTokUsd: number };
+}
 
 type EventListener = (event: OfficeEvent) => void;
 

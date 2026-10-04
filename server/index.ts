@@ -17,6 +17,7 @@ import {
 } from '../shared/models.ts';
 import { allowedModes, isToolMode, type McpServer } from '../shared/mcp.ts';
 import { isExportFormat } from '../shared/design.ts';
+import { isPersonality } from '../shared/personality.ts';
 import { isSkin } from '../shared/skins.ts';
 import { TEAMS } from '../shared/teams.ts';
 import type { AiMode, ServerMessage, ShareLink, ShareRole, TeamId, Viewer } from '../shared/types.ts';
@@ -30,6 +31,7 @@ import { designReport, exportCapabilities } from './exports/designer.ts';
 import { answerHelp } from './help.ts';
 import { buildExport } from './exports/index.ts';
 import { closeAllConnections, closeConnection, discoverTools } from './mcp.ts';
+import { adviseModel } from './model-advice.ts';
 import { finishLogin, logout, OAUTH_CALLBACK_PATH, startLogin } from './mcp-oauth.ts';
 import { apiKeyFor, dropMcpSecrets, setApiKey, setMcpSecrets } from './secrets.ts';
 import { store } from './store.ts';
@@ -237,10 +239,14 @@ app.post('/api/tasks/:id/request-changes', async (req, res) => {
 
 app.put('/api/agents/:id', (req, res) => {
   guard(res, 'manage', officeOfAgent(req.params.id));
-  const { name, rules, model, skin } = req.body ?? {};
+  const { name, rules, model, skin, personality } = req.body ?? {};
   const before = store.agent(req.params.id);
   const patch: Record<string, unknown> = {};
   if (typeof name === 'string' && name.trim()) patch.name = name.trim().slice(0, 20);
+  if (personality !== undefined) {
+    if (!isPersonality(personality)) throw new Error('알 수 없는 성격이에요.');
+    patch.personality = personality;
+  }
   if (typeof model === 'string') {
     if (!isModelId(model)) throw new Error('알 수 없는 모델입니다.');
     patch.model = model;
@@ -262,12 +268,15 @@ app.put('/api/agents/:id', (req, res) => {
 
 app.post('/api/offices/:id/agents', (req, res) => {
   guard(res, 'manage', req.params.id);
-  const { role, name, model, skin } = req.body ?? {};
+  const { role, name, model, skin, personality } = req.body ?? {};
   if (!['manager', 'researcher', 'writer', 'reviewer'].includes(role)) throw new Error('알 수 없는 역할입니다.');
   if (model !== undefined && !isModelId(model)) throw new Error('알 수 없는 모델입니다.');
   if (skin !== undefined && !isSkin(skin)) throw new Error('알 수 없는 스킨입니다.');
+  if (personality !== undefined && !isPersonality(personality)) throw new Error('알 수 없는 성격이에요.');
   const agent = store.hireAgent(req.params.id, role, typeof name === 'string' ? name : undefined);
-  if (model !== undefined || skin !== undefined) store.updateAgent(agent.id, { ...(model ? { model } : {}), ...(skin ? { skin } : {}) });
+  if (model !== undefined || skin !== undefined || personality !== undefined) {
+    store.updateAgent(agent.id, { ...(model ? { model } : {}), ...(skin ? { skin } : {}), ...(personality ? { personality } : {}) });
+  }
   store.emit('agent.hired', { agentId: agent.id, payload: { name: agent.name, role } });
   res.json(store.agent(agent.id));
 });
@@ -425,6 +434,18 @@ app.post('/api/models/discover', async (req, res, next) => {
     const key = text(body.apiKey, 500) || (saved && saved.api === api ? apiKeyFor(saved) : '');
     const models = await listModels({ api, name: saved?.name ?? API_KINDS[api].name, key, baseUrl });
     res.json({ models });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/models/advise', async (req, res, next) => {
+  try {
+    guard(res, 'owner');
+    const vendor = companyById(String(req.body?.vendor ?? '')).id;
+    const apiModel = text(req.body?.apiModel, 120);
+    if (!apiModel) throw new Error('API 모델 ID를 먼저 입력해 주세요.');
+    res.json(await adviseModel(vendor, apiModel));
   } catch (error) {
     next(error);
   }

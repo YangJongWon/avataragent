@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { allCompanies, allModels, companyOf, HATS, TIER_HAT, TIER_LABEL, modelOf, type Tier } from '../../../shared/models.ts';
+import { PERSONALITIES, personalityOf } from '../../../shared/personality.ts';
 import { SKINS } from '../../../shared/skins.ts';
 import { MAX_STAFF_PER_OFFICE, TEAMS } from '../../../shared/teams.ts';
 import type { Agent, Office, Role, Skin } from '../../../shared/types.ts';
@@ -46,14 +47,15 @@ function AgentEditor({
   const [model, setModel] = useState(agent.model);
   const [rules, setRules] = useState(agent.rules);
   const [skin, setSkin] = useState(agent.skin);
+  const [personality, setPersonality] = useState(agent.personality);
   const [roll, setRoll] = useState(0);
-  const dirty = name !== agent.name || model !== agent.model || rules !== agent.rules || skin !== agent.skin;
+  const dirty = name !== agent.name || model !== agent.model || rules !== agent.rules || skin !== agent.skin || personality !== agent.personality;
 
   const candidates = useMemo(() => buildCandidates(agent.id, roll), [agent.id, roll]);
 
   const save = async () => {
     try {
-      await api.updateAgent(agent.id, { name, model, rules, skin });
+      await api.updateAgent(agent.id, { name, model, rules, skin, personality });
       onSaved(`${name} 정보를 저장했어요.`);
     } catch (e) {
       onError(e instanceof Error ? e.message : String(e));
@@ -75,6 +77,9 @@ function AgentEditor({
             {modelOf(model).label} · {TIER_LABEL[modelOf(model).tier]} · {companyOf(modelOf(model).vendor).name}
           </div>
           <div className="muted small">{SKINS.find((s) => s.id === skin)?.name}</div>
+          <div className="muted small">
+            {personalityOf(personality).emoji} {personalityOf(personality).label}
+          </div>
         </div>
       </div>
 
@@ -147,6 +152,26 @@ function AgentEditor({
           <button type="button" className="pixel-btn small cand-reroll" onClick={() => setRoll((r) => r + 1)}>
             후보 새로 뽑기
           </button>
+        </div>
+      </div>
+
+      <div className="field">
+        <b>4. 성격 · 일하는 스타일</b>
+        <div className="muted small">지시를 어떤 방식으로 수행할지 정해요. 실제 AI에게는 매번 이 스타일이 함께 전달돼요.</div>
+        <div className="personality-row">
+          {PERSONALITIES.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className={`personality-option ${personality === p.id ? 'selected' : ''}`}
+              title={p.description}
+              onClick={() => setPersonality(p.id)}
+            >
+              <span className="personality-emoji">{p.emoji}</span>
+              <b>{p.label}</b>
+              <span className="muted small">{p.description}</span>
+            </button>
+          ))}
         </div>
       </div>
 

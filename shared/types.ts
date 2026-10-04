@@ -1,5 +1,6 @@
 import type { TaskDesigns } from './design.ts';
 import type { McpServer, PlannedAction } from './mcp.ts';
+import type { Personality } from './personality.ts';
 import type { Company, ModelEntry } from './models.ts';
 import type { Skin } from './skins.ts';
 
@@ -42,6 +43,8 @@ export interface Agent {
   role: Role;
   model: string;
   rules: string;
+  /** Default working style added to every prompt of this agent. */
+  personality: Personality;
   skin: Skin;
   status: AgentStatus;
   expression: Expression;

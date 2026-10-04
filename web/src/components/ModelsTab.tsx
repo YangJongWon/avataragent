@@ -13,7 +13,7 @@ import {
   type Tier,
 } from '../../../shared/models.ts';
 import type { AiMode, Snapshot } from '../../../shared/types.ts';
-import { api, type CompanyInput, type ModelInput } from '../api.ts';
+import { api, type CompanyInput, type ModelAdvice, type ModelInput } from '../api.ts';
 import { HatPreview } from './HatPreview.tsx';
 import { LinkRow } from './LinkRow.tsx';
 
@@ -249,9 +249,35 @@ function ModelForm({
   );
   const [options, setOptions] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [advice, setAdvice] = useState<ModelAdvice | null>(null);
+  const [advising, setAdvising] = useState(false);
+  const [advisedFor, setAdvisedFor] = useState(model ? `${model.vendor}:${model.apiModel}` : '');
   const set = (patch: Partial<ModelInput>) => setForm((f) => ({ ...f, ...patch }));
   const company = companies.find((c) => c.id === form.vendor) ?? companies[0];
   const listId = `model-options-${model?.id ?? 'new'}`;
+
+  const advise = async (raw = form.apiModel, force = false) => {
+    const apiModel = raw.trim();
+    const key = `${form.vendor}:${apiModel}`;
+    if (!apiModel || advising || (!force && key === advisedFor)) return;
+    setAdvisedFor(key);
+    setAdvising(true);
+    try {
+      const result = await api.adviseModel(form.vendor, apiModel);
+      setAdvice(result);
+      setForm((f) => ({
+        ...f,
+        label: result.label,
+        tier: result.tier,
+        priceInPerMTokUsd: result.priceInPerMTokUsd,
+        priceOutPerMTokUsd: result.priceOutPerMTokUsd,
+      }));
+    } catch (e) {
+      onError(message(e));
+    } finally {
+      setAdvising(false);
+    }
+  };
 
   const load = async () => {
     setBusy(true);
@@ -315,7 +341,16 @@ function ModelForm({
                 {busy ? '불러오는 중…' : '목록 불러오기'}
               </button>
             </span>
-            <input list={listId} value={form.apiModel} placeholder="예: deepseek-chat" onChange={(e) => set({ apiModel: e.target.value })} />
+            <input
+              list={listId}
+              value={form.apiModel}
+              placeholder="예: deepseek-chat"
+              onChange={(e) => {
+                set({ apiModel: e.target.value });
+                if (!model && options.includes(e.target.value)) void advise(e.target.value);
+              }}
+              onBlur={() => !model && void advise()}
+            />
             <datalist id={listId}>
               {options.map((id) => (
                 <option key={id} value={id} />
@@ -333,7 +368,26 @@ function ModelForm({
             <input type="number" min={0} step="0.01" value={form.priceOutPerMTokUsd} onChange={(e) => set({ priceOutPerMTokUsd: Number(e.target.value) })} />
           </label>
         </div>
+        {advising && <p className="muted small">🤖 {company.name}에 등급과 단가를 물어보는 중…</p>}
+        {advice && !advising && (
+          <p className={`advice-note advice-${advice.source}`}>
+            {advice.source === 'ai' ? '🤖 AI 추정' : advice.source === 'table' ? '📋 참고 가격표' : '🔮 이름으로 추정'} · {advice.note}
+            {advice.source === 'ai' &&
+              advice.reference &&
+              (advice.reference.priceInPerMTokUsd !== advice.priceInPerMTokUsd || advice.reference.priceOutPerMTokUsd !== advice.priceOutPerMTokUsd) && (
+                <>
+                  {' '}
+                  내장 참고값은 ${advice.reference.priceInPerMTokUsd} / ${advice.reference.priceOutPerMTokUsd}예요.
+                </>
+              )}{' '}
+            값이 다르면 그대로 고쳐서 저장하세요.
+          </p>
+        )}
+        <LinkRow links={companyLinks(company).filter((l) => /가격|모델/.test(l.label))} label="단가 확인" />
         <div className="row end">
+          <button className="pixel-btn small" type="button" disabled={advising || !form.apiModel.trim()} onClick={() => void advise(form.apiModel, true)}>
+            {advising ? '물어보는 중…' : '🤖 AI에게 물어 채우기'}
+          </button>
           <button className="pixel-btn small" type="button" onClick={onDone}>
             취소
           </button>

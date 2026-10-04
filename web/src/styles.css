@@ -1830,6 +1830,40 @@ p.plan-note {
   padding: 6px;
   background: #fff;
 }
+.personality-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+.personality-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  padding: 6px 8px;
+  border: 2px solid var(--line);
+  background: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+.personality-option.selected {
+  background: #fff3c4;
+  box-shadow: 2px 2px 0 var(--line);
+}
+.personality-emoji {
+  font-size: 18px;
+}
+.advice-note {
+  margin: 4px 0;
+  padding: 6px 8px;
+  border: 2px dashed var(--line);
+  background: #fffdf0;
+  font-size: 12px;
+}
+.advice-note.advice-guess {
+  background: #fdf2e9;
+}
 .link-row {
   gap: 4px 6px;
   align-items: center;

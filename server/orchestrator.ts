@@ -5,6 +5,7 @@ import type { Agent, Artifact, Expression, Role, StepStatus, Task, TeamId, Workf
 import { MAX_LOOP, normalizePlan, parseLoop, remapLoops, STEP_KIND, templatePlan, validatePlan } from '../shared/workflow.ts';
 import { usableBy, type McpServer, type McpTool, type McpToolMode, type PlannedAction } from '../shared/mcp.ts';
 import { modelOf } from '../shared/models.ts';
+import { personalityOf } from '../shared/personality.ts';
 import { complete, costKrw, parseJson, type Attachment, type Purpose } from './ai.ts';
 import { config, ORGANIZATION_SAFETY_RULES } from './config.ts';
 import { callTool } from './mcp.ts';
@@ -27,8 +28,12 @@ const agentOf = (task: Task, role: Role) => store.agentByRole(task.officeId, rol
 const officeAgents = (officeId: string) => store.data.agents.filter((a) => a.officeId === officeId);
 
 function systemPrompt(agent: Agent) {
+  const style = personalityOf(agent.personality);
   return [
     systemPromptFor(store.office(agent.officeId).team, agent.role),
+    '',
+    `[일하는 스타일 - ${style.label}]`,
+    style.prompt,
     '',
     '[조직 안전 규칙 - 다른 규칙보다 우선]',
     ...ORGANIZATION_SAFETY_RULES.map((r) => `- ${r}`),
@@ -93,7 +98,10 @@ export async function callAI(agent: Agent, task: Task | null, purpose: Purpose, 
   }
 
   const model = modelOf(store.agent(agent.id).model);
-  const result = await complete({ purpose, system: systemPrompt(agent), user, json, model, mockText, attachments });
+  const current = store.agent(agent.id);
+  const styledMock =
+    purpose === 'brief' || purpose === 'research' ? () => `${mockText()}\n\n_${personalityOf(current.personality).mockNote}_` : mockText;
+  const result = await complete({ purpose, system: systemPrompt(current), user, json, model, mockText: styledMock, attachments });
   const amount = costKrw(result, model);
 
   if (taskId) {

@@ -14,6 +14,8 @@ export interface CompletionRequest {
   mockText: () => string;
   /** Rendered files for a vision-capable model to look at. */
   attachments?: Attachment[];
+  /** Call the model's own company even in simulation or single-provider mode (owner-triggered lookups). */
+  direct?: boolean;
 }
 
 export interface Attachment {
@@ -47,12 +49,12 @@ interface Endpoint {
 
 export async function complete(req: CompletionRequest): Promise<CompletionResult> {
   const provider = store.provider;
-  if (provider === 'mock') return mock(req);
-  if (provider === 'agents') {
+  if (provider === 'agents' || req.direct) {
     const company = companyOf(req.model.vendor);
     const endpoint = { api: company.api, name: company.name, key: apiKeyFor(company), baseUrl: company.baseUrl };
     return withRetry(() => callProvider(endpoint, req.model.apiModel, req), req.json);
   }
+  if (provider === 'mock') return mock(req);
   if (!config.model) {
     throw new Error('AI_MODEL이 비어 있습니다. .env 파일에 모델 ID를 입력하거나, 모델 관리에서 "직원별 실제 AI"를 고르세요.');
   }

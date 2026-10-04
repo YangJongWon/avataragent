@@ -9,6 +9,7 @@ import {
   type ModelEntry,
 } from '../shared/models.ts';
 import type { McpServer } from '../shared/mcp.ts';
+import { DEFAULT_PERSONALITY_BY_ROLE, isPersonality } from '../shared/personality.ts';
 import { isSkin } from '../shared/skins.ts';
 import { MAX_STAFF_PER_OFFICE, TEAM_ORDER, TEAMS } from '../shared/teams.ts';
 import type {
@@ -84,6 +85,7 @@ function newAgent(office: Office, role: Role, id: string, name: string): Agent {
     role,
     model: DEFAULT_MODEL_BY_ROLE[role],
     rules: TEAMS[office.team].defaultRules[role],
+    personality: DEFAULT_PERSONALITY_BY_ROLE[role],
     skin: 'pixel',
     status: 'idle',
     expression: 'normal',
@@ -191,6 +193,9 @@ function load(): PersistedState {
 
 function normalize(saved: PersistedState) {
   fillCatalog(saved);
+  for (const agent of saved.agents) {
+    if (!isPersonality(agent.personality)) agent.personality = DEFAULT_PERSONALITY_BY_ROLE[agent.role];
+  }
   for (const task of saved.tasks) {
     for (const step of task.plan) {
       if (step.loop === undefined) step.loop = step.kind === 'review' ? reviewLoop(task.plan) : null;
