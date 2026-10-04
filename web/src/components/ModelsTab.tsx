@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import {
   API_KINDS,
+  COMPATIBLE_SERVICES,
   HATS,
+  companyLinks,
   TIER_HAT,
   TIER_LABEL,
   type ApiKind,
@@ -13,6 +15,7 @@ import {
 import type { AiMode, Snapshot } from '../../../shared/types.ts';
 import { api, type CompanyInput, type ModelInput } from '../api.ts';
 import { HatPreview } from './HatPreview.tsx';
+import { LinkRow } from './LinkRow.tsx';
 
 type Notify = { onError: (m: string) => void; onNotice: (m: string) => void };
 
@@ -136,6 +139,21 @@ function CompanyForm({ company, onDone, onError, onNotice }: { company: Company 
           <HatPreview key={t} hat={form.hat} color={form.color} tier={t} title={TIER_LABEL[t]} />
         ))}
       </div>
+      {!company && (
+        <div className="row wrap link-row">
+          <span className="muted small">빠른 채우기</span>
+          {COMPATIBLE_SERVICES.map((s) => (
+            <button
+              key={s.name}
+              type="button"
+              className={`pixel-btn small ${form.baseUrl === s.baseUrl ? 'primary' : ''}`}
+              onClick={() => set({ name: s.name, api: 'openai_compatible', baseUrl: s.baseUrl })}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
       <label className="field">
         회사 이름
         <input value={form.name} maxLength={20} placeholder="예: DeepSeek" onChange={(e) => set({ name: e.target.value })} />
@@ -186,6 +204,7 @@ function CompanyForm({ company, onDone, onError, onNotice }: { company: Company 
           onChange={(e) => setApiKey(e.target.value)}
         />
       </label>
+      <LinkRow links={companyLinks(form)} />
       <p className="muted small">
         키는 이 서버의 data 폴더에만 저장되고 화면으로는 다시 보내지 않아요.
         {API_KINDS[form.api].env && ` 비워 두면 .env의 ${API_KINDS[form.api].env}를 써요.`}
@@ -438,6 +457,7 @@ export function ModelsTab({ snapshot, onError, onNotice }: { snapshot: Snapshot 
                   <span className="muted small">모델 {models.filter((m) => m.vendor === c.id).length}개</span>
                 </div>
                 <QuickKey company={c} onError={onError} onNotice={onNotice} />
+                <LinkRow links={companyLinks(c)} label="" />
                 <div className="row end">
                   {!c.builtin && (
                     <button className="pixel-btn small danger" onClick={() => removeCompany(c)}>

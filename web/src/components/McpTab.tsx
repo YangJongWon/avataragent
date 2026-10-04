@@ -12,11 +12,17 @@ import {
 } from '../../../shared/mcp.ts';
 import type { Office, Snapshot } from '../../../shared/types.ts';
 import { api, type McpServerInput } from '../api.ts';
+import { LinkRow } from './LinkRow.tsx';
 
 type Notify = { onError: (m: string) => void; onNotice: (m: string) => void };
-type SecretField = { name: string; label: string; placeholder?: string; prefix?: string; value: string };
+type SecretField = { name: string; label: string; placeholder?: string; prefix?: string; value: string; plain?: boolean };
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+const presetOf = (server: McpServer) =>
+  MCP_PRESETS.find((p) =>
+    p.id === 'custom' ? false : p.transport === 'http' ? p.url === server.url : p.command === server.command && (p.args ?? []).join(' ') === server.args.join(' '),
+  ) ?? null;
 
 function StatusBadge({ server }: { server: McpServer }) {
   if (!server.enabled) return <span className="key-badge">꺼짐</span>;
@@ -91,8 +97,9 @@ function McpForm({
           oauth: Boolean(preset?.oauth),
         },
   );
+  const known = preset ?? (server ? presetOf(server) : null);
   const [secrets, setSecrets] = useState<SecretField[]>(() => {
-    const fields: SecretField[] = (preset?.secrets ?? []).map((s) => ({ ...s, value: '' }));
+    const fields: SecretField[] = (known?.secrets ?? []).map((s) => ({ ...s, value: server ? '' : (s.value ?? ''), plain: s.value !== undefined }));
     for (const saved of server?.secrets ?? []) {
       if (!fields.some((f) => f.name === saved.name)) fields.push({ name: saved.name, label: saved.name, value: '' });
     }
@@ -147,7 +154,7 @@ function McpForm({
     if (!server || !window.confirm(`${name} 비밀값을 지울까요?`)) return;
     try {
       await api.updateMcpServer(server.id, { secrets: { [name]: null } });
-      setSecrets((list) => list.filter((f) => f.name !== name || preset?.secrets.some((s) => s.name === name)));
+      setSecrets((list) => list.filter((f) => f.name !== name || known?.secrets.some((s) => s.name === name)));
       onNotice(`${name}을(를) 지웠어요.`);
     } catch (e) {
       onError(message(e));
@@ -156,7 +163,8 @@ function McpForm({
 
   return (
     <div className="company-form">
-      {preset && <p className="muted small">{preset.note}</p>}
+      {known && <p className="muted small">{known.note}</p>}
+      <LinkRow links={known?.links} />
       <div className="row wrap">
         <label className="field">
           아이콘
@@ -222,7 +230,7 @@ function McpForm({
         <p className="muted small">
           로그인 후 돌아올 주소(Redirect URL): <code>{`${location.origin}/api/mcp-oauth/callback`}</code>
           <br />
-          서비스에 앱을 직접 만들어야 하는 경우(Slack 등) 이 주소를 앱 설정에 등록하고, 비밀값에 <code>OAUTH_CLIENT_ID</code>·<code>OAUTH_CLIENT_SECRET</code>을 넣어 주세요. 외부 주소(PUBLIC_URL)를 쓰면 그 주소 기준이에요.
+          서비스에 앱을 직접 만들어야 하는 경우(Slack·Gmail 등) 이 주소를 앱 설정에 등록하고, 비밀값에 <code>OAUTH_CLIENT_ID</code>·<code>OAUTH_CLIENT_SECRET</code>을 넣어 주세요. 요청할 권한을 정해야 하면 <code>OAUTH_SCOPES</code>에 띄어쓰기로 구분해 넣어요. 외부 주소(PUBLIC_URL)를 쓰면 그 주소 기준이에요.
         </p>
       )}
 
@@ -230,7 +238,7 @@ function McpForm({
         비밀값 ({envOrHeader})
         {secrets.map((field, i) => (
           <div key={i} className="row wrap mcp-secret">
-            {field.label !== field.name || preset?.secrets.some((s) => s.name === field.name) ? (
+            {field.label !== field.name || known?.secrets.some((s) => s.name === field.name) ? (
               <span className="small mcp-secret-name" title={field.name}>
                 {field.label} <code>{field.name}</code>
               </span>
@@ -244,7 +252,7 @@ function McpForm({
             )}
             <input
               className="grow"
-              type="password"
+              type={field.plain ? 'text' : 'password'}
               autoComplete="off"
               value={field.value}
               placeholder={savedHint(field.name) ? `등록됨 ${savedHint(field.name)} · 바꿀 때만 입력` : (field.placeholder ?? '값')}
@@ -470,6 +478,7 @@ export function McpTab({ snapshot, onError, onNotice }: { snapshot: Snapshot } &
                   </div>
                 )}
                 {server.lastError && <div className="small mcp-error">{server.lastError}</div>}
+                {(server.lastError || (server.oauth && !server.login?.loggedIn)) && <LinkRow links={presetOf(server)?.links} />}
                 <ToolList server={server} onError={onError} />
                 <div className="row end wrap">
                   <label className="check small">

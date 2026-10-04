@@ -31,13 +31,118 @@ export interface Company {
   key?: { source: KeySource; hint: string };
 }
 
-export const API_KINDS: Record<ApiKind, { name: string; env?: string; base?: string }> = {
-  anthropic: { name: 'Anthropic (Claude)', env: 'ANTHROPIC_API_KEY', base: 'https://api.anthropic.com/v1' },
-  openai: { name: 'OpenAI (GPT)', env: 'OPENAI_API_KEY', base: 'https://api.openai.com/v1' },
-  xai: { name: 'xAI (Grok)', env: 'XAI_API_KEY', base: 'https://api.x.ai/v1' },
-  gemini: { name: 'Google Gemini', env: 'GEMINI_API_KEY', base: 'https://generativelanguage.googleapis.com/v1beta' },
+export interface SiteLink {
+  label: string;
+  url: string;
+}
+
+export const API_KINDS: Record<ApiKind, { name: string; env?: string; base?: string; links?: SiteLink[] }> = {
+  anthropic: {
+    name: 'Anthropic (Claude)',
+    env: 'ANTHROPIC_API_KEY',
+    base: 'https://api.anthropic.com/v1',
+    links: [
+      { label: 'API 키 발급', url: 'https://platform.claude.com/settings/keys' },
+      { label: '결제·충전', url: 'https://platform.claude.com/settings/billing' },
+      { label: '가격표', url: 'https://claude.com/pricing' },
+    ],
+  },
+  openai: {
+    name: 'OpenAI (GPT)',
+    env: 'OPENAI_API_KEY',
+    base: 'https://api.openai.com/v1',
+    links: [
+      { label: 'API 키 발급', url: 'https://platform.openai.com/api-keys' },
+      { label: '결제·충전', url: 'https://platform.openai.com/settings/organization/billing/overview' },
+      { label: '가격표', url: 'https://openai.com/api/pricing/' },
+    ],
+  },
+  xai: {
+    name: 'xAI (Grok)',
+    env: 'XAI_API_KEY',
+    base: 'https://api.x.ai/v1',
+    links: [
+      { label: 'API 키 발급·결제', url: 'https://console.x.ai/' },
+      { label: '모델·가격표', url: 'https://docs.x.ai/developers/models' },
+    ],
+  },
+  gemini: {
+    name: 'Google Gemini',
+    env: 'GEMINI_API_KEY',
+    base: 'https://generativelanguage.googleapis.com/v1beta',
+    links: [
+      { label: 'API 키 발급', url: 'https://aistudio.google.com/app/apikey' },
+      { label: '결제 설정', url: 'https://ai.google.dev/gemini-api/docs/billing' },
+      { label: '가격표', url: 'https://ai.google.dev/gemini-api/docs/pricing' },
+    ],
+  },
   openai_compatible: { name: 'OpenAI 호환 (DeepSeek·Mistral·Ollama 등)' },
 };
+
+/** Well-known OpenAI-compatible services, used to pre-fill a new company and link to its key page. */
+export const COMPATIBLE_SERVICES: { name: string; baseUrl: string; links: SiteLink[] }[] = [
+  {
+    name: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com/v1',
+    links: [
+      { label: 'API 키 발급', url: 'https://platform.deepseek.com/api_keys' },
+      { label: '가격표', url: 'https://api-docs.deepseek.com/quick_start/pricing' },
+    ],
+  },
+  {
+    name: 'Mistral',
+    baseUrl: 'https://api.mistral.ai/v1',
+    links: [
+      { label: 'API 키 발급', url: 'https://console.mistral.ai/api-keys' },
+      { label: '가격표', url: 'https://mistral.ai/pricing#api-pricing' },
+    ],
+  },
+  {
+    name: 'OpenRouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    links: [
+      { label: 'API 키 발급', url: 'https://openrouter.ai/settings/keys' },
+      { label: '모델·가격', url: 'https://openrouter.ai/models' },
+    ],
+  },
+  {
+    name: 'Groq',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    links: [
+      { label: 'API 키 발급', url: 'https://console.groq.com/keys' },
+      { label: '모델 목록', url: 'https://console.groq.com/docs/models' },
+    ],
+  },
+  {
+    name: 'Upstage',
+    baseUrl: 'https://api.upstage.ai/v1',
+    links: [
+      { label: 'API 키 발급', url: 'https://console.upstage.ai/api-keys' },
+      { label: '가격표', url: 'https://www.upstage.ai/pricing' },
+    ],
+  },
+  {
+    name: 'Ollama',
+    baseUrl: 'http://localhost:11434/v1',
+    links: [
+      { label: 'Ollama 설치', url: 'https://ollama.com/download' },
+      { label: '모델 목록', url: 'https://ollama.com/library' },
+    ],
+  },
+];
+
+export function companyLinks(company: Pick<Company, 'api' | 'baseUrl'>): SiteLink[] {
+  if (company.api !== 'openai_compatible') return API_KINDS[company.api].links ?? [];
+  const host = (url: string) => {
+    try {
+      return new URL(url).host;
+    } catch {
+      return '';
+    }
+  };
+  const target = host(company.baseUrl);
+  return (target && COMPATIBLE_SERVICES.find((s) => host(s.baseUrl) === target)?.links) || [];
+}
 
 export const HATS: Record<HatShape, { name: string; color: string }> = {
   beanie: { name: '비니 + 스파크', color: '#d97757' },

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { auth, type OAuthClientProvider, type OAuthDiscoveryState } from '@modelcontextprotocol/sdk/client/auth.js';
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
-import { OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, type McpLoginInfo, type McpServer } from '../shared/mcp.ts';
+import { OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OAUTH_SCOPES, type McpLoginInfo, type McpServer } from '../shared/mcp.ts';
 import { config } from './config.ts';
 import { loadKv, saveKv } from './db.ts';
 import { mcpSecretsFor } from './secrets.ts';
@@ -45,6 +45,17 @@ function preRegistered(serverId: string): OAuthClientInformationMixed | undefine
   return { client_id: id, ...(secrets[OAUTH_CLIENT_SECRET] ? { client_secret: secrets[OAUTH_CLIENT_SECRET] } : {}) };
 }
 
+const scopesOf = (serverId: string) => mcpSecretsFor(serverId)[OAUTH_SCOPES]?.trim().split(/\s+/).join(' ') || undefined;
+
+/** Google only returns a refresh token for offline access, and only on the consent screen. */
+function withProviderParams(url: URL) {
+  if (url.hostname === 'accounts.google.com') {
+    url.searchParams.set('access_type', 'offline');
+    url.searchParams.set('prompt', 'consent');
+  }
+  return url;
+}
+
 /** Keeps the OAuth client registration, tokens and PKCE verifier of one MCP server in kv. */
 class KvOAuthProvider implements OAuthClientProvider {
   readonly serverId: string;
@@ -66,6 +77,7 @@ class KvOAuthProvider implements OAuthClientProvider {
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: preRegistered(this.serverId)?.client_secret ? 'client_secret_post' : 'none',
+      ...(scopesOf(this.serverId) ? { scope: scopesOf(this.serverId) } : {}),
     };
   }
 
@@ -92,7 +104,7 @@ class KvOAuthProvider implements OAuthClientProvider {
   }
 
   redirectToAuthorization(url: URL) {
-    this.pendingUrl = url;
+    this.pendingUrl = withProviderParams(url);
   }
 
   saveCodeVerifier(verifier: string) {
@@ -141,7 +153,7 @@ export async function startLogin(server: McpServer, origin: string): Promise<str
     persist();
   }
   const provider = new KvOAuthProvider(server.id);
-  const result = await auth(provider, { serverUrl: server.url });
+  const result = await auth(provider, { serverUrl: server.url, scope: scopesOf(server.id) });
   if (result === 'AUTHORIZED') return null;
   if (!provider.pendingUrl) throw new Error('로그인 주소를 받지 못했어요.');
   return provider.pendingUrl.toString();
@@ -155,7 +167,7 @@ export async function finishLogin(state: string, code: string, serverOf: (id: st
   patch(serverId, { state: undefined, stateExpiresAt: undefined });
   const server = serverOf(serverId);
   if (!server) throw new Error('지워진 MCP 서버예요.');
-  const result = await auth(new KvOAuthProvider(serverId), { serverUrl: server.url, authorizationCode: code });
+  const result = await auth(new KvOAuthProvider(serverId), { serverUrl: server.url, authorizationCode: code, scope: scopesOf(serverId) });
   if (result !== 'AUTHORIZED') throw new Error('로그인을 마치지 못했어요.');
   patch(serverId, { verifier: undefined });
   return serverId;

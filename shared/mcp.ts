@@ -101,15 +101,26 @@ export interface McpPreset {
   command?: string;
   args?: string[];
   oauth?: boolean;
-  /** Secret names the user needs to fill, with where to get them. */
-  secrets: { name: string; label: string; placeholder?: string; prefix?: string }[];
+  /** Secret names the user needs to fill, with where to get them. `value` pre-fills a non-secret setting shown as plain text. */
+  secrets: { name: string; label: string; placeholder?: string; prefix?: string; value?: string }[];
   note: string;
+  /** Pages where the user creates the key, app or client; opened in a new tab. */
+  links?: McpLink[];
+}
+
+export interface McpLink {
+  label: string;
+  url: string;
 }
 
 /** Secrets with these names are the pre-registered OAuth client for services without self-registration (e.g. Slack); never sent as headers. */
 export const OAUTH_CLIENT_ID = 'OAUTH_CLIENT_ID';
 export const OAUTH_CLIENT_SECRET = 'OAUTH_CLIENT_SECRET';
-export const isOAuthClientSecret = (name: string) => name === OAUTH_CLIENT_ID || name === OAUTH_CLIENT_SECRET;
+/** Space-separated scopes to request at login, for servers that do not advertise them. */
+export const OAUTH_SCOPES = 'OAUTH_SCOPES';
+export const isOAuthClientSecret = (name: string) => name === OAUTH_CLIENT_ID || name === OAUTH_CLIENT_SECRET || name === OAUTH_SCOPES;
+
+const GMAIL_SCOPES = ['gmail.readonly', 'gmail.compose'].map((s) => `https://www.googleapis.com/auth/${s}`).join(' ');
 
 export const MCP_PRESETS: McpPreset[] = [
   {
@@ -121,6 +132,11 @@ export const MCP_PRESETS: McpPreset[] = [
     args: ['-y', '@brave/brave-search-mcp-server'],
     secrets: [{ name: 'BRAVE_API_KEY', label: 'Brave Search API 키', placeholder: 'BSA…' }],
     note: 'brave.com/search/api 에서 무료 키를 받을 수 있어요. 이 PC에 Node.js가 있어야 해요.',
+    links: [
+      { label: 'API 키 발급', url: 'https://api-dashboard.search.brave.com/app/keys' },
+      { label: '요금제 안내', url: 'https://brave.com/search/api/' },
+      { label: 'Node.js 설치', url: 'https://nodejs.org/ko/download' },
+    ],
   },
   {
     id: 'notion',
@@ -131,6 +147,7 @@ export const MCP_PRESETS: McpPreset[] = [
     args: ['-y', '@notionhq/notion-mcp-server'],
     secrets: [{ name: 'NOTION_TOKEN', label: 'Notion 통합 토큰', placeholder: 'ntn_…' }],
     note: 'notion.so/profile/integrations 에서 내부 통합을 만들고, 읽을 페이지에 그 통합을 연결해 주세요.',
+    links: [{ label: '통합 토큰 만들기', url: 'https://www.notion.so/profile/integrations' }],
   },
   {
     id: 'notion-remote',
@@ -141,6 +158,7 @@ export const MCP_PRESETS: McpPreset[] = [
     oauth: true,
     secrets: [],
     note: '저장한 뒤 로그인을 누르면 Notion 창에서 쓸 페이지를 고를 수 있어요. 토큰을 따로 만들 필요가 없어요.',
+    links: [{ label: 'Notion MCP 안내', url: 'https://developers.notion.com/guides/mcp/overview' }],
   },
   {
     id: 'github',
@@ -150,6 +168,7 @@ export const MCP_PRESETS: McpPreset[] = [
     url: 'https://api.githubcopilot.com/mcp/',
     secrets: [{ name: 'Authorization', label: 'GitHub 개인 액세스 토큰', placeholder: 'ghp_…', prefix: 'Bearer ' }],
     note: '읽기 권한만 있는 토큰을 권장해요.',
+    links: [{ label: '토큰 만들기', url: 'https://github.com/settings/personal-access-tokens/new' }],
   },
   {
     id: 'slack',
@@ -163,6 +182,27 @@ export const MCP_PRESETS: McpPreset[] = [
       { name: OAUTH_CLIENT_SECRET, label: 'Slack 앱 Client Secret' },
     ],
     note: 'api.slack.com/apps 에서 앱을 만들고 Client ID·Secret을 넣어 주세요. 앱의 OAuth & Permissions에 아래 Redirect URL을 등록하고, 워크스페이스 관리자가 MCP 사용을 허용해야 해요.',
+    links: [{ label: '앱 만들기·Client ID 확인', url: 'https://api.slack.com/apps' }],
+  },
+  {
+    id: 'gmail',
+    name: 'Gmail',
+    icon: '📧',
+    transport: 'http',
+    url: 'https://gmailmcp.googleapis.com/mcp/v1',
+    oauth: true,
+    secrets: [
+      { name: OAUTH_CLIENT_ID, label: 'Google OAuth 클라이언트 ID', placeholder: '…apps.googleusercontent.com' },
+      { name: OAUTH_CLIENT_SECRET, label: 'Google OAuth 클라이언트 보안 비밀', placeholder: 'GOCSPX-…' },
+      { name: OAUTH_SCOPES, label: '요청할 권한', value: GMAIL_SCOPES },
+    ],
+    note: '구글 클라우드에서 ① Gmail API와 Gmail MCP API를 사용 설정하고 ② OAuth 동의 화면을 "외부·테스트"로 만들어 내 주소를 테스트 사용자로 넣고 ③ "웹 애플리케이션" 클라이언트에 아래 Redirect URL을 등록해 ID·보안 비밀을 넣어 주세요. 메일 읽기·검색과 임시보관함 초안 작성만 되고 발송은 안 돼요. 테스트 모드 로그인은 7일마다 다시 해야 해요.',
+    links: [
+      { label: '① Gmail API 사용', url: 'https://console.cloud.google.com/apis/library/gmail.googleapis.com' },
+      { label: '① Gmail MCP API 사용', url: 'https://console.cloud.google.com/apis/library/gmailmcp.googleapis.com' },
+      { label: '② 동의 화면·테스트 사용자', url: 'https://console.cloud.google.com/auth/audience' },
+      { label: '③ 클라이언트 만들기', url: 'https://console.cloud.google.com/auth/clients' },
+    ],
   },
   {
     id: 'fetch',
@@ -173,6 +213,7 @@ export const MCP_PRESETS: McpPreset[] = [
     args: ['mcp-server-fetch'],
     secrets: [],
     note: '주소를 주면 페이지 내용을 읽어 와요. 이 PC에 uv(Python)가 있어야 해요.',
+    links: [{ label: 'uv 설치 안내', url: 'https://docs.astral.sh/uv/getting-started/installation/' }],
   },
   {
     id: 'custom',
@@ -182,6 +223,7 @@ export const MCP_PRESETS: McpPreset[] = [
     url: '',
     secrets: [],
     note: '메일·캘린더 등 다른 MCP 서버의 주소나 실행 명령을 직접 넣어요.',
+    links: [{ label: 'MCP 서버 목록', url: 'https://github.com/modelcontextprotocol/servers' }],
   },
 ];
 

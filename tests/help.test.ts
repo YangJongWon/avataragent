@@ -9,6 +9,7 @@ process.env.AI_PROVIDER = 'mock';
 
 const { answerHelp, searchHelp } = await import('../server/help.ts');
 const { MCP_PRESETS, isOAuthClientSecret } = await import('../shared/mcp.ts');
+const { companyLinks } = await import('../shared/models.ts');
 
 test('help search finds the section a question is about', () => {
   const top = (q: string, tab = '') => searchHelp(q, tab, 1)[0]?.title ?? '';
@@ -33,3 +34,26 @@ test('Slack connects over OAuth with a client the user registers', () => {
   assert.equal(slack.oauth, true);
   assert.ok(slack.secrets.every((s) => isOAuthClientSecret(s.name)));
 });
+
+test('Gmail asks for read and draft scopes and keeps them out of headers', () => {
+  const gmail = MCP_PRESETS.find((p) => p.id === 'gmail')!;
+  assert.equal(gmail.url, 'https://gmailmcp.googleapis.com/mcp/v1');
+  assert.equal(gmail.oauth, true);
+  assert.ok(gmail.secrets.every((s) => isOAuthClientSecret(s.name)));
+  const scopes = gmail.secrets.find((s) => s.name === 'OAUTH_SCOPES')?.value ?? '';
+  assert.match(scopes, /gmail\.readonly/);
+  assert.match(scopes, /gmail\.compose/);
+  assert.doesNotMatch(scopes, /gmail\.send|mail\.google\.com/);
+});
+
+test('presets and companies link to the pages where keys are made', () => {
+  for (const preset of MCP_PRESETS) assert.ok(preset.links?.length, `${preset.id} has links`);
+  assert.ok(preset('gmail').links!.every((l) => l.url.startsWith('https://console.cloud.google.com/')));
+  assert.match(companyLinks({ api: 'openai', baseUrl: '' })[0].url, /platform\.openai\.com/);
+  assert.match(companyLinks({ api: 'openai_compatible', baseUrl: 'https://api.deepseek.com/v1/' })[0].url, /deepseek/);
+  assert.deepEqual(companyLinks({ api: 'openai_compatible', baseUrl: 'https://example.com/v1' }), []);
+});
+
+function preset(id: string) {
+  return MCP_PRESETS.find((p) => p.id === id)!;
+}

@@ -149,6 +149,9 @@
   - 실제 AI 모드이고 업무 처리 권한이 있으면 보고 있는 사무실의 관리자 직원이 찾은 절과 현재 설정(실행 방식, 명령 MCP 허용, LibreOffice 유무 등)을 보고 답한다. 비용은 그 사무실·직원 비용으로 잡힌다.
   - 시뮬레이션 모드나 보기 권한은 찾은 절 원문을 보여 준다. 답마다 근거 절을 펼쳐 볼 수 있다.
 - MCP: 자동 등록을 막아 둔 서비스(Slack)를 위해 비밀값 `OAUTH_CLIENT_ID`·`OAUTH_CLIENT_SECRET`을 넣으면 그 클라이언트로 OAuth 로그인한다. 이 두 값은 HTTP 헤더로 보내지 않는다. Slack 프리셋(`https://mcp.slack.com/mcp`)을 추가했다. 실제 Slack 앱으로는 아직 확인하지 않았다.
+- MCP: Gmail 프리셋(`https://gmailmcp.googleapis.com/mcp/v1`, 읽기·초안 범위). 비밀값 `OAUTH_SCOPES`가 있으면 그 범위로 로그인하고(PRM보다 우선), 구글 로그인 주소에는 갱신 토큰을 받도록 `access_type=offline`·`prompt=consent`를 붙인다. 실제 구글 계정으로는 아직 확인하지 않았다(특히 SDK가 보내는 `resource` 인자를 구글이 받는지).
+- 바로가기: MCP 프리셋마다 키·앱 발급 페이지 링크, 모델 관리 회사 카드에 API 키 발급·결제·가격표 링크, OpenAI 호환 서비스 빠른 채우기(DeepSeek·Mistral·OpenRouter·Groq·Upstage·Ollama).
+- 사용법 데모: 공급자 배지를 길게 누르거나 우클릭하면 메모 투어와 함께 화면 안에서만 가짜 업무 한 바퀴를 재생한다(`web/src/demoPlayback.ts`).
 
 ### 결과물 내보내기
 
