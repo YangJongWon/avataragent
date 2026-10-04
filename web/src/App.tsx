@@ -19,6 +19,7 @@ import { TeamDataPanel } from './components/TeamDataPanel.tsx';
 import { WorkflowView } from './components/WorkflowView.tsx';
 import { krw, roleTitle } from './format.ts';
 import { OfficeView } from './office/OfficeView.tsx';
+import { useDemoPlayback } from './demoPlayback.ts';
 import { useCompact } from './useCompact.ts';
 
 type Tab = 'office' | 'hire' | 'models' | 'mcp' | 'profit';
@@ -95,23 +96,39 @@ export function App() {
     [onEvent, toast],
   );
 
+  const playback = useDemoPlayback(demo, snapshot, officeId);
+  const demoPlaying = playback.agents !== null;
+  const demoPlayingRef = useRef(demoPlaying);
+  demoPlayingRef.current = demoPlaying;
+  const subscribeDemo = playback.subscribe;
+
   const officeOnEvent = useCallback(
-    (listener: (event: OfficeEvent) => void) =>
-      onEvent((event) => {
+    (listener: (event: OfficeEvent) => void) => {
+      const offServer = onEvent((event) => {
         const snap = snapshotRef.current;
+        if (demoPlayingRef.current) return;
         if (snap && officeIdOfEvent(event, snap) === officeIdRef.current) listener(event);
-      }),
-    [onEvent],
+      });
+      const offDemo = subscribeDemo(listener);
+      return () => {
+        offServer();
+        offDemo();
+      };
+    },
+    [onEvent, subscribeDemo],
   );
 
   const view = useMemo(() => {
     if (!snapshot) return null;
+    if (playback.agents && playback.task) {
+      return { ...snapshot, agents: playback.agents, tasks: [playback.task] };
+    }
     return {
       ...snapshot,
       agents: snapshot.agents.filter((a) => a.officeId === officeId),
       tasks: snapshot.tasks.filter((t) => t.officeId === officeId),
     };
-  }, [snapshot, officeId]);
+  }, [snapshot, officeId, playback.agents, playback.task]);
 
   const officeEvents = useMemo(
     () => (snapshot ? events.filter((e) => officeIdOfEvent(e, snapshot) === officeId) : []),
