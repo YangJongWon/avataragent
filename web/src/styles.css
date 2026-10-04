@@ -1647,6 +1647,21 @@ p.plan-note {
 .plan-emoji {
   font-size: 22px;
 }
+.plan-action {
+  margin-top: 2px;
+  font-weight: 700;
+  text-decoration: underline;
+}
+.billing-box {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+.assignee {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
 .member-form {
   display: grid;
   gap: 6px;

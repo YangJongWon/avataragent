@@ -7,6 +7,22 @@ import { store } from './store.ts';
 
 const officeOfTask = (taskId: string) => store.data.tasks.find((t) => t.id === taskId)?.officeId ?? null;
 
+/** Business plan: names who is in charge of a task. The person must be able to see the task's office. */
+export function setAssignee(taskId: string, assigneeId: string | null) {
+  if (!planHas(store.data.plan, 'assignees')) throw new Error('업무 담당자 지정은 비즈니스 플랜에서 쓸 수 있어요.');
+  const task = store.task(taskId);
+  if (assigneeId !== null) {
+    const person = assigneeId === 'owner' ? { officeIds: 'all' as const, disabled: false } : store.data.members.find((m) => m.id === assigneeId);
+    if (!person || person.disabled) throw new Error('담당자로 정할 수 없는 사람이에요.');
+    if (person.officeIds !== 'all' && !person.officeIds.includes(task.officeId)) throw new Error('그 사람은 이 사무실을 볼 수 없어요.');
+  }
+  store.updateTask(taskId, (t) => {
+    t.assigneeId = assigneeId;
+  });
+  store.emit('task.assignee_changed', { taskId, payload: { assigneeId, name: personName(assigneeId) } });
+  return store.task(taskId);
+}
+
 function add(message: Omit<ChatMessage, 'id' | 'at'>) {
   const full: ChatMessage = { ...message, id: `chat_${randomUUID().slice(0, 8)}`, at: new Date().toISOString() };
   store.mutate((s) => {
@@ -42,14 +58,24 @@ const NEWS: Record<string, (event: OfficeEvent) => string> = {
   'approval.requested': () => '📝 결과물이 올라와 승인을 기다리고 있어요.',
   'task.completed': () => '🎉 업무가 끝났어요.',
   'task.failed': (e) => `⚠ 업무가 중단됐어요: ${String(e.payload.reason ?? '')}`,
+  'task.assignee_changed': (e) => (e.payload.name ? `👤 담당자를 ${String(e.payload.name)}(으)로 정했어요.` : '👤 담당자 지정을 풀었어요.'),
 };
+
+export const personName = (id: string | null | undefined) =>
+  !id ? null : id === 'owner' ? '소유자' : (store.data.members.find((m) => m.id === id)?.name ?? null);
 
 /** Posts the AI staff's important moments into chat so people can talk about them right there. */
 export function chatNews(event: OfficeEvent) {
   const make = NEWS[event.type];
   if (!make || !event.taskId || !planHas(store.data.plan, 'chat')) return;
-  const officeId = officeOfTask(event.taskId);
-  if (!officeId) return;
-  const office = store.data.offices.find((o) => o.id === officeId);
-  add({ channel: newsChannel(officeId), author: { kind: 'system', id: 'system', name: `🤖 ${office?.name ?? '사무실'}` }, text: make(event), taskId: event.taskId });
+  const task = store.data.tasks.find((t) => t.id === event.taskId);
+  if (!task) return;
+  const office = store.data.offices.find((o) => o.id === task.officeId);
+  const owner = event.type === 'task.assignee_changed' ? null : personName(task.assigneeId);
+  add({
+    channel: newsChannel(task.officeId),
+    author: { kind: 'system', id: 'system', name: `🤖 ${office?.name ?? '사무실'}` },
+    text: `${make(event)}${owner ? ` (담당: ${owner})` : ''}`,
+    taskId: task.id,
+  });
 }

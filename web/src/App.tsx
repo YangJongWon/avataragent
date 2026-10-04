@@ -91,6 +91,23 @@ export function App() {
   }, []);
   const showError = useCallback((text: string) => toast(text, 'error'), [toast]);
 
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const result = url.searchParams.get('billing');
+    if (!result) return;
+    const message: Record<string, [string, Toast['tone']]> = {
+      success: ['결제가 끝나 플랜이 바뀌었어요.', 'info'],
+      failed: ['결제가 실패했어요. 플랜은 그대로예요.', 'error'],
+      canceled: ['결제를 취소했어요.', 'info'],
+      expired: ['끝났거나 없는 결제예요.', 'error'],
+    };
+    const [text, tone] = message[result] ?? message.expired;
+    toast(text, tone);
+    if (result === 'success') setTab('members');
+    url.searchParams.delete('billing');
+    window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+  }, [toast]);
+
   useEffect(
     () =>
       onEvent((event) => {
@@ -360,6 +377,11 @@ export function App() {
       onHelp={() => setDialog({ kind: 'help' })}
       onError={showError}
       onDiscuss={chatOn ? (taskId) => openChat(taskChannel(taskId)) : undefined}
+      people={
+        planHas(snapshot.plan, 'assignees') && viewer.kind !== 'share'
+          ? (snapshot.people ?? []).filter((p) => p.officeIds === 'all' || p.officeIds.includes(office.id))
+          : undefined
+      }
     />
   );
 

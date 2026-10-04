@@ -136,6 +136,30 @@ export function eventLabel(event: OfficeEvent, agents: Map<string, Agent>) {
       return `플레이북 "${p.name}" 적용 (${p.changes}건 변경)`;
     case 'improvement.applied':
       return `${who} 📈 ${p.auto ? '자율 개선' : '개선 적용'}: ${p.reason}`;
+    case 'task.assignee_changed':
+      return p.name ? `담당자 지정: ${p.name}` : '담당자 지정 해제';
+    case 'plan.changed':
+      return `플랜 변경: ${p.plan}${p.reason ? ` (${p.reason})` : ''}`;
+    case 'member.created':
+      return `구성원 추가: ${p.name}`;
+    case 'member.updated':
+      return `구성원 정보 변경: ${p.name}`;
+    case 'member.removed':
+      return `구성원 삭제: ${p.name}`;
+    case 'billing.checkout_started':
+      return `결제 시작: ${p.plan} ${krw(Number(p.amountKrw))}`;
+    case 'billing.subscribed':
+      return `구독 시작: ${p.plan} ${krw(Number(p.amountKrw))}`;
+    case 'billing.renewed':
+      return `구독 갱신: ${p.plan} ${krw(Number(p.amountKrw))}`;
+    case 'billing.payment_failed':
+      return '결제 실패';
+    case 'billing.checkout_canceled':
+      return '결제 취소';
+    case 'billing.cancel_scheduled':
+      return `구독 해지 예약 (${p.plan})`;
+    case 'billing.resumed':
+      return `구독 해지 예약 취소 (${p.plan})`;
     default:
       return event.type;
   }

@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { SHARE_ROLES } from '../../../shared/access.ts';
-import { planOf, PLANS } from '../../../shared/plans.ts';
+import { GRACE_DAYS, type SubscriptionStatus } from '../../../shared/billing.ts';
+import { planHas, planOf, PLANS, type Plan } from '../../../shared/plans.ts';
 import { TEAMS } from '../../../shared/teams.ts';
 import type { Member, ShareRole, Snapshot } from '../../../shared/types.ts';
 import { api } from '../api.ts';
+import { krw } from '../format.ts';
 
 const MIN_PASSWORD = 8;
 const ROLE_IDS = Object.keys(SHARE_ROLES) as ShareRole[];
@@ -74,6 +76,114 @@ function MemberRow(props: { snapshot: Snapshot; member: Member; run: (work: () =
   );
 }
 
+const STATUS_LABEL: Record<SubscriptionStatus, string> = { none: '구독 없음', active: '이용 중', past_due: '결제 실패 (유예 중)', canceled: '해지됨' };
+const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('ko-KR') : '-');
+
+function PlanSection(props: { snapshot: Snapshot; busy: boolean; run: (work: () => Promise<unknown>, notice: string) => void }) {
+  const { snapshot, busy, run } = props;
+  const plan = planOf(snapshot.plan);
+  const billing = snapshot.billing;
+  const connected = Boolean(billing && billing.provider !== 'none');
+  const sub = billing?.subscription;
+
+  const choose = (target: Plan) => {
+    if (target === plan.id && !(connected && sub?.cancelAtPeriodEnd)) return;
+    if (!connected) return run(() => api.setPlan(target), `${planOf(target).label} 플랜으로 바꿨어요.`);
+    if (planOf(target).priceKrw === 0) {
+      if (!window.confirm('구독을 해지할까요? 이번 결제 기간이 끝날 때까지는 지금 플랜을 그대로 써요.')) return;
+      return run(() => api.cancelSubscription(), '구독 해지를 예약했어요.');
+    }
+    if (target === sub?.plan && sub.cancelAtPeriodEnd) return run(() => api.resumeSubscription(), '해지 예약을 취소했어요.');
+    return run(async () => {
+      const { url } = await api.startCheckout(target);
+      window.location.assign(url);
+    }, '결제 화면으로 이동해요.');
+  };
+
+  return (
+    <section className="pixel-box section">
+      <h3>플랜</h3>
+      <div className="plan-row">
+        {PLANS.map((p) => (
+          <button key={p.id} className={`plan-option ${p.id === plan.id ? 'selected' : ''}`} disabled={busy} onClick={() => choose(p.id)}>
+            <span className="plan-emoji">{p.emoji}</span>
+            <b>{p.label}</b>
+            <span className="small muted">{p.description}</span>
+            <span className="small">
+              {p.priceKrw ? `월 ${krw(p.priceKrw)}` : '무료'} · {p.maxMembers ? `구성원 ${p.maxMembers}명까지` : '구성원 없음'}
+            </span>
+            {connected && p.id !== plan.id && <span className="small plan-action">{p.priceKrw ? '결제하고 바꾸기' : '구독 해지'}</span>}
+            {connected && p.id === plan.id && sub?.cancelAtPeriodEnd && p.priceKrw > 0 && <span className="small plan-action">해지 취소</span>}
+          </button>
+        ))}
+      </div>
+      {!connected ? (
+        <p className="muted small">결제가 아직 연결되지 않아 플랜을 바로 바꿀 수 있어요. 결제사를 연결하면(BILLING_PROVIDER) 이 화면에서 결제와 해지를 하게 돼요. 플랜을 낮춰도 계정과 대화는 지워지지 않아요.</p>
+      ) : (
+        <div className="billing-box">
+          <div className="row wrap small">
+            <span>결제사: {billing!.providerLabel}</span>
+            <span>상태: {STATUS_LABEL[sub!.status]}</span>
+            {sub!.currentPeriodEnd && (
+              <span>
+                {sub!.cancelAtPeriodEnd ? '이용 종료일' : '다음 결제일'}: {day(sub!.currentPeriodEnd)}
+              </span>
+            )}
+          </div>
+          {sub!.status === 'past_due' && <p className="neg small">결제가 실패했어요. {GRACE_DAYS}일 안에 결제되지 않으면 개인 플랜으로 바뀌어요. 플랜을 다시 결제해 주세요.</p>}
+          {billing!.invoices.length > 0 && (
+            <table className="table small">
+              <thead>
+                <tr>
+                  <th>날짜</th>
+                  <th>플랜</th>
+                  <th className="num">금액</th>
+                  <th>결과</th>
+                </tr>
+              </thead>
+              <tbody>
+                {billing!.invoices.slice(0, 12).map((inv) => (
+                  <tr key={inv.id}>
+                    <td>{day(inv.at)}</td>
+                    <td>{planOf(inv.plan).label}</td>
+                    <td className="num">{krw(inv.amountKrw)}</td>
+                    <td className={inv.status === 'paid' ? 'pos' : 'neg'}>{inv.status === 'paid' ? '결제됨' : '실패'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ActivityExport() {
+  const today = new Date().toISOString().slice(0, 10);
+  const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
+  const [from, setFrom] = useState(monthAgo);
+  const [to, setTo] = useState(today);
+  const href = (format: 'csv' | 'json') => `/api/activity/export?${new URLSearchParams({ from, to, format })}`;
+  return (
+    <section className="pixel-box section">
+      <h3>활동 기록 내보내기</h3>
+      <p className="muted small">업무 등록, 단계 진행, 승인, AI 비용, 규칙 변경 같은 모든 활동을 기간별로 받아요. 날짜는 UTC 기준이에요.</p>
+      <div className="row wrap">
+        <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} />
+        <span>~</span>
+        <input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} />
+        <a className="pixel-btn small" href={href('csv')} download>
+          CSV (엑셀)
+        </a>
+        <a className="pixel-btn small" href={href('json')} download>
+          JSON
+        </a>
+      </div>
+    </section>
+  );
+}
+
 export function MembersTab(props: { snapshot: Snapshot; onError: (m: string) => void; onNotice: (m: string) => void }) {
   const { snapshot } = props;
   const plan = planOf(snapshot.plan);
@@ -96,25 +206,8 @@ export function MembersTab(props: { snapshot: Snapshot; onError: (m: string) => 
   return (
     <div className="page">
       <h2>플랜·구성원</h2>
-      <section className="pixel-box section">
-        <h3>플랜</h3>
-        <div className="plan-row">
-          {PLANS.map((p) => (
-            <button
-              key={p.id}
-              className={`plan-option ${p.id === plan.id ? 'selected' : ''}`}
-              disabled={busy}
-              onClick={() => p.id !== plan.id && run(() => api.setPlan(p.id), `${p.label} 플랜으로 바꿨어요.`)}
-            >
-              <span className="plan-emoji">{p.emoji}</span>
-              <b>{p.label}</b>
-              <span className="small muted">{p.description}</span>
-              <span className="small">{p.maxMembers ? `구성원 ${p.maxMembers}명까지` : '구성원 없음'}</span>
-            </button>
-          ))}
-        </div>
-        <p className="muted small">지금은 기능을 켜고 끄는 설정이에요. 결제는 아직 연결되지 않았어요. 플랜을 낮춰도 계정과 대화는 지워지지 않고, 다시 올리면 그대로 쓸 수 있어요.</p>
-      </section>
+      <PlanSection snapshot={snapshot} busy={busy} run={run} />
+      {planHas(snapshot.plan, 'activityExport') && <ActivityExport />}
 
       <section className="pixel-box section">
         <h3>

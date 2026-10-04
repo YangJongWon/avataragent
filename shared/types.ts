@@ -3,6 +3,7 @@ import type { McpServer, PlannedAction } from './mcp.ts';
 import type { ImprovementLog, PerfRecord } from './performance.ts';
 import type { Personality } from './personality.ts';
 import type { Plan } from './plans.ts';
+import type { BillingInfo } from './billing.ts';
 import type { Company, ModelEntry } from './models.ts';
 import type { Skin } from './skins.ts';
 
@@ -178,6 +179,8 @@ export interface Task {
   actions?: PlannedAction[];
   /** MCP tool calls made for this task, research and approved actions together. */
   toolCalls?: number;
+  /** The person in charge (business plan): 'owner' or a member id. */
+  assigneeId?: string | null;
   costKrw: number;
   costByAgent: Record<string, number>;
   value: ValueBreakdown | null;
@@ -288,6 +291,13 @@ export interface Member {
   lastLoginAt: string | null;
 }
 
+export interface Person {
+  /** 'owner' or a member id. */
+  id: string;
+  name: string;
+  officeIds: string[] | 'all';
+}
+
 export type Viewer =
   | { kind: 'owner' }
   | { kind: 'share'; shareId: string; name: string; role: ShareRole; officeIds: string[] | 'all' }
@@ -310,7 +320,11 @@ export interface Snapshot {
   shares?: ShareLink[];
   plan: Plan;
   /** Owner only. */
+  billing?: BillingInfo;
+  /** Owner only. */
   members?: Member[];
+  /** Everyone who can be named as a task's person in charge: 'owner' and active members, with the offices they see. */
+  people: Person[];
   /** Messages this viewer may read. */
   chat: ChatMessage[];
   /** Owner only: base address to put in share links. */

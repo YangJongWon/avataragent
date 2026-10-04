@@ -5,7 +5,7 @@ import { splitDraft } from '../../../shared/draft.ts';
 import { TEAMS } from '../../../shared/teams.ts';
 import { currentStepLabel } from '../../../shared/workflow.ts';
 import type { PlannedAction } from '../../../shared/mcp.ts';
-import type { Agent, OfficeEvent, Task, TeamId } from '../../../shared/types.ts';
+import type { Agent, OfficeEvent, Person, Task, TeamId } from '../../../shared/types.ts';
 import { api } from '../api.ts';
 import { eventLabel, krw, TASK_STATUS_LABEL, timeOf } from '../format.ts';
 import { ExportBox } from './ExportBox.tsx';
@@ -25,6 +25,8 @@ interface Props {
   onError: (message: string) => void;
   /** Opens this task's conversation; absent when chat is not available to the viewer. */
   onDiscuss?: (taskId: string) => void;
+  /** People who can be put in charge of tasks here; absent when the plan has no assignees. */
+  people?: Person[];
 }
 
 const renderMarkdown = (md: string) => DOMPurify.sanitize(marked.parse(md, { async: false }) as string);
@@ -66,7 +68,7 @@ function ActionList({ actions, editable, onToggle }: { actions: PlannedAction[];
   );
 }
 
-export function ReportPanel({ team, teamData, task, tasks, agents, events, canOperate, onSelectTask, onHelp, onError, onDiscuss }: Props) {
+export function ReportPanel({ team, teamData, task, tasks, agents, events, canOperate, onSelectTask, onHelp, onError, onDiscuss, people }: Props) {
   const [tab, setTab] = useState<Tab>(TEAMS[team].inputLabel || team === 'welfare' || team === 'mgmt' ? 'team' : 'report');
   const [valueInput, setValueInput] = useState('');
   const [comment, setComment] = useState('');
@@ -118,6 +120,25 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
           <span>현재 단계: {currentStepLabel(task)}</span>
           <span>비용 {krw(task.costKrw)}</span>
           {Boolean(task.toolCalls) && <span>🧩 도구 {task.toolCalls}회</span>}
+          {people && (
+            <label className="assignee">
+              👤
+              <select
+                value={task.assigneeId ?? ''}
+                disabled={!canOperate || busy}
+                title="업무 담당자"
+                onChange={(e) => run(() => api.setAssignee(task.id, e.target.value || null))}
+              >
+                <option value="">담당자 없음</option>
+                {people.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+                {task.assigneeId && !people.some((p) => p.id === task.assigneeId) && <option value={task.assigneeId}>(지금은 볼 수 없는 사람)</option>}
+              </select>
+            </label>
+          )}
           {onDiscuss && (
             <button className="pixel-btn small" onClick={() => onDiscuss(task.id)}>
               💬 업무 대화

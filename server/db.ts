@@ -556,6 +556,22 @@ export function recentEvents(limit: number): OfficeEvent[] {
   return rows.map((r) => JSON.parse(r.json) as OfficeEvent).reverse();
 }
 
+/** Events with `from <= timestamp < to` (ISO strings), oldest first, for exports. */
+export async function eventsBetween(from: string, to: string, limit: number): Promise<OfficeEvent[]> {
+  if (pool) {
+    await writeQueue;
+    const rows = await pool.query<{ json: OfficeEvent }>(
+      "SELECT json FROM events WHERE tenant_id = $1 AND json->>'timestamp' >= $2 AND json->>'timestamp' < $3 ORDER BY seq LIMIT $4",
+      [TENANT, from, to, limit],
+    );
+    return rows.rows.map((r) => r.json);
+  }
+  const rows = stmt(
+    "SELECT json FROM events WHERE tenant_id = ? AND json_extract(json, '$.timestamp') >= ? AND json_extract(json, '$.timestamp') < ? ORDER BY seq LIMIT ?",
+  ).all(TENANT, from, to, limit) as { json: string }[];
+  return rows.map((r) => JSON.parse(r.json) as OfficeEvent);
+}
+
 export function maxSeq(): number {
   if (pool) return pgEvents.at(-1)?.seq ?? 0;
   return Number((stmt('SELECT COALESCE(MAX(seq), 0) AS seq FROM events WHERE tenant_id = ?').get(TENANT) as { seq: number }).seq);

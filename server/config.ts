@@ -50,6 +50,9 @@ export const config = {
   /** Every stored row belongs to this tenant; servers with different tenants can share one database. */
   tenantId: tenantId(process.env.TENANT_ID),
   accessPassword: process.env.ACCESS_PASSWORD ?? '',
+  /** 'none' until a payment company is connected; 'mock' runs the full flow with a fake checkout page. */
+  billingProvider: process.env.BILLING_PROVIDER === 'mock' ? ('mock' as const) : ('none' as const),
+  billingWebhookSecret: process.env.BILLING_WEBHOOK_SECRET ?? '',
   publicUrl: (process.env.PUBLIC_URL ?? '').replace(/\/+$/, ''),
   /** stdio MCP servers run commands on this PC, so registering them must be switched on explicitly. */
   mcpAllowStdio: process.env.MCP_ALLOW_STDIO === '1',

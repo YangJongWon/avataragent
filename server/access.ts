@@ -1,5 +1,6 @@
 import { canSeeOffice, seesEverything } from '../shared/access.ts';
 import { canReadMessage } from '../shared/chat.ts';
+import { billingInfo } from './billing.ts';
 import type { OfficeEvent, Snapshot, Viewer } from '../shared/types.ts';
 import { store } from './store.ts';
 
@@ -27,7 +28,7 @@ export function canSeeEvent(viewer: Viewer, event: OfficeEvent) {
 
 export function snapshotFor(viewer: Viewer): Snapshot {
   const full = store.snapshot();
-  if (viewer.kind === 'owner') return full;
+  if (viewer.kind === 'owner') return { ...full, billing: billingInfo() };
 
   const offices = full.offices.filter((o) => canSeeOffice(viewer, o.id));
   const officeIds = new Set(offices.map((o) => o.id));
@@ -67,5 +68,9 @@ export function snapshotFor(viewer: Viewer): Snapshot {
     performance: full.performance.filter((r) => officeIds.has(r.officeId)),
     improvements: full.improvements.filter((i) => officeIds.has(i.officeId)),
     chat: full.chat.filter((m) => canReadMessage(viewer, full.plan, m, officeOfTask)),
+    people:
+      viewer.kind === 'share'
+        ? []
+        : full.people.filter((p) => p.officeIds === 'all' || p.officeIds.some((id) => officeIds.has(id))),
   };
 }

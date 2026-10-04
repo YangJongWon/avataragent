@@ -55,6 +55,10 @@ export const api = {
   updateOffice: (officeId: string, patch: { autoRun?: boolean; autoImprove?: boolean; budgetKrw?: number | null }) =>
     call('PUT', `/api/offices/${officeId}`, patch),
   setPlan: (plan: Plan) => call('PUT', '/api/plan', { plan }),
+  startCheckout: (plan: Plan) => call<{ url: string }>('POST', '/api/billing/checkout', { plan }),
+  cancelSubscription: () => call('POST', '/api/billing/cancel'),
+  resumeSubscription: () => call('POST', '/api/billing/resume'),
+  setAssignee: (taskId: string, assigneeId: string | null) => call('PUT', `/api/tasks/${taskId}/assignee`, { assigneeId }),
   createMember: (body: { loginId: string; name: string; password: string; role: ShareRole; officeIds: string[] | 'all' }) =>
     call<Member>('POST', '/api/members', body),
   updateMember: (memberId: string, patch: { name?: string; password?: string; role?: ShareRole; officeIds?: string[] | 'all'; disabled?: boolean }) =>

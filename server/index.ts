@@ -19,14 +19,16 @@ import { allowedModes, isToolMode, type McpServer } from '../shared/mcp.ts';
 import { isExportFormat } from '../shared/design.ts';
 import { isPersonality } from '../shared/personality.ts';
 import { parsePlaybook, playbookChanges } from '../shared/playbook.ts';
-import { isPlan } from '../shared/plans.ts';
+import { isPlan, planOf } from '../shared/plans.ts';
+import { exportActivity } from './activity.ts';
+import { billingInfo, billingProvider, billingTick, cancelSubscription, completeMockCheckout, handleWebhook, resumeSubscription, startCheckout } from './billing.ts';
 import { isSkin } from '../shared/skins.ts';
 import { TEAMS } from '../shared/teams.ts';
 import type { AiMode, ServerMessage, ShareLink, ShareRole, TeamId, Viewer } from '../shared/types.ts';
 import { canSeeEvent, ForbiddenError, snapshotFor } from './access.ts';
 import { listModels } from './ai.ts';
 import { authEnabled, authRouter, stillValid, viewerOf } from './auth.ts';
-import { chatNews, postChat } from './chat.ts';
+import { chatNews, postChat, setAssignee } from './chat.ts';
 import { config } from './config.ts';
 import { closeStorage, storageInfo } from './db.ts';
 import { createMember, deleteMember, updateMember } from './members.ts';
@@ -43,6 +45,15 @@ import { toStepInputs, workflowRuntime } from './workflow-runtime.ts';
 
 const app = express();
 app.set('trust proxy', 'loopback');
+// Payment companies call this without a session; the provider verifies the signature instead.
+app.post('/api/billing/webhook/:provider', express.text({ type: '*/*', limit: '256kb' }), async (req, res) => {
+  try {
+    await handleWebhook(req.params.provider, typeof req.body === 'string' ? req.body : '', req.headers);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
 app.use(authRouter());
 app.use(express.json({ limit: '1mb' }));
 
@@ -726,6 +737,7 @@ app.get(OAUTH_CALLBACK_PATH, async (req, res) => {
 app.put('/api/plan', (req, res) => {
   guard(res, 'owner');
   if (!isPlan(req.body?.plan)) throw new Error('알 수 없는 플랜이에요.');
+  if (billingProvider()) throw new Error('결제가 연결되어 있어서 플랜은 결제나 구독 해지로 바꿔요.');
   store.mutate((s) => {
     s.plan = req.body.plan;
   });
@@ -756,6 +768,76 @@ app.delete('/api/members/:id', (req, res) => {
 app.post('/api/chat', (req, res) => {
   res.json(postChat(viewerOfRes(res), req.body ?? {}));
 });
+
+app.put('/api/tasks/:id/assignee', (req, res) => {
+  guard(res, 'operate', officeOfTask(req.params.id));
+  const assigneeId = req.body?.assigneeId;
+  res.json(setAssignee(req.params.id, typeof assigneeId === 'string' && assigneeId ? assigneeId : null));
+});
+
+app.get('/api/activity/export', async (req, res) => {
+  guard(res, 'owner');
+  const file = await exportActivity(req.query.from, req.query.to, req.query.format);
+  res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+  res.type(file.type).send(file.body);
+});
+
+app.post('/api/billing/checkout', async (req, res) => {
+  guard(res, 'owner');
+  if (!isPlan(req.body?.plan)) throw new Error('알 수 없는 플랜이에요.');
+  res.json(await startCheckout(req.body.plan));
+});
+
+app.post('/api/billing/cancel', async (_req, res) => {
+  guard(res, 'owner');
+  await cancelSubscription();
+  res.json(billingInfo());
+});
+
+app.post('/api/billing/resume', async (_req, res) => {
+  guard(res, 'owner');
+  await resumeSubscription();
+  res.json(billingInfo());
+});
+
+app.get('/billing/mock-checkout/:id', (req, res) => {
+  guard(res, 'owner');
+  if (billingProvider()?.id !== 'mock') throw new Error('모의 결제가 켜져 있지 않아요.');
+  const checkout = store.data.billing.checkouts.find((c) => c.id === req.params.id && c.status === 'open');
+  if (!checkout) return res.redirect('/?billing=expired');
+  res.type('html').send(mockCheckoutPage(checkout.id, planOf(checkout.plan).label, checkout.amountKrw));
+});
+
+app.post('/billing/mock-checkout/:id', express.urlencoded({ extended: false }), async (req, res) => {
+  guard(res, 'owner');
+  if (billingProvider()?.id !== 'mock') throw new Error('모의 결제가 켜져 있지 않아요.');
+  const outcome = req.body?.outcome === 'fail' ? 'fail' : req.body?.outcome === 'cancel' ? 'cancel' : 'pay';
+  await completeMockCheckout(req.params.id, outcome);
+  res.redirect(`/?billing=${outcome === 'pay' ? 'success' : outcome === 'fail' ? 'failed' : 'canceled'}`);
+});
+
+function mockCheckoutPage(id: string, planLabel: string, amountKrw: number) {
+  return `<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>모의 결제</title>
+<style>
+  body { margin: 0; min-height: 100dvh; display: grid; place-items: center; background: #2b2438; font-family: system-ui, sans-serif; }
+  form { background: #fff8ec; border: 3px solid #3a3045; box-shadow: 6px 6px 0 #1a1522; padding: 24px; width: min(340px, 86vw); }
+  h1 { margin: 0 0 6px; font-size: 18px; } p { color: #5b4f63; font-size: 14px; }
+  button { display: block; width: 100%; margin-top: 10px; font-size: 15px; padding: 10px; border: 2px solid #3a3045; box-shadow: 3px 3px 0 #3a3045; cursor: pointer; background: #fff; }
+  button.pay { background: #f4c542; }
+</style></head>
+<body>
+<form method="post" action="/billing/mock-checkout/${encodeURIComponent(id)}">
+  <h1>🧪 모의 결제</h1>
+  <p>실제 돈은 나가지 않아요. 결제사 연결 전에 흐름을 시험하는 화면이에요.</p>
+  <p><b>${planLabel} 플랜</b> · 월 ${amountKrw.toLocaleString('ko-KR')}원</p>
+  <button class="pay" name="outcome" value="pay">결제 성공으로 처리</button>
+  <button name="outcome" value="fail">결제 실패로 처리</button>
+  <button name="outcome" value="cancel">취소하고 돌아가기</button>
+</form>
+</body></html>`;
+}
 
 const SHARE_ROLE_IDS: ShareRole[] = ['viewer', 'operator', 'manager'];
 const MAX_SHARES = 30;
@@ -849,6 +931,7 @@ function background(job: () => Promise<void>, label: string): void {
 }
 
 setInterval(() => background(() => workflowRuntime.tick(), '자동 확인'), config.autoRunIntervalSec * 1000);
+setInterval(() => background(() => billingTick(), '구독 확인'), 60 * 60 * 1000);
 
 store.subscribe((message) => {
   if (message.kind === 'event') chatNews(message.data);

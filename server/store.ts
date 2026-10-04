@@ -11,6 +11,7 @@ import {
 import type { McpServer } from '../shared/mcp.ts';
 import { MAX_PERF_RECORDS, type ImprovementLog, type PerfRecord } from '../shared/performance.ts';
 import { isPlan, type Plan } from '../shared/plans.ts';
+import { freeSubscription, type Checkout, type Invoice, type Subscription } from '../shared/billing.ts';
 import type { StoredMember } from './members.ts';
 import { DEFAULT_PERSONALITY_BY_ROLE, isPersonality } from '../shared/personality.ts';
 import { isSkin } from '../shared/skins.ts';
@@ -70,7 +71,10 @@ export interface PersistedState {
   plan: Plan;
   members: StoredMember[];
   chat: ChatMessage[];
+  billing: { subscription: Subscription; invoices: Invoice[]; checkouts: Checkout[]; processedEvents: string[] };
 }
+
+const freshBilling = (): PersistedState['billing'] => ({ subscription: freeSubscription(config.billingProvider), invoices: [], checkouts: [], processedEvents: [] });
 
 function defaultOffices(): Office[] {
   return TEAM_ORDER.map((team) => ({
@@ -145,6 +149,7 @@ function fresh(): PersistedState {
     plan: 'personal',
     members: [],
     chat: [],
+    billing: freshBilling(),
   };
 }
 
@@ -212,6 +217,7 @@ function normalize(saved: PersistedState) {
   if (!isPlan(saved.plan)) saved.plan = 'personal';
   saved.members ??= [];
   saved.chat ??= [];
+  saved.billing ??= freshBilling();
   for (const agent of saved.agents) {
     if (!isPersonality(agent.personality)) agent.personality = DEFAULT_PERSONALITY_BY_ROLE[agent.role];
   }
@@ -288,6 +294,10 @@ class Store {
       improvements: s.improvements,
       plan: s.plan,
       members: s.members.map(({ passwordHash: _hash, sessionVersion: _version, ...member }) => member),
+      people: [
+        { id: 'owner', name: '소유자', officeIds: 'all' as const },
+        ...s.members.filter((m) => !m.disabled).map((m) => ({ id: m.id, name: m.name, officeIds: m.officeIds })),
+      ],
       chat: s.chat,
       safetyRules: ORGANIZATION_SAFETY_RULES,
       helpTimeoutSec: config.helpTimeoutSec,

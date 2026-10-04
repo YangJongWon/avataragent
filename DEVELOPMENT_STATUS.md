@@ -153,6 +153,8 @@
 - 바로가기: MCP 프리셋마다 키·앱 발급 페이지 링크, 모델 관리 회사 카드에 API 키 발급·결제·가격표 링크, OpenAI 호환 서비스 빠른 채우기(DeepSeek·Mistral·OpenRouter·Groq·Upstage·Ollama).
 - 성과 기록과 자율 개선(`shared/performance.ts`): 조사 단계는 소요 시간·도구 호출·정확도(검수 응답의 `research_accuracy`), 검수 단계는 합/불·점수·사유·시도 차수·사용자 판정을 `performance`(최근 400건, `state_meta`)에 남긴다. 기록은 작성·조사 프롬프트의 지난 교훈, 같은 역할 중 성과 좋은 직원 우선 배정(`rankAgents`), 규칙 기반 개선 제안(`suggestImprovements`)에 쓰인다. 사무실 `autoImprove`가 켜져 있으면 업무 완료 때 비용 중립 제안(성격 변경)만 자동 반영하고 `improvements`에 남긴다. 화면은 "성과·개선" 탭.
 - 플랜·구성원·채팅(`shared/plans.ts`, `server/members.ts`, `server/chat.ts`, `shared/chat.ts`): 플랜(personal/team/business)은 기능 스위치이며 결제 미연동. 구성원 계정은 scrypt 해시, `office_member` 쿠키(`id.sessionVersion.HMAC`, 키는 ACCESS_PASSWORD 기반)로 로그인하고 권한은 공유 링크 역할·사무실 범위를 재사용한다(`Viewer.kind = 'member'`). 비밀번호 변경·사용 중지는 sessionVersion을 올려 세션을 끊고, 역할·범위 변경은 WebSocket을 닫아 다시 연결하게 한다. 채팅은 소유자·구성원만, 채널(company / office:id(비즈니스) / task:id)과 업무 카드는 사무실 범위로 거른다. 도움·승인·완료·중단 이벤트는 시스템 메시지로 올린다. 채팅은 프롬프트에 넣지 않는다. 테스트 실행 중(`NODE_TEST_CONTEXT`)에는 `.env`를 읽지 않는다.
+- 업무 담당자·활동 기록(`server/chat.ts` `setAssignee`, `server/activity.ts`): 비즈니스 플랜 전용. 담당자는 `Task.assigneeId`('owner' 또는 그 사무실을 볼 수 있는 구성원 id)이고 `PUT /api/tasks/:id/assignee`(업무 처리 권한)로 바꾼다. 스냅샷 `people`은 소유자에게는 전원, 구성원에게는 사무실이 겹치는 사람만, 공유 링크에는 비워서 보낸다. 활동 기록은 `GET /api/activity/export?from&to&format=csv|json`(소유자, UTC 날짜, 최대 5만 건, CSV는 BOM 포함)로 `eventsBetween`에서 읽는다.
+- 결제(`shared/billing.ts`, `server/billing.ts`): `BILLING_PROVIDER`가 없으면(none) 플랜을 바로 바꾸고, 설정되면 `PUT /api/plan`을 막고 플랜은 결제 이벤트로만 바뀐다(`applyBillingEvent`, 이벤트 id로 중복 무시). 결제사 어댑터는 `BillingProvider`(createCheckout / cancelSubscription / resumeSubscription / parseWebhook(서명 검증), 선택적으로 renewal)를 구현해 `PROVIDERS`에 넣으면 된다. 웹훅은 `POST /api/billing/webhook/:provider`(로그인 앞단, 원문 본문으로 서명 검증)이며 비밀키는 `BILLING_WEBHOOK_SECRET`. 지금은 `mock`만 있다(`/billing/mock-checkout/:id` 결제 화면, `x-mock-signature` HMAC, 1시간마다 `billingTick`이 갱신을 흉내 냄). 해지는 기간 끝에, 결제 실패는 7일 유예 후 개인 플랜으로 내린다. 실제 결제사(토스페이먼츠 등) 연결과 세금계산서·환불은 아직 없다.
 - 플레이북 공유 1단계(`shared/playbook.ts`): 사무실 설정(역할별 성격·규칙·모델 등급)과 성과표를 JSON으로 내보내고(클라이언트에서 생성), 가져올 때 `parsePlaybook`으로 검증 → 변경 미리보기·위험 문구 경고 → `POST /api/offices/:id/playbook`으로 적용(같은 팀만, 경고가 있으면 `acceptWarnings` 필요). 다음 단계 후보: 한 서버의 여러 테넌트 비교 화면, 공개 갤러리와 A/B 시험 적용.
 - 모델 자동 채우기: `POST /api/models/advise`(`server/model-advice.ts`). 키가 있으면 등록할 모델 자신에게(실패하면 같은 회사의 가장 싼 모델에게) JSON으로 이름·등급·단가를 묻고(`direct` 요청이라 시뮬레이션 모드에서도 실제 호출), 없으면 내장 참고 가격표, 그다음 이름 규칙으로 추정한다. 참고 가격표는 기억 기반 값이라 화면에서 확인을 권한다.
 - 직원 성격(`shared/personality.ts`): 6가지 스타일을 직원마다 고르고 시스템 프롬프트의 "[일하는 스타일]"로 넣는다. 기존 직원은 역할별 기본값으로 채운다.
@@ -202,8 +204,8 @@
 
 ### 4단계 이후
 
-- 팀원 계정 초대 (지금은 링크 공유 방식의 사무실별 권한만 있다)
-- 감사 로그와 손익 이력 내보내기
+- 실제 결제사 어댑터(토스페이먼츠·Stripe), 환불·세금계산서
+- 구성원 초대 메일 (지금은 소유자가 계정을 직접 만든다)
 - 공식 미소녀 스킨 팩 제작
 
 ---
