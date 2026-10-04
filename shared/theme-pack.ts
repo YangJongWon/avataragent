@@ -351,6 +351,7 @@ export interface ThemeSummary {
   author: string;
   license: string;
   description: string;
+  preview: string;
   hasCss: boolean;
   characters: { id: string; name: string }[];
 }
@@ -362,6 +363,7 @@ export const themeSummary = (theme: ThemeManifest): ThemeSummary => ({
   author: theme.author,
   license: theme.license,
   description: theme.description,
+  preview: theme.preview,
   hasCss: theme.css !== null,
   characters: theme.characters.map((c) => ({ id: c.id, name: c.name })),
 });

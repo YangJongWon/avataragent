@@ -1,0 +1,169 @@
+import { STATE_FALLBACK, type StateClip, type ThemeState } from '../../../shared/theme-pack.ts';
+import { gridSize, type StudioCharacter } from './buildPackage.ts';
+
+/** States grouped the way people think about them; every name here is a ThemeState. */
+export const STATE_GROUPS: { label: string; states: { id: ThemeState; label: string }[] }[] = [
+  {
+    label: '기본',
+    states: [
+      { id: 'idle', label: '서 있기 (필수)' },
+      { id: 'walk', label: '걷기' },
+      { id: 'sit', label: '앉기' },
+    ],
+  },
+  {
+    label: '직원 상태',
+    states: [
+      { id: 'working', label: '일하는 중' },
+      { id: 'collaborating', label: '협업 중' },
+      { id: 'waiting', label: '기다리는 중' },
+      { id: 'awaiting_approval', label: '승인 대기' },
+      { id: 'help_requested', label: '도움 요청' },
+      { id: 'paused', label: '일시정지' },
+      { id: 'error', label: '오류' },
+    ],
+  },
+  {
+    label: '표정',
+    states: [
+      { id: 'smile', label: '웃음' },
+      { id: 'focus', label: '집중' },
+      { id: 'sweat', label: '진땀' },
+      { id: 'troubled', label: '곤란' },
+      { id: 'panic', label: '당황' },
+      { id: 'thanks', label: '고마움' },
+      { id: 'celebrate', label: '축하' },
+    ],
+  },
+  {
+    label: '업무 순간',
+    states: [
+      { id: 'step.brief', label: '과제 접수' },
+      { id: 'step.research', label: '자료 조사' },
+      { id: 'step.draft', label: '초안 작성' },
+      { id: 'step.review', label: '검토' },
+      { id: 'review.rejected', label: '반려당함' },
+      { id: 'task.approved', label: '업무 승인' },
+      { id: 'budget.exceeded', label: '예산 초과' },
+    ],
+  },
+];
+
+export const stateLabel = (id: ThemeState) => STATE_GROUPS.flatMap((g) => g.states).find((s) => s.id === id)?.label ?? id;
+
+interface Props {
+  character: StudioCharacter;
+  sheetUrl: string;
+  state: ThemeState;
+  onState: (state: ThemeState) => void;
+  onChange: (patch: Partial<StudioCharacter>) => void;
+}
+
+export function SheetEditor({ character, sheetUrl, state, onState, onChange }: Props) {
+  const { cols, rows } = gridSize(character);
+  const clip = character.states[state];
+  const fallback = STATE_FALLBACK[state];
+
+  const setClip = (next: StateClip | null) => {
+    const states = { ...character.states };
+    if (next && next.frames.length) states[state] = next;
+    else delete states[state];
+    onChange({ states });
+  };
+  const addFrame = (frame: string) => setClip({ frames: [...(clip?.frames ?? []), frame], fps: clip?.fps ?? 6, loop: clip?.loop ?? true });
+  const num = (value: string, fallbackValue: number) => (Number.isFinite(Number(value)) && value !== '' ? Number(value) : fallbackValue);
+
+  return (
+    <div className="sheet-editor">
+      <div className="row studio-fields">
+        <label>
+          프레임 너비
+          <input type="number" min={1} value={character.frameW} onChange={(e) => onChange({ frameW: num(e.target.value, 0) })} />
+        </label>
+        <label>
+          프레임 높이
+          <input type="number" min={1} value={character.frameH} onChange={(e) => onChange({ frameH: num(e.target.value, 0) })} />
+        </label>
+        <label>
+          크기 배율
+          <input type="number" min={0.05} max={16} step={0.05} value={character.scale} onChange={(e) => onChange({ scale: num(e.target.value, 1) })} />
+        </label>
+        <label title="프레임 안에서 발이 닿는 위치 (0~1)">
+          발 위치 y
+          <input type="number" min={0} max={1} step={0.01} value={character.anchor.y} onChange={(e) => onChange({ anchor: { ...character.anchor, y: num(e.target.value, 1) } })} />
+        </label>
+        <label title="프레임 안에서 머리 꼭대기 위치 (0~1). 모자를 여기에 얹어요">
+          머리 위치 y
+          <input type="number" min={0} max={1} step={0.01} value={character.head.y} onChange={(e) => onChange({ head: { ...character.head, y: num(e.target.value, 0) } })} />
+        </label>
+        <span className="muted small">
+          {cols}×{rows} = {cols * rows}칸
+        </span>
+      </div>
+
+      <div className="state-picker">
+        {STATE_GROUPS.map((group) => (
+          <div key={group.label} className="state-group">
+            <span className="muted small">{group.label}</span>
+            {group.states.map((s) => (
+              <button key={s.id} className={`state-chip${s.id === state ? ' selected' : ''}${character.states[s.id] ? ' filled' : ''}`} onClick={() => onState(s.id)}>
+                {s.label}
+                {character.states[s.id] && <b> {character.states[s.id]!.frames.length}</b>}
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      <div className="state-clip">
+        <b>{stateLabel(state)}</b>
+        {clip ? (
+          <>
+            <span className="clip-frames">
+              {clip.frames.map((f, i) => (
+                <button key={`${f}-${i}`} className="state-chip filled" title="눌러서 빼기" onClick={() => setClip({ ...clip, frames: clip.frames.filter((_, j) => j !== i) })}>
+                  {f}
+                </button>
+              ))}
+            </span>
+            <label>
+              초당
+              <input type="number" min={1} max={30} value={clip.fps} onChange={(e) => setClip({ ...clip, fps: num(e.target.value, 6) })} /> 장
+            </label>
+            <label className="toggle">
+              <input type="checkbox" checked={clip.loop} onChange={(e) => setClip({ ...clip, loop: e.target.checked })} />
+              반복
+            </label>
+            <button className="pixel-btn small" onClick={() => setClip(null)}>
+              비우기
+            </button>
+          </>
+        ) : (
+          <span className="muted small">
+            아래 칸을 눌러 프레임을 넣으세요.{fallback && ` 비워 두면 '${stateLabel(fallback)}' 동작으로 보여요.`}
+          </span>
+        )}
+      </div>
+
+      <div className="sheet-grid" style={{ aspectRatio: `${character.sheet.w} / ${character.sheet.h}` }}>
+        <img src={sheetUrl} alt="" draggable={false} />
+        {Array.from({ length: cols * rows }, (_, i) => (
+          <button
+            key={i}
+            className={`sheet-cell${clip?.frames.includes(`f${i}`) ? ' used' : ''}`}
+            style={{
+              left: `${((i % cols) * character.frameW * 100) / character.sheet.w}%`,
+              top: `${(Math.floor(i / cols) * character.frameH * 100) / character.sheet.h}%`,
+              width: `${(character.frameW * 100) / character.sheet.w}%`,
+              height: `${(character.frameH * 100) / character.sheet.h}%`,
+            }}
+            title={`f${i}`}
+            onClick={() => addFrame(`f${i}`)}
+          >
+            {i}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}

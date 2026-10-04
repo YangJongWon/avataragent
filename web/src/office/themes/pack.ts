@@ -96,13 +96,19 @@ export async function loadPackTheme(id: string, base: string): Promise<OfficeThe
   if (!response.ok) throw new Error(`theme.json ${response.status}`);
   const theme = parseThemeManifest(await response.json());
   if (theme.id !== id) throw new Error(`theme id mismatch: ${theme.id}`);
-
   const url = (path: string) => `${base}/${path.split('/').map(encodeURIComponent).join('/')}`;
+  return createPackTheme(theme, (path) => Assets.load<Texture>(url(path)));
+}
+
+/** Gets the texture for a package file; installed themes load by URL, the theme studio from images in memory. */
+export type TextureLoader = (path: string) => Promise<Texture>;
+
+export async function createPackTheme(theme: ThemeManifest, loadTexture: TextureLoader): Promise<OfficeTheme> {
   const images = [...new Set([...theme.scene.layers.map((l) => l.image), ...theme.characters.map((c) => c.sheet)])];
   const loaded = new Map<string, Texture>();
   await Promise.all(
     images.map(async (path) => {
-      const texture = await Assets.load<Texture>(url(path));
+      const texture = await loadTexture(path);
       texture.source.scaleMode = theme.scene.scaleMode;
       loaded.set(path, texture);
     }),

@@ -1,0 +1,274 @@
+.studio {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.studio-forms {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.studio-side {
+  min-width: 0;
+}
+
+.studio-sticky {
+  position: sticky;
+  top: 12px;
+}
+
+.studio-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: flex-end;
+}
+
+.studio-fields label,
+.studio-wide {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.studio-fields input[type='number'] {
+  width: 80px;
+}
+
+.studio-wide {
+  margin-top: 8px;
+}
+
+.studio-wide textarea {
+  width: 100%;
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+.studio-layers {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.studio-layers li {
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.studio-layers img {
+  width: 64px;
+  height: 31px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.studio-layers input[type='number'] {
+  width: 60px;
+}
+
+.studio-targets,
+.state-picker,
+.studio-characters,
+.studio-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.state-picker {
+  flex-direction: column;
+  align-items: stretch;
+  margin: 10px 0;
+}
+
+.state-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.state-group > .muted {
+  width: 64px;
+}
+
+.state-chip {
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.state-chip.filled {
+  background: color-mix(in srgb, var(--accent) 18%, var(--paper));
+}
+
+.state-chip.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.state-clip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.state-clip input[type='number'] {
+  width: 48px;
+}
+
+.clip-frames {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.sheet-grid {
+  position: relative;
+  width: 100%;
+  max-height: 420px;
+  background: repeating-conic-gradient(#ddd 0% 25%, #fff 0% 50%) 0 0 / 16px 16px;
+  border: 1px solid var(--line);
+}
+
+.sheet-grid img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.sheet-cell {
+  position: absolute;
+  border: 1px dashed rgba(60, 60, 90, 0.45);
+  background: transparent;
+  color: rgba(40, 40, 70, 0.6);
+  font-size: 10px;
+  text-align: left;
+  vertical-align: top;
+  padding: 1px 3px;
+  cursor: pointer;
+}
+
+.sheet-cell:hover {
+  background: rgba(255, 220, 80, 0.25);
+}
+
+.sheet-cell.used {
+  background: rgba(80, 140, 255, 0.25);
+  border-style: solid;
+}
+
+.studio-preview {
+  position: relative;
+  border: 2px solid var(--line);
+  margin: 8px 0;
+}
+
+.studio-preview-head {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.studio-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+
+.studio-overlay.placing {
+  cursor: crosshair;
+}
+
+.studio-overlay text {
+  font-size: 13px;
+  font-weight: bold;
+  text-anchor: middle;
+  fill: #fff;
+  stroke: #2b2b3a;
+  stroke-width: 3px;
+  paint-order: stroke;
+}
+
+.studio-marker circle {
+  stroke: #fff;
+  stroke-width: 2px;
+}
+
+.studio-marker.seat circle {
+  fill: #3498db;
+}
+
+.studio-marker.lounge circle {
+  fill: #27ae60;
+}
+
+.studio-marker.door circle {
+  fill: #e67e22;
+}
+
+.studio-spot rect {
+  fill: rgba(255, 255, 255, 0.08);
+  stroke: #f1c40f;
+  stroke-width: 2px;
+  stroke-dasharray: 6 4;
+}
+
+.studio-spot text {
+  text-anchor: start;
+}
+
+.studio-spot.active rect {
+  stroke: #e74c3c;
+  fill: rgba(231, 76, 60, 0.15);
+}
+
+.studio-drag {
+  fill: rgba(231, 76, 60, 0.2);
+  stroke: #e74c3c;
+  stroke-width: 2px;
+}
+
+.studio-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  color: #fff;
+  font-size: 13px;
+  pointer-events: none;
+}
+
+@media (max-width: 900px) {
+  .studio {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-sticky {
+    position: static;
+  }
+}

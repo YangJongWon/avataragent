@@ -1,0 +1,82 @@
+.themes-head {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.theme-grid {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  border: 2px solid var(--line);
+  background: var(--paper);
+}
+
+.theme-card.current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.theme-preview {
+  aspect-ratio: 1000 / 480;
+  background: var(--bg);
+  border-bottom: 2px solid var(--line);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.theme-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+}
+
+.theme-preview-builtin {
+  font-size: 40px;
+}
+
+.theme-body {
+  padding: 8px 10px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.theme-body p {
+  margin: 0;
+}
+
+.theme-badge {
+  align-self: flex-start;
+  font-size: 11px;
+  padding: 1px 6px;
+  border: 1px solid var(--muted);
+  color: var(--muted);
+}
+
+.theme-actions {
+  padding: 0 10px 10px;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.theme-actions a.pixel-btn {
+  color: inherit;
+  text-decoration: none;
+}
+
+.pixel-btn.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
