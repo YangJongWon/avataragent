@@ -1532,6 +1532,149 @@ p.plan-note {
 .perf-tag.ok {
   background: #dff3d8;
 }
+.chat-btn {
+  position: relative;
+}
+.chat-unread {
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: #e0533d;
+  color: #fff;
+  font-size: 11px;
+}
+.chat-panel {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 60;
+  width: min(380px, calc(100vw - 24px));
+  height: min(560px, calc(100dvh - 90px));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: #fffdf5;
+}
+.chat-head {
+  display: flex;
+  gap: 6px;
+}
+.chat-head select {
+  flex: 1;
+  min-width: 0;
+}
+.chat-thread-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px;
+  border: 2px solid var(--line);
+  background: #fff;
+}
+.chat-msg {
+  align-self: flex-start;
+  max-width: 85%;
+  padding: 4px 8px;
+  border: 2px solid var(--line);
+  background: #f7f3e8;
+}
+.chat-msg.mine {
+  align-self: flex-end;
+  background: #fff3c4;
+}
+.chat-msg.system {
+  align-self: stretch;
+  max-width: none;
+  background: #e8f1fb;
+  border-style: dashed;
+}
+.chat-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.chat-task {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  margin-top: 4px;
+  padding: 4px 6px;
+  border: 2px solid var(--line);
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+.chat-input {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.chat-input textarea {
+  flex: 1;
+  resize: none;
+}
+.chat-note {
+  margin: 0;
+}
+.plan-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+.plan-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border: 3px solid var(--line);
+  background: #fffdf5;
+  text-align: left;
+  cursor: pointer;
+}
+.plan-option.selected {
+  background: #fff3c4;
+  box-shadow: 3px 3px 0 var(--line);
+}
+.plan-emoji {
+  font-size: 22px;
+}
+.member-form {
+  display: grid;
+  gap: 6px;
+  max-width: 520px;
+  margin-bottom: 10px;
+}
+.member-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.member-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 2px solid var(--line);
+  background: #fffdf5;
+}
+.member-row > div:first-child {
+  flex: 1 1 200px;
+}
+.member-row.disabled {
+  opacity: 0.6;
+}
 .playbook-preview {
   margin-top: 10px;
   padding-top: 8px;

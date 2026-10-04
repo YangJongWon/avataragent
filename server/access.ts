@@ -1,4 +1,5 @@
 import { canSeeOffice, seesEverything } from '../shared/access.ts';
+import { canReadMessage } from '../shared/chat.ts';
 import type { OfficeEvent, Snapshot, Viewer } from '../shared/types.ts';
 import { store } from './store.ts';
 
@@ -19,7 +20,7 @@ export function eventOfficeId(event: OfficeEvent): string | null {
 
 export function canSeeEvent(viewer: Viewer, event: OfficeEvent) {
   if (viewer.kind === 'owner') return true;
-  if (event.type.startsWith('share.')) return false;
+  if (event.type.startsWith('share.') || event.type.startsWith('member.')) return false;
   const officeId = eventOfficeId(event);
   return officeId ? canSeeOffice(viewer, officeId) : seesEverything(viewer);
 }
@@ -39,8 +40,10 @@ export function snapshotFor(viewer: Viewer): Snapshot {
     envProvider: _envProvider,
     mcpServers: _mcpServers,
     mcpStdioAllowed: _mcpStdioAllowed,
+    members: _members,
     ...rest
   } = full;
+  const officeOfTask = (taskId: string) => full.tasks.find((t) => t.id === taskId)?.officeId ?? null;
   return {
     ...rest,
     viewer,
@@ -63,5 +66,6 @@ export function snapshotFor(viewer: Viewer): Snapshot {
     recommendations: hasTeam('welfare') ? full.recommendations : [],
     performance: full.performance.filter((r) => officeIds.has(r.officeId)),
     improvements: full.improvements.filter((i) => officeIds.has(i.officeId)),
+    chat: full.chat.filter((m) => canReadMessage(viewer, full.plan, m, officeOfTask)),
   };
 }

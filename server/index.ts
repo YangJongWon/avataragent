@@ -19,14 +19,17 @@ import { allowedModes, isToolMode, type McpServer } from '../shared/mcp.ts';
 import { isExportFormat } from '../shared/design.ts';
 import { isPersonality } from '../shared/personality.ts';
 import { parsePlaybook, playbookChanges } from '../shared/playbook.ts';
+import { isPlan } from '../shared/plans.ts';
 import { isSkin } from '../shared/skins.ts';
 import { TEAMS } from '../shared/teams.ts';
 import type { AiMode, ServerMessage, ShareLink, ShareRole, TeamId, Viewer } from '../shared/types.ts';
 import { canSeeEvent, ForbiddenError, snapshotFor } from './access.ts';
 import { listModels } from './ai.ts';
 import { authEnabled, authRouter, stillValid, viewerOf } from './auth.ts';
+import { chatNews, postChat } from './chat.ts';
 import { config } from './config.ts';
 import { closeStorage, storageInfo } from './db.ts';
+import { createMember, deleteMember, updateMember } from './members.ts';
 import { applyImprovement, autoImproveOffice, setActionEnabled, simulateInquiry, simulateMail } from './orchestrator.ts';
 import { designReport, exportCapabilities } from './exports/designer.ts';
 import { answerHelp } from './help.ts';
@@ -720,6 +723,40 @@ app.get(OAUTH_CALLBACK_PATH, async (req, res) => {
   }
 });
 
+app.put('/api/plan', (req, res) => {
+  guard(res, 'owner');
+  if (!isPlan(req.body?.plan)) throw new Error('알 수 없는 플랜이에요.');
+  store.mutate((s) => {
+    s.plan = req.body.plan;
+  });
+  store.emit('plan.changed', { payload: { plan: req.body.plan } });
+  closeRevokedSockets();
+  res.json({ plan: store.data.plan });
+});
+
+app.post('/api/members', (req, res) => {
+  guard(res, 'owner');
+  res.json(createMember(req.body ?? {}));
+});
+
+app.put('/api/members/:id', (req, res) => {
+  guard(res, 'owner');
+  const member = updateMember(req.params.id, req.body ?? {});
+  closeRevokedSockets();
+  res.json(member);
+});
+
+app.delete('/api/members/:id', (req, res) => {
+  guard(res, 'owner');
+  deleteMember(req.params.id);
+  closeRevokedSockets();
+  res.json({ ok: true });
+});
+
+app.post('/api/chat', (req, res) => {
+  res.json(postChat(viewerOfRes(res), req.body ?? {}));
+});
+
 const SHARE_ROLE_IDS: ShareRole[] = ['viewer', 'operator', 'manager'];
 const MAX_SHARES = 30;
 
@@ -812,6 +849,10 @@ function background(job: () => Promise<void>, label: string): void {
 }
 
 setInterval(() => background(() => workflowRuntime.tick(), '자동 확인'), config.autoRunIntervalSec * 1000);
+
+store.subscribe((message) => {
+  if (message.kind === 'event') chatNews(message.data);
+});
 
 server.listen(config.port, () => {
   console.log(

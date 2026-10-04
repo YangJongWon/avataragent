@@ -2,6 +2,7 @@ import type { TaskDesigns } from './design.ts';
 import type { McpServer, PlannedAction } from './mcp.ts';
 import type { ImprovementLog, PerfRecord } from './performance.ts';
 import type { Personality } from './personality.ts';
+import type { Plan } from './plans.ts';
 import type { Company, ModelEntry } from './models.ts';
 import type { Skin } from './skins.ts';
 
@@ -275,14 +276,43 @@ export interface ShareLink {
   lastUsedAt: string | null;
 }
 
+/** A person with their own login. Permissions reuse the share roles and office scopes. */
+export interface Member {
+  id: string;
+  loginId: string;
+  name: string;
+  role: ShareRole;
+  officeIds: string[] | 'all';
+  disabled: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
 export type Viewer =
   | { kind: 'owner' }
-  | { kind: 'share'; shareId: string; name: string; role: ShareRole; officeIds: string[] | 'all' };
+  | { kind: 'share'; shareId: string; name: string; role: ShareRole; officeIds: string[] | 'all' }
+  | { kind: 'member'; memberId: string; name: string; role: ShareRole; officeIds: string[] | 'all' };
+
+export interface ChatMessage {
+  id: string;
+  /** 'company', 'office:<id>' or 'task:<id>'. */
+  channel: string;
+  author: { kind: 'owner' | 'member' | 'system'; id: string; name: string };
+  text: string;
+  /** Shows the task as a card under the text. */
+  taskId?: string;
+  at: string;
+}
 
 export interface Snapshot {
   viewer: Viewer;
   /** Owner only. */
   shares?: ShareLink[];
+  plan: Plan;
+  /** Owner only. */
+  members?: Member[];
+  /** Messages this viewer may read. */
+  chat: ChatMessage[];
   /** Owner only: base address to put in share links. */
   publicUrl?: string;
   companyName: string;

@@ -4,9 +4,12 @@ import type { McpServer, McpTool, McpToolMode, PlannedAction } from '../../share
 import { setCatalog, type ApiKind, type Company, type ModelEntry, type Tier } from '../../shared/models.ts';
 import type { Personality } from '../../shared/personality.ts';
 import type { Playbook, PlaybookChange } from '../../shared/playbook.ts';
+import type { Plan } from '../../shared/plans.ts';
 import type {
   Agent,
   AiMode,
+  ChatMessage,
+  Member,
   Interests,
   Office,
   OfficeEvent,
@@ -51,6 +54,13 @@ export const api = {
   deleteShare: (shareId: string) => call('DELETE', `/api/shares/${shareId}`),
   updateOffice: (officeId: string, patch: { autoRun?: boolean; autoImprove?: boolean; budgetKrw?: number | null }) =>
     call('PUT', `/api/offices/${officeId}`, patch),
+  setPlan: (plan: Plan) => call('PUT', '/api/plan', { plan }),
+  createMember: (body: { loginId: string; name: string; password: string; role: ShareRole; officeIds: string[] | 'all' }) =>
+    call<Member>('POST', '/api/members', body),
+  updateMember: (memberId: string, patch: { name?: string; password?: string; role?: ShareRole; officeIds?: string[] | 'all'; disabled?: boolean }) =>
+    call<Member>('PUT', `/api/members/${memberId}`, patch),
+  deleteMember: (memberId: string) => call('DELETE', `/api/members/${memberId}`),
+  postChat: (body: { channel: string; text: string; taskId?: string }) => call<ChatMessage>('POST', '/api/chat', body),
   applyPlaybook: (officeId: string, body: { playbook: Playbook; includeModel: boolean; acceptWarnings: boolean }) =>
     call<{ changes: PlaybookChange[] }>('POST', `/api/offices/${officeId}/playbook`, body),
   applyImprovement: (officeId: string, id: string) => call('POST', `/api/offices/${officeId}/improvements`, { id }),

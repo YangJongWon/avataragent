@@ -10,6 +10,8 @@ import {
 } from '../shared/models.ts';
 import type { McpServer } from '../shared/mcp.ts';
 import { MAX_PERF_RECORDS, type ImprovementLog, type PerfRecord } from '../shared/performance.ts';
+import { isPlan, type Plan } from '../shared/plans.ts';
+import type { StoredMember } from './members.ts';
 import { DEFAULT_PERSONALITY_BY_ROLE, isPersonality } from '../shared/personality.ts';
 import { isSkin } from '../shared/skins.ts';
 import { MAX_STAFF_PER_OFFICE, TEAM_ORDER, TEAMS } from '../shared/teams.ts';
@@ -18,6 +20,7 @@ import type {
   AiMode,
   Budget,
   CalendarEvent,
+  ChatMessage,
   Inquiry,
   Interests,
   Mail,
@@ -64,6 +67,9 @@ export interface PersistedState {
   mcpServers: McpServer[];
   performance: PerfRecord[];
   improvements: ImprovementLog[];
+  plan: Plan;
+  members: StoredMember[];
+  chat: ChatMessage[];
 }
 
 function defaultOffices(): Office[] {
@@ -136,6 +142,9 @@ function fresh(): PersistedState {
     mcpServers: [],
     performance: [],
     improvements: [],
+    plan: 'personal',
+    members: [],
+    chat: [],
   };
 }
 
@@ -200,6 +209,9 @@ function normalize(saved: PersistedState) {
   fillCatalog(saved);
   saved.performance ??= [];
   saved.improvements ??= [];
+  if (!isPlan(saved.plan)) saved.plan = 'personal';
+  saved.members ??= [];
+  saved.chat ??= [];
   for (const agent of saved.agents) {
     if (!isPersonality(agent.personality)) agent.personality = DEFAULT_PERSONALITY_BY_ROLE[agent.role];
   }
@@ -274,6 +286,9 @@ class Store {
       recommendations: s.recommendations,
       performance: s.performance,
       improvements: s.improvements,
+      plan: s.plan,
+      members: s.members.map(({ passwordHash: _hash, sessionVersion: _version, ...member }) => member),
+      chat: s.chat,
       safetyRules: ORGANIZATION_SAFETY_RULES,
       helpTimeoutSec: config.helpTimeoutSec,
       seq: this.seq,

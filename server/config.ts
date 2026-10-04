@@ -1,7 +1,10 @@
-try {
-  process.loadEnvFile('.env');
-} catch {
-  // .env is optional; defaults below run the mock provider.
+// Tests must never pick up the real DATABASE_URL or API keys from .env.
+if (!process.env.NODE_TEST_CONTEXT) {
+  try {
+    process.loadEnvFile('.env');
+  } catch {
+    // .env is optional; defaults below run the mock provider.
+  }
 }
 
 const num = (key: string, fallback: number) => {

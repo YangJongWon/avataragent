@@ -11,7 +11,11 @@ import { HireTab } from './components/HireTab.tsx';
 import { AgentCardModal, HelpDialog, NewOfficeModal, NewTaskModal, PlanEditModal, RulesModal } from './components/Modals.tsx';
 import { McpTab } from './components/McpTab.tsx';
 import { ModelsTab } from './components/ModelsTab.tsx';
+import { ChatPanel, isMine } from './components/ChatPanel.tsx';
+import { MembersTab } from './components/MembersTab.tsx';
 import { PerformanceTab } from './components/PerformanceTab.tsx';
+import { COMPANY_CHANNEL, taskChannel } from '../../shared/chat.ts';
+import { planHas } from '../../shared/plans.ts';
 import { ProfitTab } from './components/ProfitTab.tsx';
 import { ReportPanel } from './components/ReportPanel.tsx';
 import { OfficeTabMenu } from './components/OfficeTabMenu.tsx';
@@ -23,7 +27,7 @@ import { OfficeView } from './office/OfficeView.tsx';
 import { useDemoPlayback } from './demoPlayback.ts';
 import { useCompact } from './useCompact.ts';
 
-type Tab = 'office' | 'hire' | 'models' | 'mcp' | 'profit' | 'perf';
+type Tab = 'office' | 'hire' | 'models' | 'mcp' | 'profit' | 'perf' | 'members';
 type Dialog =
   | { kind: 'newTask' }
   | { kind: 'newOffice' }
@@ -64,6 +68,15 @@ export function App() {
   const closeTabMenu = useCallback(() => setTabMenu(null), []);
   const press = useRef<{ timer: number; x: number; y: number; fired: boolean } | null>(null);
   const [demo, setDemo] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatChannel, setChatChannel] = useState(COMPANY_CHANNEL);
+  const [chatSeenAt, setChatSeenAt] = useState(() => localStorage.getItem('chatSeenAt') ?? '');
+  const latestChatAt = snapshot?.chat?.at(-1)?.at ?? '';
+  useEffect(() => {
+    if (!chatOpen || !latestChatAt || latestChatAt <= chatSeenAt) return;
+    setChatSeenAt(latestChatAt);
+    localStorage.setItem('chatSeenAt', latestChatAt);
+  }, [chatOpen, latestChatAt, chatSeenAt]);
   const demoPress = useRef<number | null>(null);
   const compact = useCompact();
   const snapshotRef = useRef(snapshot);
@@ -157,7 +170,21 @@ export function App() {
   const isOwner = viewer.kind === 'owner';
   const office = snapshot.offices.find((o) => o.id === officeId) ?? snapshot.offices[0];
   const allowed = (action: Action) => can(viewer, action, office.id);
-  const denied = (what: string) => toast(`이 공유 링크로는 ${what}할 수 없어요.`, 'error');
+  const denied = (what: string) => toast(`지금 권한으로는 ${what}할 수 없어요.`, 'error');
+  const chatOn = planHas(snapshot.plan, 'chat') && viewer.kind !== 'share';
+  const unread = chatOn ? snapshot.chat.filter((m) => m.at > chatSeenAt && !isMine(snapshot, m)).length : 0;
+  const openChat = (channel: string) => {
+    setChatChannel(channel);
+    setChatOpen(true);
+  };
+  const openTask = (taskId: string) => {
+    const target = snapshot.tasks.find((t) => t.id === taskId);
+    if (!target) return;
+    setTab('office');
+    setOfficeId(target.officeId);
+    setSelectedTaskId(target.id);
+    if (compact) setDrawer('report');
+  };
   const team = TEAMS[office.team];
   const task =
     view.tasks.find((t) => t.id === selectedTaskId) ?? view.tasks.find((t) => ACTIVE.includes(t.status)) ?? view.tasks[0];
@@ -332,6 +359,7 @@ export function App() {
       onSelectTask={setSelectedTaskId}
       onHelp={() => setDialog({ kind: 'help' })}
       onError={showError}
+      onDiscuss={chatOn ? (taskId) => openChat(taskChannel(taskId)) : undefined}
     />
   );
 
@@ -348,6 +376,7 @@ export function App() {
               ['mcp', 'MCP 관리'],
               ['profit', '손익·결산'],
               ['perf', '성과·개선'],
+              ['members', '플랜·구성원'],
             ] as [Tab, string][]
           )
             .filter(([id]) => isOwner || id === 'office')
@@ -367,9 +396,14 @@ export function App() {
           <button className="main-tab help-btn" onClick={() => setShowHelp(true)} title="사용법 묻기">
             ❓ 도움말
           </button>
-          {viewer.kind === 'share' && (
+          {chatOn && (
+            <button className="main-tab chat-btn" onClick={() => (chatOpen ? setChatOpen(false) : openChat(chatChannel))} title="그룹 채팅">
+              💬 채팅{unread > 0 && <span className="chat-unread">{unread > 99 ? '99+' : unread}</span>}
+            </button>
+          )}
+          {viewer.kind !== 'owner' && (
             <span className="share-viewer" title={viewer.officeIds === 'all' ? '전체 사무실' : `${viewer.officeIds.length}개 사무실`}>
-              👀 {viewer.name} · {SHARE_ROLES[viewer.role].label}
+              {viewer.kind === 'member' ? '🙂' : '👀'} {viewer.name} · {SHARE_ROLES[viewer.role].label}
               <a href="/logout">나가기</a>
             </span>
           )}
@@ -510,6 +544,17 @@ export function App() {
       {showHelp && <HelpPanel tab={tab} officeId={office?.id} onClose={() => setShowHelp(false)} />}
       {tab === 'profit' && <ProfitTab snapshot={snapshot} onError={showError} onNotice={toast} />}
       {tab === 'perf' && <PerformanceTab snapshot={snapshot} officeId={officeId} onError={showError} onNotice={toast} />}
+      {tab === 'members' && <MembersTab snapshot={snapshot} onError={showError} onNotice={toast} />}
+      {chatOn && chatOpen && (
+        <ChatPanel
+          snapshot={snapshot}
+          channel={chatChannel}
+          onChannel={setChatChannel}
+          onOpenTask={openTask}
+          onClose={() => setChatOpen(false)}
+          onError={showError}
+        />
+      )}
 
       {dialog?.kind === 'newOffice' && (
         <NewOfficeModal

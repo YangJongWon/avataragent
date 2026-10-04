@@ -23,6 +23,8 @@ interface Props {
   onSelectTask: (id: string) => void;
   onHelp: () => void;
   onError: (message: string) => void;
+  /** Opens this task's conversation; absent when chat is not available to the viewer. */
+  onDiscuss?: (taskId: string) => void;
 }
 
 const renderMarkdown = (md: string) => DOMPurify.sanitize(marked.parse(md, { async: false }) as string);
@@ -64,7 +66,7 @@ function ActionList({ actions, editable, onToggle }: { actions: PlannedAction[];
   );
 }
 
-export function ReportPanel({ team, teamData, task, tasks, agents, events, canOperate, onSelectTask, onHelp, onError }: Props) {
+export function ReportPanel({ team, teamData, task, tasks, agents, events, canOperate, onSelectTask, onHelp, onError, onDiscuss }: Props) {
   const [tab, setTab] = useState<Tab>(TEAMS[team].inputLabel || team === 'welfare' || team === 'mgmt' ? 'team' : 'report');
   const [valueInput, setValueInput] = useState('');
   const [comment, setComment] = useState('');
@@ -116,6 +118,11 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
           <span>현재 단계: {currentStepLabel(task)}</span>
           <span>비용 {krw(task.costKrw)}</span>
           {Boolean(task.toolCalls) && <span>🧩 도구 {task.toolCalls}회</span>}
+          {onDiscuss && (
+            <button className="pixel-btn small" onClick={() => onDiscuss(task.id)}>
+              💬 업무 대화
+            </button>
+          )}
         </div>
         {queue.length > 0 && (
           <ol className="queue-list">
