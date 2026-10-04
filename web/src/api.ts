@@ -3,6 +3,7 @@ import type { DesignKind, DesignReview, ExportFormat } from '../../shared/design
 import type { McpServer, McpTool, McpToolMode, PlannedAction } from '../../shared/mcp.ts';
 import { setCatalog, type ApiKind, type Company, type ModelEntry, type Tier } from '../../shared/models.ts';
 import type { Personality } from '../../shared/personality.ts';
+import type { Playbook, PlaybookChange } from '../../shared/playbook.ts';
 import type {
   Agent,
   AiMode,
@@ -50,6 +51,8 @@ export const api = {
   deleteShare: (shareId: string) => call('DELETE', `/api/shares/${shareId}`),
   updateOffice: (officeId: string, patch: { autoRun?: boolean; autoImprove?: boolean; budgetKrw?: number | null }) =>
     call('PUT', `/api/offices/${officeId}`, patch),
+  applyPlaybook: (officeId: string, body: { playbook: Playbook; includeModel: boolean; acceptWarnings: boolean }) =>
+    call<{ changes: PlaybookChange[] }>('POST', `/api/offices/${officeId}/playbook`, body),
   applyImprovement: (officeId: string, id: string) => call('POST', `/api/offices/${officeId}/improvements`, { id }),
   createOffice: (input: { team: TeamId; name?: string }) => call<Office>('POST', '/api/offices', input),
   deleteOffice: (officeId: string) => call('DELETE', `/api/offices/${officeId}`),

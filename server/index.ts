@@ -18,6 +18,7 @@ import {
 import { allowedModes, isToolMode, type McpServer } from '../shared/mcp.ts';
 import { isExportFormat } from '../shared/design.ts';
 import { isPersonality } from '../shared/personality.ts';
+import { parsePlaybook, playbookChanges } from '../shared/playbook.ts';
 import { isSkin } from '../shared/skins.ts';
 import { TEAMS } from '../shared/teams.ts';
 import type { AiMode, ServerMessage, ShareLink, ShareRole, TeamId, Viewer } from '../shared/types.ts';
@@ -136,6 +137,21 @@ app.put('/api/offices/:id', async (req, res) => {
   if (autoImprove === true) autoImproveOffice(req.params.id);
   await workflowRuntime.tick();
   res.json(store.office(req.params.id));
+});
+
+app.post('/api/offices/:id/playbook', (req, res) => {
+  guard(res, 'manage', req.params.id);
+  const playbook = parsePlaybook(req.body?.playbook);
+  const office = store.office(req.params.id);
+  const changes = playbookChanges(playbook, office, store.data.agents, store.data.models, req.body?.includeModel === true);
+  if (changes.some((c) => c.warnings.length) && req.body?.acceptWarnings !== true) throw new Error('주의가 필요한 규칙이 있어요. 내용을 확인한 뒤 다시 적용해 주세요.');
+  for (const change of changes) {
+    const before = store.agent(change.agentId);
+    if (change.field === 'rules') store.emit('rule.changed', { agentId: before.id, payload: { scope: 'personal', before: before.rules, after: change.to } });
+    store.updateAgent(change.agentId, { [change.field]: change.to });
+  }
+  store.emit('playbook.applied', { payload: { officeId: office.id, name: playbook.name, changes: changes.length } });
+  res.json({ changes });
 });
 
 app.post('/api/offices/:id/improvements', (req, res) => {

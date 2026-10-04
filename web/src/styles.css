@@ -1532,6 +1532,25 @@ p.plan-note {
 .perf-tag.ok {
   background: #dff3d8;
 }
+.playbook-preview {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 2px dashed var(--line);
+}
+.playbook-warn {
+  padding: 4px 6px;
+  background: #fff1e6;
+  border: 2px solid #e8a26a;
+}
+.playbook-rules {
+  margin: 4px 0 0;
+  padding: 4px 6px;
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: #f7f3e8;
+  font-size: 12px;
+}
 .data-list {
   list-style: none;
   margin: 0;

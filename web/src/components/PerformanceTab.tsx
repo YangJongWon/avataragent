@@ -6,6 +6,7 @@ import { taskTypeOf, TEAMS } from '../../../shared/teams.ts';
 import type { Snapshot } from '../../../shared/types.ts';
 import { api } from '../api.ts';
 import { roleTitle } from '../format.ts';
+import { PlaybookPanel } from './PlaybookPanel.tsx';
 
 const pct = (value: number | null) => (value === null ? '-' : `${Math.round(value * 100)}%`);
 const points = (value: number | null) => (value === null ? '-' : `${Math.round(value)}점`);
@@ -178,6 +179,8 @@ export function PerformanceTab(props: {
           </tbody>
         </table>
       </section>
+
+      <PlaybookPanel snapshot={snapshot} office={office} onError={props.onError} onNotice={props.onNotice} />
 
       <section className="pixel-box section">
         <h3>최근 반려 사유</h3>
