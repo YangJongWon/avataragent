@@ -1,0 +1,115 @@
+import type { Container } from 'pixi.js';
+import type { TeamMeta } from '../../../shared/teams.ts';
+import { DEFAULT_THEME, SPOT_NAMES, type Point, type Rect, type SceneLayout, type SpotName, type ThemeState } from '../../../shared/theme-pack.ts';
+import type { Agent, Role } from '../../../shared/types.ts';
+
+/** A layout with every gap filled in. Seats are where a character's feet stand. */
+export interface Layout {
+  seats: Record<Role, Point>;
+  lounge: Record<Role, Point>;
+  extraSeats: Point[];
+  extraLounge: Point[];
+  door: Point;
+  spots: Record<SpotName, Rect>;
+}
+
+export const DEFAULT_LAYOUT: Layout = {
+  seats: {
+    manager: { x: 400, y: 194 },
+    researcher: { x: 180, y: 304 },
+    writer: { x: 400, y: 399 },
+    reviewer: { x: 620, y: 304 },
+  },
+  lounge: {
+    manager: { x: 862, y: 342 },
+    researcher: { x: 942, y: 342 },
+    writer: { x: 940, y: 162 },
+    reviewer: { x: 864, y: 162 },
+  },
+  extraSeats: [
+    { x: 180, y: 194 },
+    { x: 620, y: 194 },
+    { x: 180, y: 399 },
+    { x: 620, y: 399 },
+  ],
+  extraLounge: [
+    { x: 842, y: 252 },
+    { x: 962, y: 252 },
+    { x: 846, y: 446 },
+    { x: 958, y: 446 },
+  ],
+  door: { x: 805, y: 248 },
+  spots: {
+    board: { x: 260, y: 14, w: 280, h: 86 },
+    shelf: { x: 690, y: 22, w: 80, h: 92 },
+    safe: { x: 700, y: 392, w: 70, h: 62 },
+    archive: { x: 30, y: 404, w: 64, h: 44 },
+  },
+};
+
+export function mergeLayout(from: Partial<SceneLayout>): Layout {
+  const extraSeats = from.extraSeats?.length ? from.extraSeats : DEFAULT_LAYOUT.extraSeats;
+  return {
+    seats: { ...DEFAULT_LAYOUT.seats, ...from.seats },
+    lounge: { ...DEFAULT_LAYOUT.lounge, ...from.lounge },
+    extraSeats,
+    // Pair every extra seat with a resting spot, reusing the defaults when a theme gives fewer.
+    extraLounge: extraSeats.map((_, i) => from.extraLounge?.[i] ?? DEFAULT_LAYOUT.extraLounge[i % DEFAULT_LAYOUT.extraLounge.length]),
+    door: from.door ?? DEFAULT_LAYOUT.door,
+    spots: Object.fromEntries(SPOT_NAMES.map((name) => [name, from.spots?.[name] ?? DEFAULT_LAYOUT.spots[name]])) as Layout['spots'],
+  };
+}
+
+/** What a character is doing right now; the theme decides how that looks. */
+export interface CharacterLook {
+  walking: boolean;
+  place: 'desk' | 'lounge';
+  status: Agent['status'];
+  expression: Agent['expression'];
+  /** A short moment from an office event, such as a rejected review. */
+  moment: ThemeState | null;
+}
+
+export interface CharacterArt {
+  view: Container;
+  /** Height above the feet where the role tag sits (negative y); status icons float above it. */
+  tagY: number;
+  /** Clickable box around the feet: half width and height. */
+  hit: { halfW: number; h: number };
+  apply(agent: Agent): void;
+  /** `phase` is seconds since the character appeared. */
+  update(phase: number, look: CharacterLook): void;
+}
+
+export interface RoomArt {
+  /** Floor, walls and furniture behind everyone. */
+  back: Container;
+  /** Desk fronts and anything that covers characters. */
+  front: Container;
+  /** One per extra seat, shown only while that seat is taken. */
+  extraDesks: Container[];
+}
+
+export interface OfficeTheme {
+  id: string;
+  layout: Layout;
+  background(team: TeamMeta): string;
+  buildRoom(team: TeamMeta): RoomArt;
+  createCharacter(): CharacterArt;
+}
+
+/** Installed theme packages are served here as `<id>/theme.json` plus their files. */
+export const THEME_BASE = '/themes';
+
+/** Loads a theme by id; anything that fails to load falls back to the pixel theme so the office always shows. */
+export async function loadTheme(id: string = DEFAULT_THEME): Promise<OfficeTheme> {
+  const { createPixelTheme } = await import('./themes/pixel.ts');
+  if (id === DEFAULT_THEME) return createPixelTheme();
+  try {
+    const { loadPackTheme } = await import('./themes/pack.ts');
+    return await loadPackTheme(id, `${THEME_BASE}/${encodeURIComponent(id)}`);
+  } catch (error) {
+    console.warn(`theme ${id} failed to load, using pixel`, error);
+    return createPixelTheme();
+  }
+}

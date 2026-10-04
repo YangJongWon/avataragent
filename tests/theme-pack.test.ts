@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 const { STATE_FALLBACK, THEME_STATES, isSafePath, parseThemeManifest, resolveState, splitPackSkin } = await import('../shared/theme-pack.ts');
+const { DEFAULT_LAYOUT, mergeLayout } = await import('../web/src/office/theme.ts');
 
 const minimal = () => ({
   format: 'avataragent-theme',
@@ -21,6 +22,8 @@ test('a theme with one background and a single idle frame is valid', () => {
   assert.equal(theme.characters[0].states.idle.fps, 6);
   assert.equal(theme.scene.scaleMode, 'linear');
   assert.equal(theme.css, null);
+  assert.deepEqual(theme.scene.spots, {});
+  assert.deepEqual(theme.scene.extraSeats, []);
   assert.deepEqual(parseThemeManifest(JSON.parse(JSON.stringify(theme)), files), theme);
 });
 
@@ -60,7 +63,7 @@ test('rejects broken or unsafe packages', () => {
     assert.throws(() => parseThemeManifest(t, files), message);
   };
   broken((t) => (t.format = 'other'), /테마 패키지가 아니에요/);
-  broken((t) => (t.id = 'pixel'), /기본 테마 이름/);
+  broken((t) => (t.id = 'pixel'), /앱에 들어 있는 테마 이름/);
   broken((t) => (t.id = 'Bad Id'), /id는/);
   broken((t) => delete t.license, /라이선스/);
   broken((t) => (t.characters[0].states = {}), /idle/);
@@ -71,11 +74,25 @@ test('rejects broken or unsafe packages', () => {
   broken((t) => (t.tokens = { accent: 'red; background:url(https://x)' }), /색 토큰/);
   broken((t) => (t.characters.push({ ...t.characters[0] })), /겹쳐요/);
   broken((t) => (t.scene.seats = { writer: { x: 5000, y: 0 } }), /좌표/);
+  broken((t) => (t.scene.spots = { safe: { x: 900, y: 400, w: 200, h: 10 } }), /장면을 벗어났어요/);
 });
 
 test('safe paths stay inside the package', () => {
   assert.ok(isSafePath('assets/a.png'));
   for (const bad of ['/abs.png', 'a/../b.png', './a.png', 'a\\b.png', 'a//b.png', 'a.svg', 'a.js']) assert.ok(!isSafePath(bad), bad);
+});
+
+test('a theme layout only overrides what it gives', () => {
+  const layout = mergeLayout({ seats: { writer: { x: 10, y: 20 } }, extraSeats: [{ x: 1, y: 2 }, { x: 3, y: 4 }], spots: {} });
+  assert.deepEqual(layout.seats.writer, { x: 10, y: 20 });
+  assert.deepEqual(layout.seats.manager, DEFAULT_LAYOUT.seats.manager);
+  assert.equal(layout.extraLounge.length, 2, 'every extra seat gets a resting spot');
+  assert.deepEqual(layout.spots, DEFAULT_LAYOUT.spots);
+  assert.deepEqual(mergeLayout({}), DEFAULT_LAYOUT);
+});
+
+test('characters without a head anchor wear hats at the top of the frame', () => {
+  assert.deepEqual(parseThemeManifest(minimal(), files).characters[0].head, { x: 0.5, y: 0 });
 });
 
 test('pack skins are told apart from built-in skins', () => {

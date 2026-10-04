@@ -1,55 +1,28 @@
-import { Application, Container, Graphics, Sprite, Text, type FederatedPointerEvent } from 'pixi.js';
+import { Application, Container, Graphics, Text, type FederatedPointerEvent } from 'pixi.js';
 import { TEAMS, type TeamMeta } from '../../../shared/teams.ts';
+import { DEFAULT_THEME, type Point, type ThemeState } from '../../../shared/theme-pack.ts';
 import { currentStepLabel, planProgress } from '../../../shared/workflow.ts';
-import { type Agent, type OfficeEvent, type Role, type Skin, type Snapshot, type TeamId } from '../../../shared/types.ts';
+import { type Agent, type OfficeEvent, type Role, type Snapshot, type StepKind, type TeamId } from '../../../shared/types.ts';
 import { krw } from '../format.ts';
-import { companyOf, modelOf, type HatShape, type Tier } from '../../../shared/models.ts';
-import { drawBody, drawFace, drawHat, drawHatGlow, HAT_TOP, S } from './pixelArt.ts';
-import { loadPinkGirl, type SpriteSkin } from './skinSprites.ts';
+import { loadTheme, type CharacterArt, type Layout, type OfficeTheme } from './theme.ts';
 
 export const SCENE_W = 1000;
 export const SCENE_H = 480;
 
 const FONT = '"Malgun Gothic", "Apple SD Gothic Neo", sans-serif';
 
-const DESK: Record<Role, { x: number; y: number }> = {
-  manager: { x: 400, y: 190 },
-  researcher: { x: 180, y: 300 },
-  writer: { x: 400, y: 395 },
-  reviewer: { x: 620, y: 300 },
-};
-
-const BOARD = { x: 260, y: 14, w: 280, h: 86 };
-const SHELF = { x: 690, y: 22, w: 80, h: 92 };
-const SAFE = { x: 700, y: 392, w: 70, h: 62 };
-const ARCHIVE = { x: 30, y: 404, w: 64, h: 44 };
-
-const OFFICE_W = 800;
-const LOUNGE_X = 810;
-const DOOR = { x: 805, y: 248 };
-const LOUNGE: Record<Role, Point> = {
-  manager: { x: 862, y: 342 },
-  researcher: { x: 942, y: 342 },
-  writer: { x: 940, y: 162 },
-  reviewer: { x: 864, y: 162 },
-};
-
-// Seats for staff hired beyond the first person of each role, in fill order.
-const EXTRA_DESKS: Point[] = [
-  { x: 180, y: 190 },
-  { x: 620, y: 190 },
-  { x: 180, y: 395 },
-  { x: 620, y: 395 },
-];
-const EXTRA_LOUNGE: Point[] = [
-  { x: 842, y: 252 },
-  { x: 962, y: 252 },
-  { x: 846, y: 446 },
-  { x: 958, y: 446 },
-];
-
 const WORK_GLYPH: Record<Role, string> = { manager: '📋', researcher: '🔍', writer: '✏️', reviewer: '🧐' };
 const LOUNGE_GLYPH: Record<Role, string> = { manager: '☕', researcher: '📖', writer: '💧', reviewer: '☕' };
+
+/** How long an event moment (a stamp, a thank-you) shows before the character goes back to its status. */
+const MOMENT_MS = 2400;
+const STEP_MOMENT: Record<StepKind, ThemeState | null> = {
+  brief: 'step.brief',
+  research: 'step.research',
+  draft: 'step.draft',
+  review: 'step.review',
+  approval: null,
+};
 
 export interface SceneCallbacks {
   onAgentClick: (agentId: string) => void;
@@ -57,16 +30,10 @@ export interface SceneCallbacks {
   onBoardClick: () => void;
 }
 
-interface Point {
-  x: number;
-  y: number;
-}
-
 interface Walk extends Point {
   done: () => void;
 }
 
-const homeOf = (role: Role): Point => ({ x: DESK[role].x, y: DESK[role].y + 4 });
 const LONG_PRESS_MS = 500;
 
 type Place = 'desk' | 'lounge';
@@ -74,11 +41,6 @@ type Place = 'desk' | 'lounge';
 class CharacterView {
   root = new Container();
   sprite = new Container();
-  body = new Graphics();
-  face = new Graphics();
-  hat = new Graphics();
-  glow = new Graphics();
-  sparkles = new Graphics();
   icon = new Container();
   iconBg = new Graphics();
   iconText: Text;
@@ -87,40 +49,28 @@ class CharacterView {
   roleTag = new Container();
   roleBg = new Graphics();
   roleText: Text;
-  iconY = -40 * S;
+  iconY = -40;
   pos: Point;
   walks: Walk[] = [];
   phase = Math.random() * 10;
-  expression: Agent['expression'] | null = null;
+  expression: Agent['expression'] = 'normal';
   status: Agent['status'] = 'idle';
-  modelId: string | null = null;
-  hatShape: HatShape = 'beanie';
-  skin: Skin | null = null;
-  tier: Tier = 1;
-  hatOffset = 0;
   place: Place;
-  girl: Sprite | null = null;
+  private moment: { state: ThemeState; until: number } | null = null;
 
   constructor(
     public agent: Agent,
     callbacks: SceneCallbacks,
     roleTitle: string,
     startInLounge: boolean,
-    private pinkGirl: SpriteSkin | null,
+    private art: CharacterArt,
+    private door: Point,
     public home: Point,
     public rest: Point,
   ) {
     this.place = startInLounge ? 'lounge' : 'desk';
     this.pos = startInLounge ? { ...rest } : { ...home };
-    if (pinkGirl) {
-      this.girl = new Sprite(pinkGirl.idle);
-      this.girl.anchor.set(0.5, 1);
-      this.girl.scale.set(pinkGirl.scale);
-      this.girl.visible = false;
-    }
-    this.sprite.addChild(this.glow, this.body, this.face);
-    if (this.girl) this.sprite.addChild(this.girl);
-    this.sprite.addChild(this.hat, this.sparkles);
+    this.sprite.addChild(art.view);
     this.root.addChild(this.sprite);
 
     this.roleText = new Text({ text: roleTitle, style: { fontFamily: FONT, fontSize: 11, fontWeight: 'bold', fill: '#3d3449' } });
@@ -144,7 +94,7 @@ class CharacterView {
 
     this.root.eventMode = 'static';
     this.root.cursor = 'pointer';
-    this.root.hitArea = { contains: (x: number, y: number) => x > -10 * S && x < 10 * S && y > -34 * S && y < 24 };
+    this.root.hitArea = { contains: (x: number, y: number) => x > -this.art.hit.halfW && x < this.art.hit.halfW && y > -this.art.hit.h && y < 24 };
     let pressTimer: ReturnType<typeof setTimeout> | undefined;
     let longPressed = false;
     const cancelPress = () => clearTimeout(pressTimer);
@@ -169,37 +119,9 @@ class CharacterView {
 
   apply(agent: Agent) {
     this.agent = agent;
-    const skinChanged = agent.skin !== this.skin;
-    if (skinChanged) {
-      this.skin = agent.skin;
-      const useSprite = agent.skin === 'pinkgirl' && this.girl !== null;
-      const drawn = agent.skin === 'pinkgirl' && !useSprite ? 'bishoujo' : agent.skin;
-      drawBody(this.body, agent.role, drawn);
-      if (this.girl) this.girl.visible = useSprite;
-      this.hatOffset = useSprite ? 2 * S : 0;
-      this.hat.y = this.glow.y = this.sparkles.y = this.hatOffset;
-      this.expression = null;
-    }
-    if (agent.expression !== this.expression) {
-      this.expression = agent.expression;
-      const drawn = agent.skin === 'pinkgirl' && !this.girl ? 'bishoujo' : agent.skin;
-      drawFace(this.face, agent.role, agent.expression, drawn);
-    }
-    const model = modelOf(agent.model);
-    const company = companyOf(model.vendor);
-    const hatKey = `${company.hat}:${company.color}:${model.tier}`;
-    if (hatKey !== this.modelId || skinChanged) {
-      this.modelId = hatKey;
-      this.tier = model.tier;
-      this.hatShape = company.hat;
-      drawHat(this.hat, company.hat, company.color, model.tier);
-      if (model.tier === 3) drawHatGlow(this.glow, company.hat);
-      else this.glow.clear();
-      this.sparkles.clear();
-      const tagY = (HAT_TOP[company.hat] - (model.tier === 3 ? 9 : 6)) * S + this.hatOffset;
-      this.roleTag.y = tagY;
-      this.iconY = tagY - 22;
-    }
+    this.art.apply(agent);
+    this.iconY = this.art.tagY - 22;
+    this.expression = agent.expression;
     this.status = agent.status;
     this.label.text = agent.name;
     this.labelBg.clear();
@@ -210,10 +132,15 @@ class CharacterView {
     this.updateIcon();
   }
 
+  /** Plays a short event moment, such as being thanked or having work sent back. */
+  play(state: ThemeState) {
+    this.moment = { state, until: performance.now() + MOMENT_MS };
+  }
+
   setPlace(place: Place) {
     if (place === this.place) return;
     this.place = place;
-    void this.walkTo(DOOR);
+    void this.walkTo(this.door);
     void this.walkTo(place === 'lounge' ? this.rest : this.home);
   }
 
@@ -294,28 +221,20 @@ class CharacterView {
       this.sprite.scale.x = 1;
     }
 
-    if (this.tier === 3) this.updateAura();
-    if (this.girl?.visible && this.pinkGirl) {
-      this.girl.texture = walk ? this.pinkGirl.walk[Math.floor(this.phase * 8) % this.pinkGirl.walk.length] : this.pinkGirl.idle;
-    }
+    if (this.moment && performance.now() > this.moment.until) this.moment = null;
+    this.art.update(this.phase, {
+      walking: Boolean(walk),
+      place: this.place,
+      status: this.status,
+      expression: this.expression,
+      moment: this.moment?.state ?? null,
+    });
 
     this.root.position.set(Math.round(this.pos.x), Math.round(this.pos.y));
     this.sprite.y = offsetY;
     this.sprite.rotation = rotation;
     this.roleTag.y = this.iconY + 22;
     this.icon.y = this.iconY + Math.sin(this.phase * 4) * 2;
-  }
-
-  private updateAura() {
-    this.glow.alpha = 0.55 + Math.sin(this.phase * 3) * 0.35;
-    const cy = (HAT_TOP[this.hatShape] - 22) * 0.5 * S;
-    this.sparkles.clear();
-    for (let i = 0; i < 3; i++) {
-      const a = this.phase * 1.8 + (i * Math.PI * 2) / 3;
-      const twinkle = (Math.sin(this.phase * 6 + i * 2) + 1) / 2;
-      const size = 1.5 + twinkle * 2;
-      this.sparkles.star(Math.cos(a) * 11 * S, cy + Math.sin(a) * 4 * S, 4, size + 1.5, size * 0.4).fill({ color: '#fff7b0', alpha: 0.4 + twinkle * 0.6 });
-    }
   }
 }
 
@@ -330,12 +249,13 @@ export class OfficeScene {
   private app = new Application();
   private ready = false;
   private destroyed = false;
-  private pinkGirl: SpriteSkin | null = null;
+  private theme!: OfficeTheme;
+  private layout!: Layout;
   private chars = new Map<string, CharacterView>();
   private roleOf = new Map<string, Role>();
   private charLayer = new Container();
   private deskLayer = new Container();
-  private extraDesks: Graphics[] = [];
+  private extraDesks: Container[] = [];
   private fxLayer = new Container();
   private fxs: Fx[] = [];
   private boardTitle!: Text;
@@ -343,6 +263,7 @@ export class OfficeScene {
   private postIt = new Graphics();
   private safeText!: Text;
   private pending: Snapshot | null = null;
+  private tasks: Snapshot['tasks'] = [];
 
   private team: TeamMeta;
 
@@ -350,15 +271,19 @@ export class OfficeScene {
     private callbacks: SceneCallbacks,
     private officeId: string,
     team: TeamId,
+    private themeId: string = DEFAULT_THEME,
   ) {
     this.team = TEAMS[team];
   }
 
   async init(host: HTMLElement) {
+    this.theme = await loadTheme(this.themeId);
+    this.layout = this.theme.layout;
+    if (this.destroyed) return;
     await this.app.init({
       width: SCENE_W,
       height: SCENE_H,
-      background: this.team.wall,
+      background: this.theme.background(this.team),
       antialias: false,
       resolution: Math.max(2, window.devicePixelRatio || 1),
       autoDensity: true,
@@ -378,14 +303,12 @@ export class OfficeScene {
     canvas.style.userSelect = 'none';
     host.appendChild(canvas);
 
-    this.pinkGirl = await loadPinkGirl();
-    if (this.destroyed) {
-      this.app.destroy(true, { children: true });
-      return;
-    }
-    this.buildRoom();
+    const room = this.theme.buildRoom(this.team);
+    this.app.stage.addChild(room.back);
+    this.buildOverlay();
+    this.deskLayer.addChild(room.front, ...room.extraDesks);
+    this.extraDesks = room.extraDesks;
     this.app.stage.addChild(this.charLayer, this.deskLayer, this.fxLayer);
-    this.buildDesks();
     this.app.ticker.add((ticker) => this.update(ticker.deltaMS));
     this.ready = true;
     if (this.pending) this.applySnapshot(this.pending);
@@ -408,6 +331,7 @@ export class OfficeScene {
       return;
     }
     const office = snapshot.offices.find((o) => o.id === this.officeId);
+    this.tasks = snapshot.tasks;
     // While the task waits on the user, only the agent who is waiting stays at the desk.
     const officeBusy = snapshot.tasks.some((t) => t.officeId === this.officeId && t.status === 'running');
     const present = new Set(snapshot.agents.map((a) => a.id));
@@ -424,12 +348,12 @@ export class OfficeScene {
       let rest: Point;
       if (!seated.has(agent.role)) {
         seated.add(agent.role);
-        home = homeOf(agent.role);
-        rest = LOUNGE[agent.role];
+        home = this.layout.seats[agent.role];
+        rest = this.layout.lounge[agent.role];
       } else {
-        const i = Math.min(extra++, EXTRA_DESKS.length - 1);
-        home = { x: EXTRA_DESKS[i].x, y: EXTRA_DESKS[i].y + 4 };
-        rest = EXTRA_LOUNGE[i];
+        const i = Math.min(extra++, this.layout.extraSeats.length - 1);
+        home = this.layout.extraSeats[i];
+        rest = this.layout.extraLounge[i];
       }
       const resting = !officeBusy && agent.status === 'idle' && agent.expression !== 'celebrate';
       const existing = this.chars.get(agent.id);
@@ -438,7 +362,8 @@ export class OfficeScene {
         existing.moveSeat(home, rest);
         existing.setPlace(resting ? 'lounge' : 'desk');
       } else {
-        const view = new CharacterView(agent, this.callbacks, this.team.roleTitles[agent.role], resting, this.pinkGirl, home, rest);
+        const art = this.theme.createCharacter();
+        const view = new CharacterView(agent, this.callbacks, this.team.roleTitles[agent.role], resting, art, this.layout.door, home, rest);
         this.chars.set(agent.id, view);
         this.charLayer.addChild(view.root);
       }
@@ -457,12 +382,22 @@ export class OfficeScene {
       const c = this.chars.get(String(id));
       if (c) return { x: c.pos.x, y: c.pos.y - 24 };
       const role = this.roleOf.get(String(id));
-      return role ? { x: DESK[role].x, y: DESK[role].y - 20 } : null;
+      return role ? { x: this.layout.seats[role].x, y: this.layout.seats[role].y - 24 } : null;
     };
     const agentChar = event.agentId ? this.chars.get(event.agentId) : undefined;
+    const { board: BOARD, shelf: SHELF, safe: SAFE, archive: ARCHIVE } = this.layout.spots;
     const boardSpot = { x: BOARD.x + BOARD.w / 2, y: BOARD.y + BOARD.h + 30 };
 
     switch (event.type) {
+      case 'task.assigned': {
+        const kind = this.tasks.find((t) => t.id === event.taskId)?.plan.find((s) => s.id === p.step)?.kind;
+        const moment = kind ? STEP_MOMENT[kind] : null;
+        if (agentChar && moment) agentChar.play(moment);
+        break;
+      }
+      case 'budget.exceeded':
+        agentChar?.play('budget.exceeded');
+        break;
       case 'task.created':
         if (p.queued) this.floatText(`대기열 +1: ${String(p.title ?? '')}`, BOARD.x + BOARD.w / 2, BOARD.y + BOARD.h + 16, '#4b3f80', 13);
         break;
@@ -499,6 +434,7 @@ export class OfficeScene {
         const at = deskOf(event.agentId);
         const to = deskOf(p.returnTo);
         if (at) this.stamp('반려', at, '#c0392b');
+        if (p.returnTo) this.chars.get(String(p.returnTo))?.play('review.rejected');
         if (at && to) setTimeout(() => this.paperFly(at, to, '#ffd6d6'), 700);
         break;
       }
@@ -517,10 +453,12 @@ export class OfficeScene {
       case 'approval.denied': {
         const at = deskOf(event.agentId);
         if (at) this.stamp('수정 요청', at, '#d35400');
+        agentChar?.play('troubled');
         break;
       }
       case 'agent.help_received':
         if (agentChar) this.floatText('고마워요!', agentChar.pos.x, agentChar.pos.y - 120, '#e75480', 14);
+        agentChar?.play('thanks');
         break;
       case 'value.recognized': {
         const from = deskOf(event.agentId) ?? { x: 400, y: 200 };
@@ -546,7 +484,10 @@ export class OfficeScene {
         const manager = [...this.roleOf.entries()].find(([, r]) => r === 'manager')?.[0];
         const from = deskOf(manager);
         if (from) this.paperFly(from, { x: ARCHIVE.x + ARCHIVE.w / 2, y: ARCHIVE.y + 10 }, '#b9f6ca');
-        for (const c of this.chars.values()) this.sparkle(c.pos.x, c.pos.y - 70);
+        for (const c of this.chars.values()) {
+          this.sparkle(c.pos.x, c.pos.y - 70);
+          c.play('task.approved');
+        }
         break;
       }
     }
@@ -580,55 +521,9 @@ export class OfficeScene {
     this.boardLines.text = `진행률 ${done}/${total}${queued ? ` · 대기 ${queued}건` : ''}\n${task.status === 'queued' ? '곧 시작해요' : statusLine}`;
   }
 
-  private buildRoom() {
-    const g = new Graphics();
-    for (let y = 120; y < SCENE_H; y += 32) {
-      for (let x = 0; x < OFFICE_W; x += 32) {
-        g.rect(x, y, 32, 32).fill(((x + y) / 32) % 2 === 0 ? this.team.floor[0] : this.team.floor[1]);
-      }
-    }
-    g.rect(0, 0, SCENE_W, 120).fill(this.team.wall);
-    g.rect(0, 112, SCENE_W, 8).fill('#a3896b');
-    g.rect(0, 0, SCENE_W, 6).fill('#cbb593');
-
-    g.rect(22, 30, 52, 82).fill('#8b5a2b');
-    g.rect(28, 36, 40, 76).fill('#a86f3b');
-    g.circle(60, 76, 3).fill('#f1c40f');
-
-    g.rect(BOARD.x - 8, BOARD.y - 6, BOARD.w + 16, BOARD.h + 12).fill('#8b5a2b');
-    g.rect(BOARD.x, BOARD.y, BOARD.w, BOARD.h).fill('#2f5d50');
-    g.rect(BOARD.x + 20, BOARD.y + BOARD.h + 2, 50, 4).fill('#f5f5f5');
-
-    g.rect(SHELF.x, SHELF.y, SHELF.w, SHELF.h).fill('#7a4f2a');
-    const bookColors = ['#c0392b', '#2980b9', '#27ae60', '#f39c12', '#8e44ad', '#16a085'];
-    for (let row = 0; row < 3; row++) {
-      const y = SHELF.y + 6 + row * 29;
-      g.rect(SHELF.x + 4, y + 22, SHELF.w - 8, 3).fill('#5a3a1e');
-      for (let i = 0; i < 8; i++) g.rect(SHELF.x + 6 + i * 9, y + 4, 7, 18).fill(bookColors[(i + row) % bookColors.length]);
-    }
-
-    g.rect(140, 30, 70, 54).fill('#a3896b');
-    g.rect(145, 35, 60, 44).fill('#bfe3ff');
-    g.rect(174, 35, 2, 44).fill('#a3896b');
-
-    g.rect(SAFE.x, SAFE.y, SAFE.w, SAFE.h).fill('#5d6d7e');
-    g.rect(SAFE.x + 5, SAFE.y + 5, SAFE.w - 10, SAFE.h - 10).fill('#85929e');
-    g.circle(SAFE.x + SAFE.w / 2, SAFE.y + SAFE.h / 2, 10).fill('#d5d8dc').stroke({ width: 2, color: '#34495e' });
-
-    g.rect(ARCHIVE.x, ARCHIVE.y, ARCHIVE.w, ARCHIVE.h).fill('#b9770e');
-    g.rect(ARCHIVE.x + 4, ARCHIVE.y + 4, ARCHIVE.w - 8, 10).fill('#f5cba7');
-
-    for (const [x, y] of [
-      [110, 108],
-      [620, 108],
-    ]) {
-      g.rect(x - 8, y - 4, 16, 14).fill('#a04000');
-      g.circle(x, y - 12, 12).fill('#27ae60');
-      g.circle(x - 7, y - 18, 7).fill('#2ecc71');
-    }
-    this.drawLounge(g);
-    this.app.stage.addChild(g);
-
+  /** Board text, its click area and the profit figure: shared by every theme, placed by its layout. */
+  private buildOverlay() {
+    const { board: BOARD, safe: SAFE } = this.layout.spots;
     const board = new Container();
     board.eventMode = 'static';
     board.cursor = 'pointer';
@@ -644,126 +539,10 @@ export class OfficeScene {
     board.addChild(this.boardTitle, this.boardLines, this.postIt);
     this.app.stage.addChild(board);
 
-    const labels: [string, number, number][] = [
-      ['금고', SAFE.x + SAFE.w / 2, SAFE.y + SAFE.h + 4],
-      [this.team.stepLabels.done, ARCHIVE.x + ARCHIVE.w / 2, ARCHIVE.y + ARCHIVE.h + 4],
-      ['자료실', SHELF.x + SHELF.w / 2, SHELF.y + SHELF.h + 2],
-    ];
-    for (const [text, x, y] of labels) {
-      const t = new Text({ text, style: { fontFamily: FONT, fontSize: 11, fontWeight: 'bold', fill: '#5d4037' } });
-      t.anchor.set(0.5, 0);
-      t.position.set(x, y);
-      this.app.stage.addChild(t);
-    }
-    const sign = new Graphics();
-    sign.roundRect(14, 10, 70, 18, 3).fill('#5d4037');
-    this.app.stage.addChild(sign);
-    const signText = new Text({
-      text: `${this.team.emoji} ${this.team.name}`,
-      style: { fontFamily: FONT, fontSize: 11, fontWeight: 'bold', fill: '#fdf2e9' },
-    });
-    signText.anchor.set(0.5);
-    signText.position.set(49, 19);
-    this.app.stage.addChild(signText);
-
     this.safeText = new Text({ text: '', style: { fontFamily: FONT, fontSize: 13, fontWeight: 'bold', fill: '#1e8449' } });
     this.safeText.anchor.set(1, 1);
     this.safeText.position.set(SAFE.x + SAFE.w, SAFE.y - 4);
     this.app.stage.addChild(this.safeText);
-
-    const loungeSign = new Graphics();
-    loungeSign.roundRect(LOUNGE_X + 10, 10, 84, 20, 4).fill('#6d4c41');
-    this.app.stage.addChild(loungeSign);
-    const loungeText = new Text({ text: '☕ 휴게실', style: { fontFamily: FONT, fontSize: 12, fontWeight: 'bold', fill: '#fff3e0' } });
-    loungeText.anchor.set(0.5);
-    loungeText.position.set(LOUNGE_X + 52, 20);
-    this.app.stage.addChild(loungeText);
-  }
-
-  private drawLounge(g: Graphics) {
-    const right = SCENE_W;
-    for (let y = 120; y < SCENE_H; y += 16) {
-      g.rect(LOUNGE_X, y, right - LOUNGE_X, 16).fill((y / 16) % 2 === 0 ? '#d4a373' : '#c9965f');
-      for (let x = LOUNGE_X + ((y / 16) % 2 === 0 ? 30 : 70); x < right; x += 80) g.rect(x, y, 2, 16).fill('#b5834f');
-    }
-    g.rect(LOUNGE_X, 0, right - LOUNGE_X, 112).fill('#fbe7c6');
-    g.rect(LOUNGE_X, 72, right - LOUNGE_X, 4).fill('#e6c89c');
-    g.rect(LOUNGE_X, 112, right - LOUNGE_X, 8).fill('#a3896b');
-
-    g.rect(OFFICE_W, 0, LOUNGE_X - OFFICE_W, 120).fill('#8d7356');
-    g.rect(OFFICE_W, 120, LOUNGE_X - OFFICE_W, DOOR.y - 38 - 120).fill('#a3896b');
-    g.rect(OFFICE_W, DOOR.y + 32, LOUNGE_X - OFFICE_W, SCENE_H - DOOR.y - 32).fill('#a3896b');
-    g.rect(OFFICE_W - 2, DOOR.y - 42, LOUNGE_X - OFFICE_W + 4, 4).fill('#6d5843');
-    g.rect(OFFICE_W - 2, DOOR.y + 32, LOUNGE_X - OFFICE_W + 4, 4).fill('#6d5843');
-
-    g.rect(912, 22, 64, 46).fill('#a3896b');
-    g.rect(916, 26, 56, 38).fill('#cdeaff');
-    g.rect(943, 26, 2, 38).fill('#a3896b');
-    g.rect(916, 50, 56, 3).fill('#ffffff');
-
-    g.rect(828, 82, 88, 36).fill('#8d6e63');
-    g.rect(824, 78, 96, 6).fill('#6d4c41');
-    g.rect(838, 50, 30, 28).fill('#455a64');
-    g.rect(842, 54, 22, 8).fill('#90a4ae');
-    g.rect(848, 66, 10, 3).fill('#263238');
-    g.rect(849, 70, 8, 8).fill('#fdfefe');
-    g.rect(878, 68, 8, 10).fill('#e57373');
-    g.rect(890, 68, 8, 10).fill('#81c784');
-    g.rect(830, 90, 84, 2).fill('#5d4037');
-
-    g.rect(950, 84, 26, 34).fill('#ecf0f1');
-    g.rect(952, 60, 22, 26).fill('#aee1f9');
-    g.rect(955, 63, 4, 18).fill('#e8f8ff');
-    g.rect(958, 96, 8, 4).fill('#3498db');
-
-    g.ellipse(902, 404, 82, 40).fill('#e8b4b8');
-    g.ellipse(902, 404, 66, 30).fill('#f2c9cc');
-
-    g.rect(838, 292, 128, 30).fill('#5d8aa8');
-    g.rect(842, 296, 58, 22).fill('#6d9bb8');
-    g.rect(904, 296, 58, 22).fill('#6d9bb8');
-
-    g.rect(818, 452, 16, 14).fill('#a04000');
-    g.circle(826, 440, 13).fill('#27ae60');
-    g.circle(833, 433, 7).fill('#2ecc71');
-  }
-
-  private buildDesks() {
-    const spots = [...Object.values(DESK), ...EXTRA_DESKS];
-    spots.forEach(({ x, y }, i) => {
-      const g = new Graphics();
-      g.rect(x - 44, y - 4, 88, 10).fill('#c68642');
-      g.rect(x - 44, y + 6, 88, 22).fill('#a0522d');
-      g.rect(x - 40, y + 28, 6, 8).fill('#7b3f1c');
-      g.rect(x + 34, y + 28, 6, 8).fill('#7b3f1c');
-      g.rect(x + 22, y - 22, 20, 16).fill('#34495e');
-      g.rect(x + 24, y - 20, 16, 11).fill('#85c1e9');
-      g.rect(x + 30, y - 6, 4, 3).fill('#34495e');
-      g.rect(x - 38, y - 8, 14, 4).fill('#fdfefe');
-      this.deskLayer.addChild(g);
-      if (i >= 4) {
-        g.visible = false;
-        this.extraDesks.push(g);
-      }
-    });
-
-    const lounge = new Graphics();
-    lounge.rect(834, 324, 136, 22).fill('#4a7391');
-    lounge.rect(838, 324, 128, 5).fill('#5d8aa8');
-    lounge.rect(830, 302, 14, 44).fill('#3f6680');
-    lounge.rect(960, 302, 14, 44).fill('#3f6680');
-    lounge.rect(838, 346, 6, 6).fill('#2c3e50');
-    lounge.rect(960, 346, 6, 6).fill('#2c3e50');
-
-    lounge.rect(899, 422, 8, 26).fill('#8d6e63');
-    lounge.ellipse(903, 448, 16, 4).fill('#6d4c41');
-    lounge.ellipse(903, 420, 30, 10).fill('#d7b98e');
-    lounge.ellipse(903, 418, 30, 9).fill('#e6cba2');
-    lounge.rect(890, 408, 8, 9).fill('#ffffff');
-    lounge.rect(898, 410, 3, 4).fill('#ffffff');
-    lounge.circle(914, 414, 4).fill('#c68642');
-    lounge.circle(914, 414, 1.5).fill('#6d4c41');
-    this.deskLayer.addChild(lounge);
   }
 
   private update(dt: number) {

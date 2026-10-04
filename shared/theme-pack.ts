@@ -7,7 +7,9 @@ import type { Expression, Role, TeamId } from './types.ts';
  * No dependencies beyond shared/, so the community service can reuse the same checks.
  */
 export const THEME_FORMAT = 'avataragent-theme';
-export const BUILTIN_THEME = 'pixel';
+/** Themes that ship with the app (drawn in code); packages cannot take these ids. */
+export const BUILTIN_THEMES = ['pixel'] as const;
+export const DEFAULT_THEME = 'pixel';
 
 export const THEME_LIMITS = {
   zipBytes: 20 * 1024 * 1024,
@@ -40,11 +42,23 @@ export interface SceneLayer extends Point {
   front: boolean;
 }
 
-export interface ThemeScene {
-  layers: SceneLayer[];
+/** Furniture the office reacts to: the board shows the task, papers fly to the archive, coins to the safe. */
+export const SPOT_NAMES = ['board', 'shelf', 'safe', 'archive'] as const;
+export type SpotName = (typeof SPOT_NAMES)[number];
+
+/** Where people sit and rest. Anything a theme leaves out comes from the default layout. */
+export interface SceneLayout {
   seats: Partial<Record<Role, Point>>;
+  lounge: Partial<Record<Role, Point>>;
+  /** Seats for staff hired beyond the first person of each role, in fill order, paired with extraLounge. */
+  extraSeats: Point[];
+  extraLounge: Point[];
   door: Point | null;
-  lounge: Point | null;
+  spots: Partial<Record<SpotName, Rect>>;
+}
+
+export interface ThemeScene extends SceneLayout {
+  layers: SceneLayer[];
   scaleMode: 'nearest' | 'linear';
   teamTint: Partial<Record<TeamId, string>>;
 }
@@ -62,6 +76,8 @@ export interface ThemeCharacter {
   frames: Record<string, Rect>;
   /** Feet position inside a frame, as 0..1 of its size. */
   anchor: Point;
+  /** Top of the head inside a frame, as 0..1 of its size; hats and accessories sit here. */
+  head: Point;
   scale: number;
   states: Partial<Record<ThemeState, StateClip>> & { idle: StateClip };
   portraits: Partial<Record<Expression, string>>;
@@ -185,9 +201,25 @@ function parseScene(input: unknown, files: ReadonlySet<string> | null): ThemeSce
     const at = point(l, `배경 레이어 ${i + 1}`, THEME_SCENE.w, THEME_SCENE.h);
     return { image: filePath(l.image, `배경 레이어 ${i + 1}`, files), x: at.x, y: at.y, front: l.front === true };
   });
-  const seatsIn = obj(raw.seats);
-  const seats: ThemeScene['seats'] = {};
-  for (const role of ROLES) if (role in seatsIn) seats[role] = point(seatsIn[role], `${role} 좌석`);
+  const byRole = (input: unknown, label: string) => {
+    const from = obj(input);
+    const out: Partial<Record<Role, Point>> = {};
+    for (const role of ROLES) if (role in from) out[role] = point(from[role], `${role} ${label}`);
+    return out;
+  };
+  const points = (input: unknown, label: string) =>
+    (Array.isArray(input) ? input : []).slice(0, 8).map((p, i) => point(p, `${label} ${i + 1}`));
+  const spotsIn = obj(raw.spots);
+  const spots: ThemeScene['spots'] = {};
+  for (const name of SPOT_NAMES) {
+    if (!(name in spotsIn)) continue;
+    const at = point(spotsIn[name], name);
+    const size = obj(spotsIn[name]);
+    const w = num(size.w, 1, THEME_SCENE.w - at.x);
+    const h = num(size.h, 1, THEME_SCENE.h - at.y);
+    if (w === null || h === null) fail(`${name} 크기가 장면을 벗어났어요.`);
+    spots[name] = { ...at, w: w!, h: h! };
+  }
   const tintIn = obj(raw.teamTint);
   const teamTint: ThemeScene['teamTint'] = {};
   for (const team of Object.keys(TEAMS) as TeamId[]) {
@@ -196,9 +228,12 @@ function parseScene(input: unknown, files: ReadonlySet<string> | null): ThemeSce
   }
   return {
     layers,
-    seats,
+    seats: byRole(raw.seats, '좌석'),
+    lounge: byRole(raw.lounge, '휴게 자리'),
+    extraSeats: points(raw.extraSeats, '추가 좌석'),
+    extraLounge: points(raw.extraLounge, '추가 휴게 자리'),
     door: raw.door === undefined || raw.door === null ? null : point(raw.door, '문'),
-    lounge: raw.lounge === undefined || raw.lounge === null ? null : point(raw.lounge, '라운지'),
+    spots,
     scaleMode: raw.scaleMode === 'nearest' ? 'nearest' : 'linear',
     teamTint,
   };
@@ -241,12 +276,14 @@ function parseCharacter(input: unknown, index: number, files: ReadonlySet<string
   }
 
   const anchor = obj(raw.anchor);
+  const head = obj(raw.head);
   return {
     id,
     name: str(raw.name, 40) || id,
     sheet: filePath(raw.sheet, `${where}의 스프라이트 시트`, files),
     frames,
     anchor: { x: num(anchor.x, 0, 1) ?? 0.5, y: num(anchor.y, 0, 1) ?? 1 },
+    head: { x: num(head.x, 0, 1) ?? 0.5, y: num(head.y, 0, 1) ?? 0 },
     scale: num(raw.scale, 0.05, 16) ?? 1,
     states: states as ThemeCharacter['states'],
     portraits,
@@ -263,7 +300,7 @@ export function parseThemeManifest(input: unknown, files: ReadonlySet<string> | 
   if (raw.version !== 1) fail('이 버전의 테마는 아직 읽을 수 없어요.');
   const id = str(raw.id, 40);
   if (!SLUG.test(id)) fail('id는 영어 소문자·숫자·하이픈으로 2~40자여야 해요.');
-  if (id === BUILTIN_THEME) fail(`'${BUILTIN_THEME}'은(는) 기본 테마 이름이라 쓸 수 없어요.`);
+  if ((BUILTIN_THEMES as readonly string[]).includes(id)) fail(`'${id}'은(는) 앱에 들어 있는 테마 이름이라 쓸 수 없어요.`);
   const themeVersion = str(raw.themeVersion, 20);
   if (!SEMVER.test(themeVersion)) fail('themeVersion은 1.0.0 같은 형식이어야 해요.');
   const license = str(raw.license, 80);
@@ -305,6 +342,29 @@ export function parseThemeManifest(input: unknown, files: ReadonlySet<string> | 
     css,
   };
 }
+
+/** What the app lists about an installed theme. */
+export interface ThemeSummary {
+  id: string;
+  themeVersion: string;
+  name: string;
+  author: string;
+  license: string;
+  description: string;
+  hasCss: boolean;
+  characters: { id: string; name: string }[];
+}
+
+export const themeSummary = (theme: ThemeManifest): ThemeSummary => ({
+  id: theme.id,
+  themeVersion: theme.themeVersion,
+  name: theme.name,
+  author: theme.author,
+  license: theme.license,
+  description: theme.description,
+  hasCss: theme.css !== null,
+  characters: theme.characters.map((c) => ({ id: c.id, name: c.name })),
+});
 
 /** How agents point at a theme character: `<themeId>:<characterId>`. Built-in skins have no colon. */
 export const packSkin = (themeId: string, characterId: string) => `${themeId}:${characterId}`;

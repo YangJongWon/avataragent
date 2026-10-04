@@ -41,6 +41,8 @@ import { adviseModel } from './model-advice.ts';
 import { finishLogin, logout, OAUTH_CALLBACK_PATH, startLogin } from './mcp-oauth.ts';
 import { apiKeyFor, dropMcpSecrets, setApiKey, setMcpSecrets } from './secrets.ts';
 import { store } from './store.ts';
+import { exportTheme, importTheme, listThemes, removeTheme, themeFile } from './themes.ts';
+import { THEME_LIMITS } from '../shared/theme-pack.ts';
 import { toStepInputs, workflowRuntime } from './workflow-runtime.ts';
 
 const app = express();
@@ -166,6 +168,41 @@ app.post('/api/offices/:id/playbook', (req, res) => {
   }
   store.emit('playbook.applied', { payload: { officeId: office.id, name: playbook.name, changes: changes.length } });
   res.json({ changes });
+});
+
+// Themes are only looks: anyone signed in (owner, member or share link) may list them and load their files.
+app.get('/api/themes', (_req, res) => {
+  res.json(listThemes());
+});
+
+// Themes apply to the whole company and may carry custom CSS, so only the owner installs or removes them.
+app.post('/api/themes/import', express.raw({ type: ['application/zip', 'application/octet-stream'], limit: THEME_LIMITS.zipBytes }), (req, res) => {
+  guard(res, 'owner');
+  if (!Buffer.isBuffer(req.body) || !req.body.length) throw new Error('테마 zip 파일을 올려 주세요.');
+  const theme = importTheme(new Uint8Array(req.body));
+  store.emit('theme.installed', { payload: { themeId: theme.id, name: theme.name, version: theme.themeVersion, hasCss: theme.hasCss } });
+  res.json(theme);
+});
+
+app.delete('/api/themes/:id', (req, res) => {
+  guard(res, 'owner');
+  removeTheme(req.params.id);
+  store.emit('theme.removed', { payload: { themeId: req.params.id } });
+  res.json({ ok: true });
+});
+
+app.get('/api/themes/:id/export', (req, res) => {
+  const zip = exportTheme(req.params.id);
+  res.setHeader('content-type', 'application/zip');
+  res.setHeader('content-disposition', `attachment; filename="${req.params.id}.zip"`);
+  res.send(Buffer.from(zip));
+});
+
+app.get('/themes/:id/*path', (req, res) => {
+  const path = (req.params as unknown as { path: string[] }).path.join('/');
+  const found = themeFile(req.params.id, path);
+  if (!found) return void res.status(404).end();
+  res.sendFile(found.file, { headers: { 'content-type': found.contentType, 'x-content-type-options': 'nosniff', 'cache-control': 'no-cache' } });
 });
 
 app.post('/api/offices/:id/improvements', (req, res) => {

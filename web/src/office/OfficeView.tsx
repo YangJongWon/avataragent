@@ -18,6 +18,9 @@ interface Props extends OfficeActions {
   onEvent: (listener: (event: OfficeEvent) => void) => () => void;
 }
 
+/** Dev builds only: `?theme=<id>` previews a theme served under /themes before it can be picked per office. */
+const devTheme = () => (import.meta.env.DEV ? (new URLSearchParams(location.search).get('theme') ?? undefined) : undefined);
+
 const pct = (x: number, y: number) => ({ left: `${(x / SCENE_W) * 100}%`, top: `${(y / SCENE_H) * 100}%` });
 const bubbleAt = (x: number, y: number) => pct(Math.min(Math.max(x, SCENE_W * 0.12), SCENE_W * 0.88), y);
 
@@ -41,7 +44,7 @@ export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
         setMenuAgent(id);
       },
       onBoardClick: () => actionsRef.current.onNewTask(),
-    }, office.id, office.team);
+    }, office.id, office.team, devTheme());
     sceneRef.current = scene;
     if (hostRef.current) void scene.init(hostRef.current);
     return () => {

@@ -13,6 +13,7 @@ export default defineConfig({
       '/api': `http://localhost:${serverPort}`,
       '/login': `http://localhost:${serverPort}`,
       '/logout': `http://localhost:${serverPort}`,
+      '/themes': `http://localhost:${serverPort}`,
       '/ws': { target: `ws://localhost:${serverPort}`, ws: true },
     },
   },
