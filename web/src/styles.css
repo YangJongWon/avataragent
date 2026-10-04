@@ -1757,6 +1757,56 @@ p.plan-note {
 .share-modal {
   width: 560px;
 }
+.help-btn {
+  white-space: nowrap;
+}
+.help-panel {
+  width: 620px;
+  height: min(720px, calc(100vh - 64px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.help-log {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 4px;
+}
+.help-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.help-q {
+  align-self: flex-end;
+  margin-left: auto;
+  max-width: 85%;
+  width: fit-content;
+  background: var(--line);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-weight: 700;
+}
+.help-a {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: #fffdf7;
+}
+.help-a .markdown {
+  font-size: 14px;
+}
+.help-source {
+  margin: 4px 0 0 10px;
+}
+.help-input {
+  margin-top: 10px;
+  gap: 6px;
+}
 .share-section + .share-section {
   border-top: 2px dashed var(--line);
   margin-top: 6px;

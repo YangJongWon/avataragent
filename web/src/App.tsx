@@ -5,6 +5,7 @@ import type { Agent, OfficeEvent, Snapshot } from '../../shared/types.ts';
 import { currentStepLabel, planProgress } from '../../shared/workflow.ts';
 import { api, useOffice } from './api.ts';
 import { Drawer } from './components/Drawer.tsx';
+import { HelpPanel } from './components/HelpPanel.tsx';
 import { HireTab } from './components/HireTab.tsx';
 import { AgentCardModal, HelpDialog, NewOfficeModal, NewTaskModal, PlanEditModal, RulesModal } from './components/Modals.tsx';
 import { McpTab } from './components/McpTab.tsx';
@@ -52,6 +53,7 @@ export function App() {
   const [tab, setTab] = useState<Tab>('office');
   const [officeId, setOfficeId] = useState('office_dev');
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [showHelp, setShowHelp] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [drawer, setDrawer] = useState<'flow' | 'report' | null>(null);
@@ -314,6 +316,9 @@ export function App() {
             ))}
         </nav>
         <div className="money">
+          <button className="pixel-btn small help-btn" onClick={() => setShowHelp(true)} title="사용법 묻기">
+            ❓ 도움말
+          </button>
           {viewer.kind === 'share' && (
             <span className="share-viewer" title={viewer.officeIds === 'all' ? '전체 사무실' : `${viewer.officeIds.length}개 사무실`}>
               👀 {viewer.name} · {SHARE_ROLES[viewer.role].label}
@@ -449,6 +454,7 @@ export function App() {
       )}
       {tab === 'models' && <ModelsTab snapshot={snapshot} onError={showError} onNotice={toast} />}
       {tab === 'mcp' && <McpTab snapshot={snapshot} onError={showError} onNotice={toast} />}
+      {showHelp && <HelpPanel tab={tab} officeId={office?.id} onClose={() => setShowHelp(false)} />}
       {tab === 'profit' && <ProfitTab snapshot={snapshot} onError={showError} onNotice={toast} />}
 
       {dialog?.kind === 'newOffice' && (

@@ -106,6 +106,11 @@ export interface McpPreset {
   note: string;
 }
 
+/** Secrets with these names are the pre-registered OAuth client for services without self-registration (e.g. Slack); never sent as headers. */
+export const OAUTH_CLIENT_ID = 'OAUTH_CLIENT_ID';
+export const OAUTH_CLIENT_SECRET = 'OAUTH_CLIENT_SECRET';
+export const isOAuthClientSecret = (name: string) => name === OAUTH_CLIENT_ID || name === OAUTH_CLIENT_SECRET;
+
 export const MCP_PRESETS: McpPreset[] = [
   {
     id: 'brave-search',
@@ -145,6 +150,19 @@ export const MCP_PRESETS: McpPreset[] = [
     url: 'https://api.githubcopilot.com/mcp/',
     secrets: [{ name: 'Authorization', label: 'GitHub 개인 액세스 토큰', placeholder: 'ghp_…', prefix: 'Bearer ' }],
     note: '읽기 권한만 있는 토큰을 권장해요.',
+  },
+  {
+    id: 'slack',
+    name: 'Slack',
+    icon: '💬',
+    transport: 'http',
+    url: 'https://mcp.slack.com/mcp',
+    oauth: true,
+    secrets: [
+      { name: OAUTH_CLIENT_ID, label: 'Slack 앱 Client ID', placeholder: '1234567890.1234567890' },
+      { name: OAUTH_CLIENT_SECRET, label: 'Slack 앱 Client Secret' },
+    ],
+    note: 'api.slack.com/apps 에서 앱을 만들고 Client ID·Secret을 넣어 주세요. 앱의 OAuth & Permissions에 아래 Redirect URL을 등록하고, 워크스페이스 관리자가 MCP 사용을 허용해야 해요.',
   },
   {
     id: 'fetch',

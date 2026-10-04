@@ -3,7 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { allowedModes, type McpServer, type McpTool } from '../shared/mcp.ts';
+import { allowedModes, isOAuthClientSecret, type McpServer, type McpTool } from '../shared/mcp.ts';
 import { config } from './config.ts';
 import { oauthProvider } from './mcp-oauth.ts';
 import { mcpSecretsFor } from './secrets.ts';
@@ -49,7 +49,8 @@ async function open(server: McpServer): Promise<Connection> {
   }
 
   const url = new URL(server.url);
-  const options = { requestInit: { headers: secrets }, authProvider: server.oauth ? oauthProvider(server.id) : undefined };
+  const headers = Object.fromEntries(Object.entries(secrets).filter(([name]) => !isOAuthClientSecret(name)));
+  const options = { requestInit: { headers }, authProvider: server.oauth ? oauthProvider(server.id) : undefined };
   try {
     const client = new Client(CLIENT_INFO);
     await client.connect(new StreamableHTTPClientTransport(url, options));

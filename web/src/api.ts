@@ -86,6 +86,8 @@ export const api = {
   designReport: (taskId: string, kind: DesignKind, review = false) =>
     call<{ dropped: number; review?: DesignReview }>('POST', `/api/tasks/${taskId}/design`, { kind, review }),
   exportCapabilities: () => call<ExportCapabilities>('GET', '/api/export-capabilities'),
+  askHelp: (question: string, tab: string, officeId: string | undefined, history: HelpTurn[]) =>
+    call<HelpAnswer>('POST', '/api/help', { question, tab, officeId, history }),
   exportUrl: (taskId: string, format: ExportFormat, print = false) =>
     `/api/tasks/${taskId}/export?format=${format}${print ? '&print=1' : ''}`,
   exportFile: async (taskId: string, format: ExportFormat) => {
@@ -107,6 +109,17 @@ export interface ExportCapabilities {
   visualReview: boolean;
   hint: string;
   rounds: number;
+}
+
+export interface HelpTurn {
+  question: string;
+  answer: string;
+}
+
+export interface HelpAnswer {
+  answer: string;
+  sources: { source: string; title: string; text: string }[];
+  ai: boolean;
 }
 
 export type CompanyInput = Pick<Company, 'name' | 'hat' | 'color' | 'api' | 'baseUrl'>;

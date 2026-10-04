@@ -27,6 +27,7 @@ import { config } from './config.ts';
 import { closeStorage, storageInfo } from './db.ts';
 import { setActionEnabled, simulateInquiry, simulateMail } from './orchestrator.ts';
 import { designReport, exportCapabilities } from './exports/designer.ts';
+import { answerHelp } from './help.ts';
 import { buildExport } from './exports/index.ts';
 import { closeAllConnections, closeConnection, discoverTools } from './mcp.ts';
 import { finishLogin, logout, OAUTH_CALLBACK_PATH, startLogin } from './mcp-oauth.ts';
@@ -211,6 +212,16 @@ app.post('/api/tasks/:id/design', async (req, res) => {
 
 app.get('/api/export-capabilities', (_req, res) => {
   res.json(exportCapabilities());
+});
+
+app.post('/api/help', async (req, res) => {
+  const viewer = viewerOfRes(res);
+  const officeId = typeof req.body?.officeId === 'string' && can(viewer, 'view', req.body.officeId) ? req.body.officeId : undefined;
+  const history = Array.isArray(req.body?.history)
+    ? req.body.history.slice(-3).map((h: { question?: unknown; answer?: unknown }) => ({ question: String(h?.question ?? '').slice(0, 500), answer: String(h?.answer ?? '').slice(0, 2000) }))
+    : [];
+  const useAI = officeId ? can(viewer, 'operate', officeId) : can(viewer, 'owner');
+  res.json(await answerHelp({ question: String(req.body?.question ?? ''), tab: String(req.body?.tab ?? ''), officeId, history }, useAI));
 });
 
 app.put('/api/tasks/:id/actions/:actionId', (req, res) => {

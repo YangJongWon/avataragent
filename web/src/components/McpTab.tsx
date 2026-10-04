@@ -218,6 +218,13 @@ function McpForm({
           OAuth 로그인 사용 (저장하면 그 서비스의 로그인 창이 열려요)
         </label>
       )}
+      {form.transport === 'http' && form.oauth && (
+        <p className="muted small">
+          로그인 후 돌아올 주소(Redirect URL): <code>{`${location.origin}/api/mcp-oauth/callback`}</code>
+          <br />
+          서비스에 앱을 직접 만들어야 하는 경우(Slack 등) 이 주소를 앱 설정에 등록하고, 비밀값에 <code>OAUTH_CLIENT_ID</code>·<code>OAUTH_CLIENT_SECRET</code>을 넣어 주세요. 외부 주소(PUBLIC_URL)를 쓰면 그 주소 기준이에요.
+        </p>
+      )}
 
       <div className="field">
         비밀값 ({envOrHeader})

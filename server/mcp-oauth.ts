@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { auth, type OAuthClientProvider, type OAuthDiscoveryState } from '@modelcontextprotocol/sdk/client/auth.js';
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
-import type { McpLoginInfo, McpServer } from '../shared/mcp.ts';
+import { OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, type McpLoginInfo, type McpServer } from '../shared/mcp.ts';
 import { config } from './config.ts';
 import { loadKv, saveKv } from './db.ts';
+import { mcpSecretsFor } from './secrets.ts';
 
 export const OAUTH_CALLBACK_PATH = '/api/mcp-oauth/callback';
 const LOGIN_WINDOW_MS = 10 * 60_000;
@@ -36,6 +37,14 @@ function patch(serverId: string, change: Partial<OAuthRecord>) {
   persist();
 }
 
+/** A client created by hand in the service's developer console, for servers that do not allow dynamic registration. */
+function preRegistered(serverId: string): OAuthClientInformationMixed | undefined {
+  const secrets = mcpSecretsFor(serverId);
+  const id = secrets[OAUTH_CLIENT_ID];
+  if (!id) return undefined;
+  return { client_id: id, ...(secrets[OAUTH_CLIENT_SECRET] ? { client_secret: secrets[OAUTH_CLIENT_SECRET] } : {}) };
+}
+
 /** Keeps the OAuth client registration, tokens and PKCE verifier of one MCP server in kv. */
 class KvOAuthProvider implements OAuthClientProvider {
   readonly serverId: string;
@@ -56,7 +65,7 @@ class KvOAuthProvider implements OAuthClientProvider {
       redirect_uris: [this.redirectUrl],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
-      token_endpoint_auth_method: 'none',
+      token_endpoint_auth_method: preRegistered(this.serverId)?.client_secret ? 'client_secret_post' : 'none',
     };
   }
 
@@ -67,7 +76,7 @@ class KvOAuthProvider implements OAuthClientProvider {
   }
 
   clientInformation() {
-    return record(this.serverId).client;
+    return preRegistered(this.serverId) ?? record(this.serverId).client;
   }
 
   saveClientInformation(client: OAuthClientInformationMixed) {
