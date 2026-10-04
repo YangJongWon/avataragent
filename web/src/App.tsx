@@ -4,6 +4,7 @@ import { TEAMS } from '../../shared/teams.ts';
 import type { Agent, OfficeEvent, Snapshot } from '../../shared/types.ts';
 import { currentStepLabel, planProgress } from '../../shared/workflow.ts';
 import { api, useOffice } from './api.ts';
+import { DemoTour } from './components/DemoTour.tsx';
 import { Drawer } from './components/Drawer.tsx';
 import { HelpPanel } from './components/HelpPanel.tsx';
 import { HireTab } from './components/HireTab.tsx';
@@ -60,6 +61,8 @@ export function App() {
   const [tabMenu, setTabMenu] = useState<{ officeId: string; x: number; y: number } | null>(null);
   const closeTabMenu = useCallback(() => setTabMenu(null), []);
   const press = useRef<{ timer: number; x: number; y: number; fired: boolean } | null>(null);
+  const [demo, setDemo] = useState(false);
+  const demoPress = useRef<number | null>(null);
   const compact = useCompact();
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
@@ -209,6 +212,32 @@ export function App() {
           onPointerCancel: cancelPress,
         }
       : {};
+  const startDemo = () => {
+    setTab('office');
+    setDialog(null);
+    setShowHelp(false);
+    setTabMenu(null);
+    setDrawer(null);
+    setDemo(true);
+  };
+  const demoPressHandlers = {
+    onContextMenu: (e: React.MouseEvent) => {
+      e.preventDefault();
+      if (demoPress.current) window.clearTimeout(demoPress.current);
+      startDemo();
+    },
+    onPointerDown: () => {
+      if (demoPress.current) window.clearTimeout(demoPress.current);
+      demoPress.current = window.setTimeout(() => {
+        demoPress.current = null;
+        navigator.vibrate?.(15);
+        startDemo();
+      }, LONG_PRESS_MS);
+    },
+    onPointerUp: () => demoPress.current && window.clearTimeout(demoPress.current),
+    onPointerLeave: () => demoPress.current && window.clearTimeout(demoPress.current),
+    onPointerCancel: () => demoPress.current && window.clearTimeout(demoPress.current),
+  };
   const menuOffice = tabMenu ? snapshot.offices.find((o) => o.id === tabMenu.officeId) : undefined;
   const menuBusy = menuOffice ? snapshot.tasks.some((t) => t.officeId === menuOffice.id && ACTIVE.includes(t.status)) : false;
 
@@ -333,8 +362,12 @@ export function App() {
               </span>
             </>
           )}
-          <span className={`provider ${snapshot.provider}`} title={snapshot.model}>
-            {snapshot.provider === 'mock' ? '시뮬레이션' : snapshot.provider === 'agents' ? '직원별 AI' : snapshot.provider.toUpperCase()}
+          <span
+            className={`provider ${snapshot.provider}${demo ? ' demo' : ''}`}
+            title={`${snapshot.model}\n길게 누르기(우클릭): 사용법 데모`}
+            {...demoPressHandlers}
+          >
+            {demo ? '📝 데모 중' : snapshot.provider === 'mock' ? '시뮬레이션' : snapshot.provider === 'agents' ? '직원별 AI' : snapshot.provider.toUpperCase()}
           </span>
           <span className={`dot ${connected ? 'on' : 'off'}`} title={connected ? '서버 연결됨' : '연결 끊김'} />
         </div>
@@ -454,6 +487,7 @@ export function App() {
       )}
       {tab === 'models' && <ModelsTab snapshot={snapshot} onError={showError} onNotice={toast} />}
       {tab === 'mcp' && <McpTab snapshot={snapshot} onError={showError} onNotice={toast} />}
+      {demo && <DemoTour onClose={() => setDemo(false)} />}
       {showHelp && <HelpPanel tab={tab} officeId={office?.id} onClose={() => setShowHelp(false)} />}
       {tab === 'profit' && <ProfitTab snapshot={snapshot} onError={showError} onNotice={toast} />}
 
