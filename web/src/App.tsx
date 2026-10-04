@@ -316,7 +316,7 @@ export function App() {
             ))}
         </nav>
         <div className="money">
-          <button className="pixel-btn small help-btn" onClick={() => setShowHelp(true)} title="사용법 묻기">
+          <button className="main-tab help-btn" onClick={() => setShowHelp(true)} title="사용법 묻기">
             ❓ 도움말
           </button>
           {viewer.kind === 'share' && (

@@ -1757,8 +1757,14 @@ p.plan-note {
 .share-modal {
   width: 560px;
 }
-.help-btn {
-  white-space: nowrap;
+.main-tab.help-btn {
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+.main-tab.help-btn:hover {
+  background: var(--yellow);
+  color: var(--ink);
 }
 .help-panel {
   width: 620px;
@@ -1781,21 +1787,33 @@ p.plan-note {
   gap: 6px;
 }
 .help-q {
-  align-self: flex-end;
   margin-left: auto;
   max-width: 85%;
   width: fit-content;
-  background: var(--line);
-  border-radius: 10px;
-  padding: 6px 10px;
+  background: var(--yellow);
+  border: 2px solid var(--line);
+  box-shadow: 2px 2px 0 var(--line);
+  padding: 5px 10px;
   font-weight: 700;
 }
 .help-a {
-  margin-top: 6px;
-  padding: 8px 10px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #fff;
   border: 2px solid var(--line);
-  border-radius: 10px;
-  background: #fffdf7;
+  box-shadow: 2px 2px 0 rgba(61, 52, 73, 0.25);
+}
+.help-a details summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.help-intro {
+  background: #fff4dc;
+  border: 2px dashed var(--line);
+  padding: 10px;
+}
+.help-intro p {
+  margin: 0 0 8px;
 }
 .help-a .markdown {
   font-size: 14px;
@@ -1806,6 +1824,11 @@ p.plan-note {
 .help-input {
   margin-top: 10px;
   gap: 6px;
+}
+.help-input input {
+  border: 2px solid var(--line);
+  padding: 6px;
+  background: #fff;
 }
 .share-section + .share-section {
   border-top: 2px dashed var(--line);
