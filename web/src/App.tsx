@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { can, seesEverything, SHARE_ROLES, type Action } from '../../shared/access.ts';
+import { can, seesEverything, shareRoleLabel, type Action } from '../../shared/access.ts';
 import { TEAMS } from '../../shared/teams.ts';
 import type { Agent, OfficeEvent, Snapshot } from '../../shared/types.ts';
 import { currentStepLabel, planProgress } from '../../shared/workflow.ts';
@@ -20,15 +20,22 @@ import { ProfitTab } from './components/ProfitTab.tsx';
 import { ProjectLounge } from './components/ProjectLounge.tsx';
 import { ReportPanel } from './components/ReportPanel.tsx';
 import { OfficeTabMenu } from './components/OfficeTabMenu.tsx';
+import { SettingsTab } from './components/SettingsTab.tsx';
 import { ShareModal } from './components/ShareModal.tsx';
 import { TeamDataPanel } from './components/TeamDataPanel.tsx';
 import { WorkflowView } from './components/WorkflowView.tsx';
+import { WorkTab } from './components/WorkTab.tsx';
 import { krw, roleTitle } from './format.ts';
 import { OfficeView } from './office/OfficeView.tsx';
 import { useDemoPlayback } from './demoPlayback.ts';
 import { useCompact } from './useCompact.ts';
+import { LanguageProvider, useLanguage } from './LanguageProvider.tsx';
+import { ThemesTab } from './components/ThemesTab.tsx';
+import { ThemeStudio } from './studio/ThemeStudio.tsx';
+import { themeApi } from './themeApi.ts';
+import { useThemePack } from './useThemePack.ts';
 
-type Tab = 'office' | 'lounge' | 'hire' | 'models' | 'mcp' | 'profit' | 'perf' | 'members';
+type Tab = 'office' | 'lounge' | 'hire' | 'models' | 'mcp' | 'profit' | 'perf' | 'work' | 'members' | 'settings' | 'themes' | 'studio';
 type Dialog =
   | { kind: 'newTask' }
   | { kind: 'newOffice' }
@@ -45,7 +52,7 @@ interface Toast {
   tone: 'info' | 'error';
 }
 
-const DISABLED_TABS = ['업무 게시판', '업무 설계', '근무·효율', '설정'];
+const DISABLED_TABS = ['업무 게시판', '업무 설계'];
 const ACTIVE = ['running', 'awaiting_help', 'awaiting_approval'];
 const LONG_PRESS_MS = 500;
 
@@ -57,6 +64,7 @@ function officeIdOfEvent(event: OfficeEvent, snapshot: Snapshot) {
 }
 
 export function App() {
+  const { t } = useLanguage();
   const { snapshot, events, connected, onEvent } = useOffice();
   const [tab, setTab] = useState<Tab>('office');
   const [officeId, setOfficeId] = useState('office_dev');
@@ -172,6 +180,10 @@ export function App() {
   useEffect(() => {
     if (officeMissing && firstOfficeId) setOfficeId(firstOfficeId);
   }, [officeMissing, firstOfficeId]);
+
+  // The office being looked at sets the look of the whole page: its theme's colors and cleaned custom CSS.
+  const themedOffice = snapshot?.offices.find((o) => o.id === officeId) ?? snapshot?.offices[0];
+  const themePack = useThemePack(themedOffice?.theme, themedOffice?.themeCss !== false);
 
   if (!snapshot || !view) {
     return <div className="loading">사무실 문을 여는 중… {connected ? '' : '(서버 연결 대기)'}</div>;
@@ -387,274 +399,328 @@ export function App() {
   );
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <div className="brand">🏢 {snapshot.companyName}</div>
-        <nav className="main-tabs">
-          {(
-            [
-              ['office', '사무실'],
-              ['lounge', '프로젝트 라운지'],
-              ['hire', '직원 관리'],
-              ['models', '모델 관리'],
-              ['mcp', 'MCP 관리'],
-              ['profit', '손익·결산'],
-              ['perf', '성과·개선'],
-              ['members', '플랜·구성원'],
-            ] as [Tab, string][]
-          )
-            .filter(([id]) => isOwner || id === 'office' || id === 'lounge')
-            .map(([id, label]) => (
-              <button key={id} className={`main-tab ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>
-                {label}
-              </button>
-            ))}
-          {isOwner &&
-            DISABLED_TABS.map((label) => (
-              <button key={label} className="main-tab" disabled title="알파 이후 추가 예정">
-                {label}
-              </button>
-            ))}
-        </nav>
-        <div className="money">
-          <button className="main-tab help-btn" onClick={() => setShowHelp(true)} title="사용법 묻기">
-            ❓ 도움말
-          </button>
-          {chatOn && (
-            <button className="main-tab chat-btn" onClick={() => (chatOpen ? setChatOpen(false) : openChat(chatChannel))} title="그룹 채팅">
-              💬 채팅{unread > 0 && <span className="chat-unread">{unread > 99 ? '99+' : unread}</span>}
+    <LanguageProvider language={snapshot.language}>
+      <div className="app" {...themePack.attrs}>
+        <header className="topbar">
+          <div className="brand">🏢 {snapshot.companyName}</div>
+          <nav className="main-tabs">
+            {(
+              [
+                ['office', '사무실'],
+                ['lounge', '프로젝트 라운지'],
+                ['hire', '직원 관리'],
+                ['themes', '테마'],
+                ['models', '모델 관리'],
+                ['mcp', 'MCP 관리'],
+                ['profit', '손익·결산'],
+                ['perf', '성과·개선'],
+                ['members', '플랜·구성원'],
+                ['settings', '환경 설정'],
+                ['work', '근무·효율'],
+              ] as [Tab, string][]
+            )
+              .filter(([id]) => isOwner || id === 'office' || id === 'lounge')
+              .map(([id, label]) => (
+                <button key={id} className={`main-tab ${tab === id || (id === 'themes' && tab === 'studio') ? 'active' : ''}`} onClick={() => setTab(id)}>
+                  {t(label)}
+                </button>
+              ))}
+            {isOwner &&
+              DISABLED_TABS.map((label) => (
+                <button key={label} className="main-tab" disabled title={t('알파 이후 추가 예정')}>
+                  {t(label)}
+                </button>
+              ))}
+          </nav>
+          <div className="money">
+            <button className="main-tab help-btn" onClick={() => setShowHelp(true)} title={t('사용법 묻기')}>
+              ❓ {t('도움말')}
             </button>
-          )}
-          {viewer.kind !== 'owner' && (
-            <span className="share-viewer" title={viewer.officeIds === 'all' ? '전체 사무실' : `${viewer.officeIds.length}개 사무실`}>
-              {viewer.kind === 'member' ? '🙂' : '👀'} {viewer.name} · {SHARE_ROLES[viewer.role].label}
-              <a href="/logout">나가기</a>
-            </span>
-          )}
-          {seesEverything(viewer) && (
-            <>
-              <span title="이번 달 남은 AI 예산">잔액 {krw(remaining)}</span>
-              <span title="인정 가치 - 비용" className={profit < 0 ? 'neg' : 'pos'}>
-                이익 {krw(profit)}
-              </span>
-            </>
-          )}
-          <span
-            className={`provider ${snapshot.provider}${demo ? ' demo' : ''}`}
-            title={`${snapshot.model}\n길게 누르기(우클릭): 사용법 데모`}
-            {...demoPressHandlers}
-          >
-            {demo ? '📝 데모 중' : snapshot.provider === 'mock' ? '시뮬레이션' : snapshot.provider === 'agents' ? '직원별 AI' : snapshot.provider.toUpperCase()}
-          </span>
-          <span className={`dot ${connected ? 'on' : 'off'}`} title={connected ? '서버 연결됨' : '연결 끊김'} />
-        </div>
-      </header>
-
-      {(tab === 'office' || tab === 'hire') && (
-        <nav className="office-tabs">
-          {snapshot.offices.map((o) => {
-            const tasks = snapshot.tasks.filter((t) => t.officeId === o.id);
-            const needsMe = tasks.filter((t) => t.status === 'awaiting_help' || t.status === 'awaiting_approval').length;
-            const running = tasks.some((t) => t.status === 'running');
-            const waiting = tasks.filter((t) => t.status === 'queued').length;
-            const meta = TEAMS[o.team];
-            return (
+            {chatOn && (
               <button
-                key={o.id}
-                className={`office-tab ${o.id === officeId ? 'active' : ''}`}
-                style={{ background: o.id === officeId ? meta.wall : undefined }}
-                onClick={() => {
-                  if (press.current?.fired) {
-                    press.current = null;
-                    return;
-                  }
-                  switchOffice(o.id);
-                }}
-                {...tabPressHandlers(o.id)}
-                title={isOwner ? `${meta.description}\n우클릭(길게 누르기): 공유·닫기` : meta.description}
+                className="main-tab chat-btn"
+                onClick={() => (chatOpen ? setChatOpen(false) : openChat(chatChannel))}
+                title={t('그룹 채팅')}
               >
-                {meta.emoji} {o.name}
-                {running && <span className="tab-running" title="일하는 중" />}
-                {needsMe > 0 && <span className="tab-badge">{needsMe}</span>}
-                {waiting > 0 && (
-                  <span className="tab-queue" title={`대기 업무 ${waiting}건`}>
-                    +{waiting}
-                  </span>
-                )}
-                {o.autoRun && <span className="tab-auto">AUTO</span>}
+                💬 {t('채팅')}
+                {unread > 0 && <span className="chat-unread">{unread > 99 ? '99+' : unread}</span>}
               </button>
-            );
-          })}
-          {isOwner && (
-            <button className="office-tab add" onClick={() => setDialog({ kind: 'newOffice' })} title="새 사무실 열기">
-              + 사무실
-            </button>
-          )}
-          <span className="office-tab-desc muted small">{team.description}</span>
-        </nav>
-      )}
-      {tabMenu && menuOffice && (
-        <OfficeTabMenu
-          title={`${TEAMS[menuOffice.team].emoji} ${menuOffice.name}`}
-          x={tabMenu.x}
-          y={tabMenu.y}
-          onClose={closeTabMenu}
-          items={[
-            { label: '🔗 이 사무실 공유', run: () => setDialog({ kind: 'share', officeIds: [menuOffice.id] }) },
-            { label: '🏢 전체 사무실 공유', run: () => setDialog({ kind: 'share' }) },
-            {
-              label: '🗑 사무실 닫기',
-              danger: true,
-              run: () => void closeOffice(menuOffice.id, menuOffice.name),
-              disabled: !menuOffice.custom || menuBusy,
-              hint: !menuOffice.custom ? '기본 사무실은 닫을 수 없어요' : menuBusy ? '진행 중인 업무가 끝나면 닫을 수 있어요' : undefined,
-            },
-          ]}
-        />
-      )}
-
-      {tab === 'office' && !compact && (
-        <main className="office-layout">
-          <section className="office-col">
-            {scene}
-            {workflow}
-          </section>
-          {report}
-        </main>
-      )}
-      {tab === 'office' && compact && (
-        <main className="compact-main">
-          <div className="compact-stage">{scene}</div>
-          <Drawer
-            side="bottom"
-            open={drawer === 'flow'}
-            onOpenChange={(open) => setDrawer(open ? 'flow' : null)}
-            handle={
+            )}
+            {viewer.kind !== 'owner' && (
+              <span className="share-viewer" title={viewer.officeIds === 'all' ? t('전체 사무실') : `${viewer.officeIds.length}개 사무실`}>
+                {viewer.kind === 'member' ? '🙂' : '👀'} {viewer.name} · {shareRoleLabel(viewer.role)}
+                <a href="/logout">{t('나가기')}</a>
+              </span>
+            )}
+            {seesEverything(viewer) && (
               <>
-                <span className="drawer-grip" />
-                <span className="drawer-handle-text">
-                  업무 여정 · {flowSummary}
-                  {queuedCount > 0 && <span className="tab-queue">대기 {queuedCount}</span>}
+                <span title={t('이번 달 남은 AI 예산')}>
+                  {t('잔액')} {krw(remaining)}
+                </span>
+                <span title={t('인정 가치 - 비용')} className={profit < 0 ? 'neg' : 'pos'}>
+                  {t('이익')} {krw(profit)}
                 </span>
               </>
-            }
-          >
-            {workflow}
-          </Drawer>
-          <Drawer
-            side="right"
-            open={drawer === 'report'}
-            onOpenChange={(open) => setDrawer(open ? 'report' : null)}
-            attention={needsMeHere > 0}
-            handle={
-              <>
-                {needsMeHere > 0 && <span className="tab-badge">{needsMeHere}</span>}
-                <span className="drawer-handle-vertical">
-                  {helpTask ? '도움 요청' : view.tasks.some((t) => t.status === 'awaiting_approval') ? '승인 대기' : '업무·보고'}
-                </span>
-              </>
-            }
-          >
-            {report}
-          </Drawer>
-        </main>
-      )}
-      {tab === 'hire' && (
-        <HireTab key={office.id} office={office} agents={view.agents} onError={showError} onNotice={toast} onManageModels={() => setTab('models')} />
-      )}
-      {tab === 'lounge' && (
-        <ProjectLounge
-          snapshot={snapshot}
-          onOpenOffice={(id) => {
-            if (id === 'plan') setTab('members');
-            else switchOffice(id);
-          }}
-        />
-      )}
-      {tab === 'models' && <ModelsTab snapshot={snapshot} onError={showError} onNotice={toast} />}
-      {tab === 'mcp' && <McpTab snapshot={snapshot} onError={showError} onNotice={toast} />}
-      {demo && <DemoTour onClose={() => setDemo(false)} />}
-      {showHelp && <HelpPanel tab={tab} officeId={office?.id} onClose={() => setShowHelp(false)} />}
-      {tab === 'profit' && <ProfitTab snapshot={snapshot} onError={showError} onNotice={toast} />}
-      {tab === 'perf' && <PerformanceTab snapshot={snapshot} officeId={officeId} onError={showError} onNotice={toast} />}
-      {tab === 'members' && <MembersTab snapshot={snapshot} onError={showError} onNotice={toast} />}
-      {chatOn && chatOpen && (
-        <ChatPanel
-          snapshot={snapshot}
-          channel={chatChannel}
-          onChannel={setChatChannel}
-          onOpenTask={openTask}
-          onClose={() => setChatOpen(false)}
-          onError={showError}
-        />
-      )}
-
-      {dialog?.kind === 'newOffice' && (
-        <NewOfficeModal
-          onCreated={(created) => {
-            switchOffice(created.id);
-            toast(`${created.name} 사무실을 열었어요. 직원 4명이 출근했어요!`);
-          }}
-          onClose={() => setDialog(null)}
-          onError={showError}
-        />
-      )}
-      {dialog?.kind === 'newTask' && (
-        <NewTaskModal
-          office={office}
-          agents={view.agents}
-          busy={officeBusy}
-          queuedCount={queuedCount}
-          pendingCount={pendingCount}
-          hourlyRateKrw={snapshot.budget.hourlyRateKrw}
-          onClose={() => setDialog(null)}
-          onError={showError}
-        />
-      )}
-      {dialog?.kind === 'share' && isOwner && (
-        <ShareModal snapshot={snapshot} initialOfficeIds={dialog.officeIds} onClose={() => setDialog(null)} onError={showError} onNotice={toast} />
-      )}
-      {dialog?.kind === 'plan' && view.tasks.find((t) => t.id === dialog.taskId) && (
-        <PlanEditModal
-          task={view.tasks.find((t) => t.id === dialog.taskId)!}
-          team={office.team}
-          agents={view.agents}
-          onClose={() => setDialog(null)}
-          onError={showError}
-        />
-      )}
-      {dialog?.kind === 'help' && helpTask?.help && agentById(helpTask.help.agentId) && (
-        <HelpDialog
-          task={helpTask}
-          agent={agentById(helpTask.help.agentId)!}
-          roleTitle={roleTitle(agentById(helpTask.help.agentId)!, snapshot.offices)}
-          onClose={() => setDialog(null)}
-          onError={showError}
-        />
-      )}
-      {dialog?.kind === 'rules' && agentById(dialog.agentId) && (
-        <RulesModal
-          agent={agentById(dialog.agentId)!}
-          safetyRules={snapshot.safetyRules}
-          onClose={() => setDialog(null)}
-          onError={showError}
-        />
-      )}
-      {dialog?.kind === 'card' && agentById(dialog.agentId) && (
-        <AgentCardModal
-          agent={agentById(dialog.agentId)!}
-          roleTitle={roleTitle(agentById(dialog.agentId)!, snapshot.offices)}
-          onClose={() => setDialog(null)}
-        />
-      )}
-
-      <div className="toasts">
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast ${t.tone}`}>
-            {t.text}
+            )}
+            <span
+              className={`provider ${snapshot.provider}${demo ? ' demo' : ''}`}
+              title={`${snapshot.model}\n길게 누르기(우클릭): 사용법 데모`}
+              {...demoPressHandlers}
+            >
+              {demo ? '📝 데모 중' : snapshot.provider === 'mock' ? '시뮬레이션' : snapshot.provider === 'agents' ? '직원별 AI' : snapshot.provider.toUpperCase()}
+            </span>
+            <span className={`dot ${connected ? 'on' : 'off'}`} title={connected ? '서버 연결됨' : '연결 끊김'} />
           </div>
-        ))}
+        </header>
+
+        {(tab === 'office' || tab === 'hire' || tab === 'themes') && (
+          <nav className="office-tabs">
+            {snapshot.offices.map((o) => {
+              const tasks = snapshot.tasks.filter((t) => t.officeId === o.id);
+              const needsMe = tasks.filter((t) => t.status === 'awaiting_help' || t.status === 'awaiting_approval').length;
+              const running = tasks.some((t) => t.status === 'running');
+              const waiting = tasks.filter((t) => t.status === 'queued').length;
+              const meta = TEAMS[o.team];
+              return (
+                <button
+                  key={o.id}
+                  className={`office-tab ${o.id === officeId ? 'active' : ''}`}
+                  style={{ background: o.id === officeId ? meta.wall : undefined }}
+                  onClick={() => {
+                    if (press.current?.fired) {
+                      press.current = null;
+                      return;
+                    }
+                    switchOffice(o.id);
+                  }}
+                  {...tabPressHandlers(o.id)}
+                  title={isOwner ? `${meta.description}\n우클릭(길게 누르기): 공유·닫기` : meta.description}
+                >
+                  {meta.emoji} {o.name}
+                  {running && <span className="tab-running" title="일하는 중" />}
+                  {needsMe > 0 && <span className="tab-badge">{needsMe}</span>}
+                  {waiting > 0 && (
+                    <span className="tab-queue" title={`대기 업무 ${waiting}건`}>
+                      +{waiting}
+                    </span>
+                  )}
+                  {o.autoRun && <span className="tab-auto">AUTO</span>}
+                </button>
+              );
+            })}
+            {isOwner && (
+              <button className="office-tab add" onClick={() => setDialog({ kind: 'newOffice' })} title="새 사무실 열기">
+                + 사무실
+              </button>
+            )}
+            <span className="office-tab-desc muted small">{team.description}</span>
+          </nav>
+        )}
+        {tabMenu && menuOffice && (
+          <OfficeTabMenu
+            title={`${TEAMS[menuOffice.team].emoji} ${menuOffice.name}`}
+            x={tabMenu.x}
+            y={tabMenu.y}
+            onClose={closeTabMenu}
+            items={[
+              { label: '🔗 이 사무실 공유', run: () => setDialog({ kind: 'share', officeIds: [menuOffice.id] }) },
+              { label: '🏢 전체 사무실 공유', run: () => setDialog({ kind: 'share' }) },
+              {
+                label: '🎨 테마 바꾸기',
+                run: () => {
+                  switchOffice(menuOffice.id);
+                  setTab('themes');
+                },
+              },
+              {
+                label: '🗑 사무실 닫기',
+                danger: true,
+                run: () => void closeOffice(menuOffice.id, menuOffice.name),
+                disabled: !menuOffice.custom || menuBusy,
+                hint: !menuOffice.custom ? '기본 사무실은 닫을 수 없어요' : menuBusy ? '진행 중인 업무가 끝나면 닫을 수 있어요' : undefined,
+              },
+            ]}
+          />
+        )}
+
+        {tab === 'office' && !compact && (
+          <main className="office-layout">
+            <section className="office-col">
+              {scene}
+              {workflow}
+            </section>
+            {report}
+          </main>
+        )}
+        {tab === 'office' && compact && (
+          <main className="compact-main">
+            <div className="compact-stage">{scene}</div>
+            <Drawer
+              side="bottom"
+              open={drawer === 'flow'}
+              onOpenChange={(open) => setDrawer(open ? 'flow' : null)}
+              handle={
+                <>
+                  <span className="drawer-grip" />
+                  <span className="drawer-handle-text">
+                    업무 여정 · {flowSummary}
+                    {queuedCount > 0 && <span className="tab-queue">대기 {queuedCount}</span>}
+                  </span>
+                </>
+              }
+            >
+              {workflow}
+            </Drawer>
+            <Drawer
+              side="right"
+              open={drawer === 'report'}
+              onOpenChange={(open) => setDrawer(open ? 'report' : null)}
+              attention={needsMeHere > 0}
+              handle={
+                <>
+                  {needsMeHere > 0 && <span className="tab-badge">{needsMeHere}</span>}
+                  <span className="drawer-handle-vertical">
+                    {helpTask ? '도움 요청' : view.tasks.some((t) => t.status === 'awaiting_approval') ? '승인 대기' : '업무·보고'}
+                  </span>
+                </>
+              }
+            >
+              {report}
+            </Drawer>
+          </main>
+        )}
+        {tab === 'hire' && (
+          <HireTab key={office.id} office={office} agents={view.agents} onError={showError} onNotice={toast} onManageModels={() => setTab('models')} />
+        )}
+        {tab === 'lounge' && (
+          <ProjectLounge
+            snapshot={snapshot}
+            onError={showError}
+            onOpenOffice={(id) => {
+              if (id === 'plan') setTab('members');
+              else switchOffice(id);
+            }}
+          />
+        )}
+        {tab === 'models' && <ModelsTab snapshot={snapshot} onError={showError} onNotice={toast} />}
+        {tab === 'mcp' && <McpTab snapshot={snapshot} onError={showError} onNotice={toast} />}
+        {demo && <DemoTour onClose={() => setDemo(false)} />}
+        {showHelp && <HelpPanel tab={tab} officeId={office?.id} onClose={() => setShowHelp(false)} />}
+        {tab === 'profit' && <ProfitTab snapshot={snapshot} onError={showError} onNotice={toast} />}
+        {tab === 'perf' && <PerformanceTab snapshot={snapshot} officeId={officeId} onError={showError} onNotice={toast} />}
+        {tab === 'work' && <WorkTab snapshot={snapshot} onError={showError} onNotice={toast} />}
+        {tab === 'members' && <MembersTab snapshot={snapshot} onError={showError} onNotice={toast} />}
+        {tab === 'settings' && <SettingsTab snapshot={snapshot} onError={showError} onNotice={toast} />}
+        {tab === 'themes' && (
+          <main className="page">
+          <ThemesTab
+            isOwner={isOwner}
+            current={office.theme}
+            onUse={(themeId) =>
+              void api
+                .updateOffice(office.id, { theme: themeId })
+                .then(() => toast(`${office.name}의 테마를 바꿨어요.`), (e) => showError(e instanceof Error ? e.message : String(e)))
+            }
+            cssOn={office.themeCss !== false}
+            onCssOn={(on) => void api.updateOffice(office.id, { themeCss: on }).catch((e) => showError(e instanceof Error ? e.message : String(e)))}
+            onMake={() => setTab('studio')}
+            onError={showError}
+            onNotice={toast}
+          />
+          </main>
+        )}
+        {tab === 'studio' && (
+          <main className="page">
+            <div className="row studio-back">
+              <button className="pixel-btn small" onClick={() => setTab('themes')}>
+                ← 테마 목록
+              </button>
+            </div>
+            <ThemeStudio
+              onInstall={isOwner ? async (zip) => void (await themeApi.importZip(zip)) : undefined}
+              onError={showError}
+              onNotice={toast}
+            />
+          </main>
+        )}
+        {chatOn && chatOpen && (
+          <ChatPanel
+            snapshot={snapshot}
+            channel={chatChannel}
+            onChannel={setChatChannel}
+            onOpenTask={openTask}
+            onClose={() => setChatOpen(false)}
+            onError={showError}
+          />
+        )}
+
+        {dialog?.kind === 'newOffice' && (
+          <NewOfficeModal
+            onCreated={(created) => {
+              switchOffice(created.id);
+              toast(`${created.name} 사무실을 열었어요. 직원 4명이 출근했어요!`);
+            }}
+            onClose={() => setDialog(null)}
+            onError={showError}
+          />
+        )}
+        {dialog?.kind === 'newTask' && (
+          <NewTaskModal
+            office={office}
+            agents={view.agents}
+            busy={officeBusy}
+            queuedCount={queuedCount}
+            pendingCount={pendingCount}
+            hourlyRateKrw={snapshot.budget.hourlyRateKrw}
+            onClose={() => setDialog(null)}
+            onError={showError}
+          />
+        )}
+        {dialog?.kind === 'share' && isOwner && (
+          <ShareModal snapshot={snapshot} initialOfficeIds={dialog.officeIds} onClose={() => setDialog(null)} onError={showError} onNotice={toast} />
+        )}
+        {dialog?.kind === 'plan' && view.tasks.find((t) => t.id === dialog.taskId) && (
+          <PlanEditModal
+            task={view.tasks.find((t) => t.id === dialog.taskId)!}
+            team={office.team}
+            agents={view.agents}
+            onClose={() => setDialog(null)}
+            onError={showError}
+          />
+        )}
+        {dialog?.kind === 'help' && helpTask?.help && agentById(helpTask.help.agentId) && (
+          <HelpDialog
+            task={helpTask}
+            agent={agentById(helpTask.help.agentId)!}
+            roleTitle={roleTitle(agentById(helpTask.help.agentId)!, snapshot.offices)}
+            onClose={() => setDialog(null)}
+            onError={showError}
+          />
+        )}
+        {dialog?.kind === 'rules' && agentById(dialog.agentId) && (
+          <RulesModal
+            agent={agentById(dialog.agentId)!}
+            safetyRules={snapshot.safetyRules}
+            onClose={() => setDialog(null)}
+            onError={showError}
+          />
+        )}
+        {dialog?.kind === 'card' && agentById(dialog.agentId) && (
+          <AgentCardModal
+            agent={agentById(dialog.agentId)!}
+            roleTitle={roleTitle(agentById(dialog.agentId)!, snapshot.offices)}
+            onClose={() => setDialog(null)}
+          />
+        )}
+
+        <div className="toasts">
+          {toasts.map((t) => (
+            <div key={t.id} className={`toast ${t.tone}`}>
+              {t.text}
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
+    </LanguageProvider>
   );
 }

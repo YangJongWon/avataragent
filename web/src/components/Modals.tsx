@@ -4,6 +4,8 @@ import type { Agent, Office, PlanMode, Task, TeamId, WorkflowStepInput } from '.
 import { loopTargetLabel, STEP_KIND, templatePlan, validatePlan } from '../../../shared/workflow.ts';
 import { api } from '../api.ts';
 import { krw, modelLabel, roi } from '../format.ts';
+import { themeApi } from '../themeApi.ts';
+import { DEFAULT_THEME, type ThemeSummary } from '../../../shared/theme-pack.ts';
 import { PlanEditor } from './PlanEditor.tsx';
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
@@ -55,11 +57,17 @@ export function NewOfficeModal({
   const [team, setTeam] = useState<TeamId>('dev');
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
+  const [themes, setThemes] = useState<ThemeSummary[]>([]);
+  const [theme, setTheme] = useState(DEFAULT_THEME);
+
+  useEffect(() => {
+    themeApi.list().then(setThemes, () => setThemes([]));
+  }, []);
 
   const submit = async () => {
     setBusy(true);
     try {
-      onCreated(await api.createOffice({ team, name }));
+      onCreated(await api.createOffice({ team, name, theme }));
       onClose();
     } catch (e) {
       onError(e instanceof Error ? e.message : String(e));
@@ -90,6 +98,19 @@ export function NewOfficeModal({
         사무실 이름 (선택)
         <input value={name} maxLength={20} onChange={(e) => setName(e.target.value)} placeholder={`비워 두면 "${TEAMS[team].name} 2" 같은 이름`} />
       </label>
+      {themes.length > 0 && (
+        <label className="field">
+          테마
+          <select value={theme} onChange={(e) => setTheme(e.target.value)}>
+            <option value={DEFAULT_THEME}>기본 픽셀</option>
+            {themes.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <div className="row end">
         <button className="pixel-btn" onClick={onClose}>
           취소
@@ -149,6 +170,7 @@ export function NewTaskModal({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [taskType, setTaskType] = useState(team.taskTypes[0].id);
+  const [milestoneId, setMilestoneId] = useState(office.milestones?.[0]?.id ?? '');
   const [planMode, setPlanMode] = useState<PlanMode>('template');
   const [steps, setSteps] = useState<WorkflowStepInput[]>(() => templatePlan(office.team, team.taskTypes[0].id, agents));
   const [planNote, setPlanNote] = useState('');
@@ -190,6 +212,7 @@ export function NewTaskModal({
         title,
         description,
         taskType,
+        milestoneId: milestoneId || undefined,
         planMode,
         steps: planMode === 'custom' ? steps : undefined,
         planNote: planMode === 'custom' ? planNote : undefined,
@@ -227,6 +250,15 @@ export function NewTaskModal({
           onChange={(e) => setDescription(e.target.value)}
           placeholder={DESCRIPTION_PLACEHOLDER[office.team]}
         />
+      </label>
+      <label className="field">
+        프로젝트 마일스톤
+        <select value={milestoneId} onChange={(e) => setMilestoneId(e.target.value)}>
+          <option value="">진행률에 포함하지 않음</option>
+          {(office.milestones ?? []).map((milestone) => (
+            <option key={milestone.id} value={milestone.id}>{milestone.label} · 전체의 {milestone.weight}%</option>
+          ))}
+        </select>
       </label>
       <label className="field">
         업무 유형 (여정 바로가기)

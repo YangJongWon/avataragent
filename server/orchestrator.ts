@@ -22,6 +22,7 @@ import { callTool } from './mcp.ts';
 import { nextInquiry, nextMail } from './seed.ts';
 import { store } from './store.ts';
 import { systemPromptFor, TEAM_SPECS } from './teams.ts';
+import { agentAvailability, freshDailyUsage, usageDate } from '../shared/work-policy.ts';
 
 class BudgetExceededError extends Error {}
 
@@ -78,7 +79,43 @@ function systemPrompt(agent: Agent) {
 }
 
 function setAgent(agent: Agent, status: Agent['status'], expression: Expression, activity: string) {
-  store.updateAgent(agent.id, { status: store.agent(agent.id).paused ? 'paused' : status, expression, activity });
+  const current = store.agent(agent.id);
+  const availability = agentAvailability(current);
+  if (!availability.available) {
+    const unavailableStatus = availability.reason === 'schedule' ? 'off_duty' : 'capacity_exhausted';
+    store.updateAgent(agent.id, { status: current.paused ? 'paused' : unavailableStatus, expression, activity: availabilityActivity(availability.reason) });
+    return;
+  }
+  store.updateAgent(agent.id, { status: current.paused ? 'paused' : status, expression, activity });
+}
+
+const availabilityActivity = (reason: 'schedule' | 'tokens' | 'work_time') =>
+  reason === 'schedule' ? '근무 시간이 끝나 퇴근했어요. 🏠' : reason === 'tokens' ? '오늘의 토큰 한도를 모두 사용했어요. 🔋' : '오늘의 작업 시간 한도를 모두 사용했어요. ⏰';
+
+/** Rolls over daily counters and synchronizes the visible attendance state. */
+export function enforceWorkPolicies(nowAt = new Date()) {
+  for (const saved of store.data.agents) {
+    let agent = store.agent(saved.id);
+    const date = usageDate(agent.workPolicy, nowAt);
+    if (agent.dailyUsage.date !== date) {
+      store.updateAgent(agent.id, { dailyUsage: freshDailyUsage(agent.workPolicy, nowAt) });
+      agent = store.agent(agent.id);
+    }
+    const availability = agentAvailability(agent, nowAt);
+    const isAttendanceStatus = agent.status === 'off_duty' || agent.status === 'capacity_exhausted';
+    if (!availability.available && !agent.paused) {
+      // Do not visually send an agent home in the middle of an in-flight model/tool call.
+      if (agent.status === 'working' || agent.status === 'collaborating') continue;
+      const status = availability.reason === 'schedule' ? 'off_duty' : 'capacity_exhausted';
+      if (agent.status !== status || agent.activity !== availabilityActivity(availability.reason)) {
+        store.updateAgent(agent.id, { status, expression: availability.reason === 'schedule' ? 'normal' : 'sweat', activity: availabilityActivity(availability.reason) });
+        store.emit('agent.clocked_out', { agentId: agent.id, payload: { reason: availability.reason } });
+      }
+    } else if (availability.available && isAttendanceStatus) {
+      store.updateAgent(agent.id, { status: 'idle', expression: 'smile', activity: '출근했어요. 오늘도 시작해 볼게요! ☕' });
+      store.emit('agent.clocked_in', { agentId: agent.id, payload: {} });
+    }
+  }
 }
 
 const stepById = (task: Task, stepId: string) => {
@@ -113,12 +150,16 @@ const stepNote = (step: WorkflowStep, feedback?: string) =>
     .join('\n');
 
 async function waitIfPaused(agent: Agent) {
-  while (store.agent(agent.id).paused) {
+  while (true) {
+    enforceWorkPolicies();
+    const current = store.agent(agent.id);
+    if (!current.paused && agentAvailability(current).available) return;
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 }
 
 export async function callAI(agent: Agent, task: Task | null, purpose: Purpose, user: string, mockText: () => string, json = false, attachments?: Attachment[]) {
+  await waitIfPaused(agent);
   const budget = store.budget;
   const taskId = task?.id;
   if (budget.spentKrw >= budget.monthlyKrw) {
@@ -135,7 +176,9 @@ export async function callAI(agent: Agent, task: Task | null, purpose: Purpose, 
   const current = store.agent(agent.id);
   const styledMock =
     purpose === 'brief' || purpose === 'research' ? () => `${mockText()}\n\n_${personalityOf(current.personality).mockNote}_` : mockText;
+  const startedAt = Date.now();
   const result = await complete({ purpose, system: systemPrompt(current), user, json, model, mockText: styledMock, attachments });
+  const elapsedMs = Date.now() - startedAt;
   const amount = costKrw(result, model);
 
   if (taskId) {
@@ -144,7 +187,12 @@ export async function callAI(agent: Agent, task: Task | null, purpose: Purpose, 
       t.costByAgent[agent.id] = (t.costByAgent[agent.id] ?? 0) + amount;
     });
   }
-  store.updateAgent(agent.id, { costKrw: store.agent(agent.id).costKrw + amount });
+  const latest = store.agent(agent.id);
+  const dailyUsage = latest.dailyUsage.date === usageDate(latest.workPolicy) ? latest.dailyUsage : freshDailyUsage(latest.workPolicy);
+  store.updateAgent(agent.id, {
+    costKrw: latest.costKrw + amount,
+    dailyUsage: { ...dailyUsage, tokens: dailyUsage.tokens + result.inputTokens + result.outputTokens, workMs: dailyUsage.workMs + elapsedMs },
+  });
   store.updateOffice(office.id, (o) => {
     o.spentKrw += amount;
   });
@@ -156,6 +204,7 @@ export async function callAI(agent: Agent, task: Task | null, purpose: Purpose, 
     agentId: agent.id,
     payload: { amountKrw: amount, inputTokens: result.inputTokens, outputTokens: result.outputTokens, purpose },
   });
+  enforceWorkPolicies();
 
   const after = store.budget;
   if (!after.warned80 && after.spentKrw >= after.monthlyKrw * 0.8) {
@@ -1336,6 +1385,7 @@ type TaskInput = {
   title?: string;
   description?: string;
   taskType?: string;
+  milestoneId?: string;
   planMode?: Task['planMode'];
   steps?: unknown;
   planNote?: string;
@@ -1356,6 +1406,7 @@ export function recordTask(input: TaskInput) {
   const description = (input.description ?? '').trim();
   const title = input.title?.trim() ?? '';
   const taskType = taskTypeOf(office.team, input.taskType ?? '').id;
+  const milestoneId = office.milestones?.some((milestone) => milestone.id === input.milestoneId) ? input.milestoneId : null;
   const planMode = input.planMode === 'ai' || input.planMode === 'custom' ? input.planMode : 'template';
   const plan = planMode === 'custom' ? checkedPlan(office.id, input.steps) : templatePlan(office.team, taskType, rankedAgents(office.id));
   const task: Task = {
@@ -1365,6 +1416,7 @@ export function recordTask(input: TaskInput) {
     autoTitle: !title,
     description,
     taskType,
+    milestoneId,
     status: 'queued',
     plan: toSteps(plan),
     planMode,

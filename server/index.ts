@@ -42,8 +42,8 @@ import { adviseModel } from './model-advice.ts';
 import { finishLogin, logout, OAUTH_CALLBACK_PATH, startLogin } from './mcp-oauth.ts';
 import { apiKeyFor, dropMcpSecrets, setApiKey, setMcpSecrets } from './secrets.ts';
 import { store } from './store.ts';
-import { exportTheme, importTheme, listThemes, removeTheme, themeFile } from './themes.ts';
-import { THEME_LIMITS } from '../shared/theme-pack.ts';
+import { exportTheme, importTheme, isUsableTheme, listThemes, removeTheme, themeFile } from './themes.ts';
+import { DEFAULT_THEME, THEME_LIMITS } from '../shared/theme-pack.ts';
 import { toStepInputs, workflowRuntime } from './workflow-runtime.ts';
 
 const app = express();
@@ -83,7 +83,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.post('/api/tasks', async (req, res) => {
-  const { officeId, title, description, taskType, planMode, steps, planNote } = req.body ?? {};
+  const { officeId, title, description, taskType, milestoneId, planMode, steps, planNote } = req.body ?? {};
   if (typeof officeId !== 'string') throw new Error('사무실을 선택해 주세요.');
   guard(res, 'operate', officeId);
   res.json(
@@ -92,11 +92,23 @@ app.post('/api/tasks', async (req, res) => {
       title: typeof title === 'string' ? title : undefined,
       description: typeof description === 'string' ? description : undefined,
       taskType: typeof taskType === 'string' ? taskType : undefined,
+      milestoneId: typeof milestoneId === 'string' ? milestoneId : undefined,
       planMode: planMode === 'custom' || planMode === 'ai' ? planMode : 'template',
       steps: planMode === 'custom' ? toStepInputs(steps) : undefined,
       planNote: typeof planNote === 'string' ? planNote : undefined,
     }),
   );
+});
+
+app.put('/api/tasks/:id/milestone', (req, res) => {
+  const task = store.task(req.params.id);
+  guard(res, 'operate', task.officeId);
+  const office = store.office(task.officeId);
+  const milestoneId = typeof req.body?.milestoneId === 'string' ? req.body.milestoneId : null;
+  if (milestoneId !== null && !office.milestones?.some((milestone) => milestone.id === milestoneId)) throw new Error('이 프로젝트에 없는 마일스톤이에요.');
+  store.updateTask(task.id, (target) => { target.milestoneId = milestoneId; });
+  store.emit('task.milestone_changed', { taskId: task.id, payload: { officeId: task.officeId, milestoneId } });
+  res.json(store.task(task.id));
 });
 
 app.post('/api/offices/:id/plan-preview', async (req, res) => {
@@ -119,12 +131,19 @@ app.put('/api/tasks/:id/plan', async (req, res) => {
 
 app.post('/api/offices', (req, res) => {
   guard(res, 'owner');
-  const { team, name } = req.body ?? {};
+  const { team, name, theme } = req.body ?? {};
   if (typeof team !== 'string' || !(team in TEAMS)) throw new Error('팀 종류를 선택해 주세요.');
+  if (theme !== undefined && !isUsableTheme(theme)) throw new Error('설치되지 않은 테마예요.');
   const meta = TEAMS[team as TeamId];
   const sameTeam = store.data.offices.filter((o) => o.team === team).length;
   const title = typeof name === 'string' && name.trim() ? name.trim().slice(0, 20) : `${meta.name} ${sameTeam + 1}`;
-  const office = store.addOffice(team as TeamId, title);
+  let office = store.addOffice(team as TeamId, title);
+  if (theme && theme !== DEFAULT_THEME) {
+    store.updateOffice(office.id, (o) => {
+      o.theme = theme;
+    });
+    office = store.office(office.id);
+  }
   store.emit('office.created', { payload: { officeId: office.id, team, name: office.name } });
   res.json(office);
 });
@@ -142,15 +161,20 @@ app.delete('/api/offices/:id', (req, res) => {
 
 app.put('/api/offices/:id', async (req, res) => {
   guard(res, 'manage', req.params.id);
-  const { autoRun, autoImprove, budgetKrw } = req.body ?? {};
+  const { autoRun, autoImprove, budgetKrw, theme, themeCss } = req.body ?? {};
   if (budgetKrw !== undefined) guard(res, 'owner');
+  if (theme !== undefined && !isUsableTheme(theme)) throw new Error('설치되지 않은 테마예요.');
   store.updateOffice(req.params.id, (o) => {
     if (typeof autoRun === 'boolean') o.autoRun = autoRun;
     if (typeof autoImprove === 'boolean') o.autoImprove = autoImprove;
+    if (theme === DEFAULT_THEME) delete o.theme;
+    else if (typeof theme === 'string') o.theme = theme;
+    if (themeCss === true) delete o.themeCss;
+    else if (themeCss === false) o.themeCss = false;
     if (budgetKrw === null) o.budgetKrw = null;
     else if (typeof budgetKrw === 'number' && budgetKrw >= 0) o.budgetKrw = Math.round(budgetKrw);
   });
-  store.emit('office.updated', { payload: { officeId: req.params.id, autoRun, autoImprove, budgetKrw } });
+  store.emit('office.updated', { payload: { officeId: req.params.id, autoRun, autoImprove, budgetKrw, theme, themeCss } });
   if (autoImprove === true) autoImproveOffice(req.params.id);
   await workflowRuntime.tick();
   res.json(store.office(req.params.id));
@@ -188,6 +212,11 @@ app.post('/api/themes/import', express.raw({ type: ['application/zip', 'applicat
 app.delete('/api/themes/:id', (req, res) => {
   guard(res, 'owner');
   removeTheme(req.params.id);
+  for (const office of store.data.offices.filter((o) => o.theme === req.params.id)) {
+    store.updateOffice(office.id, (o) => {
+      delete o.theme;
+    });
+  }
   store.emit('theme.removed', { payload: { themeId: req.params.id } });
   res.json({ ok: true });
 });
@@ -314,7 +343,7 @@ app.post('/api/tasks/:id/request-changes', async (req, res) => {
 
 app.put('/api/agents/:id', (req, res) => {
   guard(res, 'manage', officeOfAgent(req.params.id));
-  const { name, rules, model, skin, personality } = req.body ?? {};
+  const { name, rules, model, skin, personality, workPolicy } = req.body ?? {};
   const before = store.agent(req.params.id);
   const patch: Record<string, unknown> = {};
   if (typeof name === 'string' && name.trim()) patch.name = name.trim().slice(0, 20);
@@ -336,6 +365,19 @@ app.put('/api/agents/:id', (req, res) => {
       payload: { scope: 'personal', before: before.rules, after: rules },
     });
     patch.rules = rules;
+  }
+  if (workPolicy !== undefined) {
+    if (!workPolicy || typeof workPolicy !== 'object') throw new Error('근무 정책 형식이 올바르지 않습니다.');
+    const candidate = { ...before.workPolicy, ...workPolicy };
+    if (typeof candidate.enabled !== 'boolean') throw new Error('근무제 사용 여부가 올바르지 않습니다.');
+    if (!Array.isArray(candidate.days) || candidate.days.some((d: unknown) => !Number.isInteger(d) || Number(d) < 0 || Number(d) > 6)) throw new Error('근무 요일이 올바르지 않습니다.');
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(candidate.start) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(candidate.end)) throw new Error('근무 시간은 HH:mm 형식이어야 합니다.');
+    try { new Intl.DateTimeFormat('en', { timeZone: candidate.timezone }).format(); } catch { throw new Error('알 수 없는 시간대입니다.'); }
+    for (const key of ['maxTokens', 'maxWorkMinutes'] as const) {
+      const value = candidate[key];
+      if (value !== null && (!Number.isFinite(value) || value <= 0)) throw new Error('일일 한도는 양수이거나 비어 있어야 합니다.');
+    }
+    patch.workPolicy = candidate;
   }
   store.updateAgent(req.params.id, patch);
   res.json(store.agent(req.params.id));

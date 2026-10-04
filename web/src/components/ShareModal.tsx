@@ -1,6 +1,6 @@
 import QRCode from 'qrcode';
 import { useEffect, useState } from 'react';
-import { SHARE_ROLES } from '../../../shared/access.ts';
+import { SHARE_ROLES, shareRoleDescription, shareRoleLabel } from '../../../shared/access.ts';
 import { TEAMS } from '../../../shared/teams.ts';
 import type { ShareLink, ShareRole, Snapshot } from '../../../shared/types.ts';
 import { api } from '../api.ts';
@@ -142,8 +142,8 @@ export function ShareModal({ snapshot, initialOfficeIds, onClose, onError, onNot
               {(Object.keys(SHARE_ROLES) as ShareRole[]).map((id) => (
                 <label key={id} className={`share-role ${role === id ? 'selected' : ''}`}>
                   <input type="radio" name="share-role" checked={role === id} onChange={() => setRole(id)} />
-                  <b>{SHARE_ROLES[id].label}</b>
-                  <span className="small muted">{SHARE_ROLES[id].description}</span>
+                  <b>{shareRoleLabel(id)}</b>
+                  <span className="small muted">{shareRoleDescription(id)}</span>
                 </label>
               ))}
             </div>
@@ -194,7 +194,7 @@ export function ShareModal({ snapshot, initialOfficeIds, onClose, onError, onNot
                 <li key={share.id} className={`share-item ${expired ? 'expired' : ''}`}>
                   <div className="share-item-head">
                     <b>{share.name}</b>
-                    <span className={`badge share-badge role-${share.role}`}>{SHARE_ROLES[share.role].label}</span>
+                    <span className={`badge share-badge role-${share.role}`}>{shareRoleLabel(share.role)}</span>
                   </div>
                   <div className="small muted">
                     {scopeText(share)} · {expired ? '만료됨' : share.expiresAt ? `${dateText(share.expiresAt)}까지` : '만료 없음'}

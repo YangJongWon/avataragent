@@ -167,6 +167,9 @@ export function themeManifest(id: string): ThemeManifest | null {
   return parseThemeManifest(JSON.parse(readFileSync(join(folder, 'theme.json'), 'utf8')));
 }
 
+/** Whether an office may use this theme: the built-in one or an installed package. */
+export const isUsableTheme = (id: unknown): id is string => typeof id === 'string' && (id === DEFAULT_THEME || themeManifest(id) !== null);
+
 export function listThemes(): ThemeSummary[] {
   if (!existsSync(root())) return [];
   return readdirSync(root(), { withFileTypes: true })

@@ -1,13 +1,15 @@
 import { planHas } from '../../../shared/plans.ts';
+import { projectProgress } from '../../../shared/project.ts';
 import type { Office, Person, Snapshot, Task } from '../../../shared/types.ts';
 import { planProgress } from '../../../shared/workflow.ts';
+import { api } from '../api.ts';
 
-const THEMES: Record<Office['team'], { icon: string; name: string; parts: string[]; scene: string }> = {
-  dev: { icon: '🚀', name: '우주선', scene: '발사 준비', parts: ['설계도', '선체', '엔진', '조종실', '탐사 모듈', '발사대'] },
-  hr: { icon: '🏠', name: '팀 하우스', scene: '입주 준비', parts: ['기초', '골조', '지붕', '업무실', '라운지', '현판'] },
-  mgmt: { icon: '🏙️', name: '본부 빌딩', scene: '준공 준비', parts: ['부지', '기둥', '업무층', '회의실', '관제실', '옥상'] },
-  support: { icon: '🚢', name: '지원선', scene: '출항 준비', parts: ['용골', '선체', '기관실', '갑판', '통신실', '함교'] },
-  welfare: { icon: '🌳', name: '회복 정원', scene: '개장 준비', parts: ['산책로', '나무', '쉼터', '연못', '온실', '광장'] },
+const THEMES: Record<Office['team'], { icon: string; name: string; scene: string }> = {
+  dev: { icon: '🚀', name: '우주선', scene: '발사 준비' },
+  hr: { icon: '🏠', name: '팀 하우스', scene: '입주 준비' },
+  mgmt: { icon: '🏙️', name: '본부 빌딩', scene: '준공 준비' },
+  support: { icon: '🚢', name: '지원선', scene: '출항 준비' },
+  welfare: { icon: '🌳', name: '회복 정원', scene: '개장 준비' },
 };
 
 const ACTIVE = new Set<Task['status']>(['running', 'awaiting_help', 'awaiting_approval']);
@@ -15,13 +17,6 @@ const ACTIVE = new Set<Task['status']>(['running', 'awaiting_help', 'awaiting_ap
 function taskUnits(task: Task) {
   const { done, total } = planProgress(task);
   return { done: task.status === 'completed' ? Math.max(1, total) : done, total: Math.max(1, total) };
-}
-
-function officeProgress(tasks: Task[]) {
-  const units = tasks.map(taskUnits);
-  const done = units.reduce((sum, item) => sum + item.done, 0);
-  const total = units.reduce((sum, item) => sum + item.total, 0);
-  return total ? Math.round((done / total) * 100) : 0;
 }
 
 function ownerId(snapshot: Snapshot) {
@@ -38,7 +33,7 @@ function contribution(person: Person, tasks: Task[]) {
   };
 }
 
-export function ProjectLounge({ snapshot, onOpenOffice }: { snapshot: Snapshot; onOpenOffice: (officeId: string) => void }) {
+export function ProjectLounge({ snapshot, onOpenOffice, onError }: { snapshot: Snapshot; onOpenOffice: (officeId: string) => void; onError: (message: string) => void }) {
   if (!planHas(snapshot.plan, 'projectLounge')) {
     return (
       <main className="lounge-page lounge-locked">
@@ -55,10 +50,9 @@ export function ProjectLounge({ snapshot, onOpenOffice }: { snapshot: Snapshot; 
 
   const visiblePeople = snapshot.people ?? [];
   const me = ownerId(snapshot);
-  const allUnits = snapshot.tasks.map(taskUnits);
-  const overallDone = allUnits.reduce((sum, item) => sum + item.done, 0);
-  const overallTotal = allUnits.reduce((sum, item) => sum + item.total, 0);
-  const overall = overallTotal ? Math.round((overallDone / overallTotal) * 100) : 0;
+  const officeProgresses = snapshot.offices.map((office) => projectProgress(office, snapshot.tasks.filter((task) => task.officeId === office.id)));
+  const overall = officeProgresses.length ? Math.round(officeProgresses.reduce((sum, item) => sum + item.progress, 0) / officeProgresses.length * 100) : 0;
+  const completedUnits = snapshot.tasks.map(taskUnits).reduce((sum, item) => sum + item.done, 0);
 
   return (
     <main className="lounge-page">
@@ -78,8 +72,8 @@ export function ProjectLounge({ snapshot, onOpenOffice }: { snapshot: Snapshot; 
         {snapshot.offices.map((office) => {
           const theme = THEMES[office.team];
           const tasks = snapshot.tasks.filter((task) => task.officeId === office.id);
-          const progress = officeProgress(tasks);
-          const built = Math.ceil((progress / 100) * theme.parts.length);
+          const calculated = projectProgress(office, tasks);
+          const progress = calculated.percent;
           const active = tasks.filter((task) => ACTIVE.has(task.status)).length;
           const waiting = tasks.filter((task) => task.status === 'queued').length;
           return (
@@ -97,9 +91,9 @@ export function ProjectLounge({ snapshot, onOpenOffice }: { snapshot: Snapshot; 
                   {theme.icon}
                 </div>
                 <div className="model-parts">
-                  {theme.parts.map((part, index) => (
-                    <span key={part} className={index < built ? 'built' : ''} title={`${part}: ${index < built ? '완성' : '대기'}`}>
-                      {index < built ? '◆' : '◇'} {part}
+                  {calculated.milestones.map((milestone) => (
+                    <span key={milestone.id} className={milestone.progress >= 1 ? 'built' : milestone.progress > 0 ? 'building' : ''} title={`${milestone.label}: ${Math.round(milestone.progress * 100)}% · 가중치 ${milestone.weight}%`}>
+                      {milestone.progress >= 1 ? '◆' : milestone.progress > 0 ? '◈' : '◇'} {milestone.label} {Math.round(milestone.progress * 100)}%
                     </span>
                   ))}
                 </div>
@@ -110,6 +104,27 @@ export function ProjectLounge({ snapshot, onOpenOffice }: { snapshot: Snapshot; 
                 <span>{active ? `${active}개 작업 중` : waiting ? `${waiting}개 대기` : theme.scene}</span>
                 <button onClick={() => onOpenOffice(office.id)}>작업실 가기</button>
               </footer>
+              {calculated.unclassified.length > 0 && (
+                <details className="unclassified-tasks">
+                  <summary>⚠ 진행률 미분류 업무 {calculated.unclassified.length}개</summary>
+                  {calculated.unclassified.map((task) => (
+                    <label key={task.id}>
+                      <span>{task.title}</span>
+                      <select
+                        value=""
+                        onChange={(event) => {
+                          const milestoneId = event.target.value;
+                          if (!milestoneId) return;
+                          void api.setTaskMilestone(task.id, milestoneId).catch((error) => onError(error instanceof Error ? error.message : String(error)));
+                        }}
+                      >
+                        <option value="">마일스톤 지정…</option>
+                        {calculated.milestones.map((milestone) => <option key={milestone.id} value={milestone.id}>{milestone.label} ({milestone.weight}%)</option>)}
+                      </select>
+                    </label>
+                  ))}
+                </details>
+              )}
             </article>
           );
         })}
@@ -126,7 +141,7 @@ export function ProjectLounge({ snapshot, onOpenOffice }: { snapshot: Snapshot; 
         <div className="contribution-list">
           {visiblePeople.map((person) => {
             const c = contribution(person, snapshot.tasks);
-            const share = overallDone ? Math.round((c.done / overallDone) * 100) : 0;
+            const share = completedUnits ? Math.round((c.done / completedUnits) * 100) : 0;
             const current = snapshot.tasks.find((task) => task.assigneeId === person.id && ACTIVE.has(task.status));
             return (
               <div className={`contribution-row ${person.id === me ? 'mine' : ''}`} key={person.id}>

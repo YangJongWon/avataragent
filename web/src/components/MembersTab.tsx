@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SHARE_ROLES } from '../../../shared/access.ts';
+import { SHARE_ROLES, shareRoleDescription, shareRoleLabel } from '../../../shared/access.ts';
 import { GRACE_DAYS, type SubscriptionStatus } from '../../../shared/billing.ts';
 import { planHas, planOf, PLANS, type Plan } from '../../../shared/plans.ts';
 import { TEAMS } from '../../../shared/teams.ts';
@@ -233,12 +233,12 @@ export function MembersTab(props: { snapshot: Snapshot; onError: (m: string) => 
               <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as ShareRole })}>
                 {ROLE_IDS.map((r) => (
                   <option key={r} value={r}>
-                    {SHARE_ROLES[r].label}
+                    {shareRoleLabel(r)}
                   </option>
                 ))}
               </select>
               <OfficePicker snapshot={snapshot} value={form.officeIds} onChange={(officeIds) => setForm({ ...form, officeIds })} />
-              <div className="muted small">{SHARE_ROLES[form.role].description}</div>
+              <div className="muted small">{shareRoleDescription(form.role)}</div>
               <button
                 className="pixel-btn primary"
                 disabled={busy || !form.loginId || form.password.length < MIN_PASSWORD || members.length >= plan.maxMembers}

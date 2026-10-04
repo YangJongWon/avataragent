@@ -4,6 +4,7 @@ import {
   answerHelp,
   approve,
   autoRunTick,
+  enforceWorkPolicies,
   cancelTask,
   createTask,
   designPlan,
@@ -19,6 +20,7 @@ export interface CreateTaskInput {
   title?: string;
   description?: string;
   taskType?: string;
+  milestoneId?: string;
   planMode?: PlanMode;
   steps?: WorkflowStepInput[];
   planNote?: string;
@@ -77,8 +79,8 @@ export const localWorkflowRuntime: WorkflowRuntime = {
   approve: async (taskId, valueKrw) => approve(taskId, valueKrw),
   requestChanges: async (taskId, comment) => requestChanges(taskId, comment),
   pauseAgent: async (agentId, paused) => setPaused(agentId, paused),
-  tick: async () => autoRunTick(),
-  start: async () => resumeActiveTasks(),
+  tick: async () => { enforceWorkPolicies(); autoRunTick(); },
+  start: async () => { enforceWorkPolicies(); resumeActiveTasks(); },
   drain: async () => drainQueues(),
   stop: async () => {},
 };

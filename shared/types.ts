@@ -23,6 +23,8 @@ export type AgentStatus =
   | 'awaiting_approval'
   | 'help_requested'
   | 'paused'
+  | 'off_duty'
+  | 'capacity_exhausted'
   | 'error';
 
 export type Expression = 'normal' | 'smile' | 'focus' | 'sweat' | 'troubled' | 'panic' | 'thanks' | 'celebrate';
@@ -40,6 +42,19 @@ export interface Office {
   budgetKrw: number | null;
   spentKrw: number;
   valueKrw: number;
+  /** Fixed project scope used for a stable, meaningful completion percentage. */
+  milestones?: ProjectMilestone[];
+  /** Installed theme id; missing means the built-in pixel theme. */
+  theme?: string;
+  /** false turns off the theme's custom CSS here; its pictures and colors stay. */
+  themeCss?: boolean;
+}
+
+export interface ProjectMilestone {
+  id: string;
+  label: string;
+  /** Share of the whole project. Milestone weights are normalized when calculated. */
+  weight: number;
 }
 
 export interface Agent {
@@ -56,9 +71,31 @@ export interface Agent {
   expression: Expression;
   activity: string;
   paused: boolean;
+  workPolicy: WorkPolicy;
+  dailyUsage: DailyAgentUsage;
   costKrw: number;
   valueKrw: number;
   tasksDone: number;
+}
+
+export interface WorkPolicy {
+  enabled: boolean;
+  /** IANA time zone used for work days and resetting daily limits. */
+  timezone: string;
+  /** Sunday=0 ... Saturday=6. */
+  days: number[];
+  start: string;
+  end: string;
+  /** null disables the corresponding daily limit. */
+  maxTokens: number | null;
+  maxWorkMinutes: number | null;
+}
+
+export interface DailyAgentUsage {
+  /** Calendar date in the policy time zone. */
+  date: string;
+  tokens: number;
+  workMs: number;
 }
 
 /** Labels of a team's default journey; `done` names the archive the result lands in. */
@@ -161,6 +198,8 @@ export interface Task {
   autoTitle?: boolean;
   description: string;
   taskType: string;
+  /** Project milestone this task advances. Missing means explicitly unclassified. */
+  milestoneId?: string | null;
   status: TaskStatus;
   plan: WorkflowStep[];
   planMode: PlanMode;

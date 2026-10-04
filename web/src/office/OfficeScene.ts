@@ -57,6 +57,7 @@ class CharacterView {
   status: Agent['status'] = 'idle';
   place: Place;
   private moment: { state: ThemeState; until: number } | null = null;
+  private offDuty = false;
 
   constructor(
     public agent: Agent,
@@ -67,9 +68,12 @@ class CharacterView {
     private door: Point,
     public home: Point,
     public rest: Point,
+    startOffDuty = false,
   ) {
     this.place = startInLounge ? 'lounge' : 'desk';
     this.pos = startInLounge ? { ...rest } : { ...home };
+    this.offDuty = startOffDuty;
+    this.root.visible = !startOffDuty;
     this.sprite.addChild(art.view);
     this.root.addChild(this.sprite);
 
@@ -138,10 +142,23 @@ class CharacterView {
   }
 
   setPlace(place: Place) {
+    if (this.offDuty) return;
     if (place === this.place) return;
     this.place = place;
     void this.walkTo(this.door);
     void this.walkTo(place === 'lounge' ? this.rest : this.home);
+  }
+
+  setOffDuty(value: boolean) {
+    if (value === this.offDuty) return;
+    this.offDuty = value;
+    if (value) {
+      void this.walkTo(this.door).then(() => { if (this.offDuty) this.root.visible = false; });
+    } else {
+      this.root.visible = true;
+      this.pos = { ...this.door };
+      void this.walkTo(this.place === 'lounge' ? this.rest : this.home);
+    }
   }
 
   moveSeat(home: Point, rest: Point) {
@@ -356,14 +373,16 @@ export class OfficeScene {
         rest = this.layout.extraLounge[i];
       }
       const resting = !officeBusy && agent.status === 'idle' && agent.expression !== 'celebrate';
+      const offDuty = agent.status === 'off_duty' || agent.status === 'capacity_exhausted';
       const existing = this.chars.get(agent.id);
       if (existing) {
         existing.apply(agent);
         existing.moveSeat(home, rest);
+        existing.setOffDuty(offDuty);
         existing.setPlace(resting ? 'lounge' : 'desk');
       } else {
         const art = this.theme.createCharacter();
-        const view = new CharacterView(agent, this.callbacks, this.team.roleTitles[agent.role], resting, art, this.layout.door, home, rest);
+        const view = new CharacterView(agent, this.callbacks, this.team.roleTitles[agent.role], resting, art, this.layout.door, home, rest, offDuty);
         this.chars.set(agent.id, view);
         this.charLayer.addChild(view.root);
       }

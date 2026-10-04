@@ -22,11 +22,16 @@ interface Props {
   /** The theme of the office being looked at, and how to switch it; omitted until offices carry a theme. */
   current?: string;
   onUse?: (themeId: string) => void;
+  /** Whether the current theme's custom CSS is on in this office, and how to switch it. */
+  cssOn?: boolean;
+  onCssOn?: (on: boolean) => void;
+  /** Opens the theme studio. */
+  onMake?: () => void;
   onError: (message: string) => void;
   onNotice: (message: string) => void;
 }
 
-export function ThemesTab({ isOwner, current = DEFAULT_THEME, onUse, onError, onNotice }: Props) {
+export function ThemesTab({ isOwner, current = DEFAULT_THEME, onUse, cssOn = true, onCssOn, onMake, onError, onNotice }: Props) {
   const [themes, setThemes] = useState<ThemeSummary[] | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -70,12 +75,19 @@ export function ThemesTab({ isOwner, current = DEFAULT_THEME, onUse, onError, on
     <section className="pixel-box section">
       <div className="row themes-head">
         <h3>테마</h3>
-        {isOwner && (
-          <label className={`pixel-btn small primary${busy ? ' disabled' : ''}`}>
-            {busy ? '설치 중…' : '테마 설치 (.zip)…'}
-            <input type="file" accept=".zip,application/zip" hidden disabled={busy} onChange={(e) => void install(e.target.files?.[0]).finally(() => (e.target.value = ''))} />
-          </label>
-        )}
+        <div className="row theme-actions-head">
+          {onMake && (
+            <button className="pixel-btn small" onClick={onMake}>
+              테마 만들기
+            </button>
+          )}
+          {isOwner && (
+            <label className={`pixel-btn small primary${busy ? ' disabled' : ''}`}>
+              {busy ? '설치 중…' : '테마 설치 (.zip)…'}
+              <input type="file" accept=".zip,application/zip" hidden disabled={busy} onChange={(e) => void install(e.target.files?.[0]).finally(() => (e.target.value = ''))} />
+            </label>
+          )}
+        </div>
       </div>
       <p className="muted small">
         테마는 사무실 배경과 직원 캐릭터(기본 동작과 이벤트별 동작)를 바꿔요. 누구나 만들어 공유할 수 있고, 설치할 때 파일과 CSS를 검사해서 안전한 것만 넣어요.
@@ -101,6 +113,12 @@ export function ThemesTab({ isOwner, current = DEFAULT_THEME, onUse, onError, on
                   {theme.description && <p className="small">{theme.description}</p>}
                   {theme.characters.length > 0 && <div className="muted small">캐릭터: {theme.characters.map((c) => c.name).join(', ')}</div>}
                   {theme.hasCss && <span className="theme-badge">커스텀 CSS</span>}
+                  {theme.hasCss && theme.id === current && onCssOn && (
+                    <label className="toggle small">
+                      <input type="checkbox" checked={cssOn} onChange={(e) => onCssOn(e.target.checked)} />
+                      이 사무실에서 커스텀 CSS 쓰기
+                    </label>
+                  )}
                 </div>
                 <div className="row theme-actions">
                   {onUse &&

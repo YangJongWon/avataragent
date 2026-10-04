@@ -6,6 +6,7 @@ import { config } from '../config.ts';
 import {
   AUTO_RUN_DESCRIPTION,
   autoRunOffices,
+  enforceWorkPolicies,
   cancelTask,
   designPlan,
   drainQueues,
@@ -83,6 +84,7 @@ export function createTemporalRuntime(options: { address?: string; namespace?: s
     },
     pauseAgent: async (agentId, paused) => setPaused(agentId, paused),
     async tick() {
+      enforceWorkPolicies();
       for (const office of autoRunOffices()) recordTask({ officeId: office.id, description: AUTO_RUN_DESCRIPTION });
       await drain();
     },

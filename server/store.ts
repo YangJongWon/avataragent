@@ -14,8 +14,10 @@ import { isPlan, type Plan } from '../shared/plans.ts';
 import { freeSubscription, type Checkout, type Invoice, type Subscription } from '../shared/billing.ts';
 import type { StoredMember } from './members.ts';
 import { DEFAULT_PERSONALITY_BY_ROLE, isPersonality } from '../shared/personality.ts';
+import { defaultMilestones } from '../shared/project.ts';
 import { isSkin } from '../shared/skins.ts';
 import { MAX_STAFF_PER_OFFICE, TEAM_ORDER, TEAMS } from '../shared/teams.ts';
+import { DEFAULT_WORK_POLICY, freshDailyUsage, normalizeWorkPolicy } from '../shared/work-policy.ts';
 import type {
   Agent,
   AiMode,
@@ -87,6 +89,7 @@ function defaultOffices(): Office[] {
     budgetKrw: null,
     spentKrw: 0,
     valueKrw: 0,
+    milestones: defaultMilestones(team),
   }));
 }
 
@@ -106,6 +109,8 @@ function newAgent(office: Office, role: Role, id: string, name: string): Agent {
     expression: 'normal',
     activity: '휴게실에서 쉬고 있어요. ☕',
     paused: false,
+    workPolicy: structuredClone(DEFAULT_WORK_POLICY),
+    dailyUsage: freshDailyUsage(DEFAULT_WORK_POLICY),
     costKrw: 0,
     valueKrw: 0,
     tasksDone: 0,
@@ -225,7 +230,10 @@ function normalize(saved: PersistedState) {
   saved.billing ??= freshBilling();
   for (const agent of saved.agents) {
     if (!isPersonality(agent.personality)) agent.personality = DEFAULT_PERSONALITY_BY_ROLE[agent.role];
+    agent.workPolicy = normalizeWorkPolicy(agent.workPolicy);
+    agent.dailyUsage ??= freshDailyUsage(agent.workPolicy);
   }
+  for (const office of saved.offices) office.milestones ??= defaultMilestones(office.team);
   for (const task of saved.tasks) {
     for (const step of task.plan) {
       if (step.loop === undefined) step.loop = step.kind === 'review' ? reviewLoop(task.plan) : null;
@@ -399,6 +407,7 @@ class Store {
       budgetKrw: null,
       spentKrw: 0,
       valueKrw: 0,
+      milestones: defaultMilestones(team),
     };
     const used = new Set(this.state.agents.map((a) => a.name));
     const pool = EXTRA_NAMES.filter((n) => !used.has(n));
