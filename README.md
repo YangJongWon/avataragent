@@ -162,3 +162,8 @@ scripts/  운영 스크립트 (office.ps1, office.sh), 설치 (install.ps1, get.
 - [개발 현황](DEVELOPMENT_STATUS.md)
 - [운영 가이드](OPERATIONS.md)
 - [아키텍처 결정 기록](docs/ARCHITECTURE_DECISIONS.md)
+- [기여 안내](CONTRIBUTING.md)
+
+## 라이선스
+
+[AGPL-3.0](LICENSE)과 상업 라이선스의 듀얼 라이선스입니다. 고친 코드를 공개하지 않고 서비스에 쓰려면 상업 라이선스가 필요합니다. 자세한 내용은 [LICENSING.md](LICENSING.md)를 보세요.
