@@ -9,6 +9,19 @@ type PSlide = ReturnType<Pptx['addSlide']>;
 const { W, H, X, TOP, BODY_H: CH } = SLIDE;
 const CW = SLIDE.CW;
 
+/** Blends two hex colors; t=0 gives a, t=1 gives b. */
+function mix(a: string, b: string, t: number) {
+  const ch = (hex: string, i: number) => parseInt(hex.slice(i, i + 2), 16);
+  return [0, 2, 4].map((i) => Math.round(ch(a, i) * (1 - t) + ch(b, i) * t).toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+
+const SHADOW = { type: 'outer', color: '000000', opacity: 0.1, blur: 10, offset: 2, angle: 90 } as const;
+
+/** White raised card: content sits on these, the tinted page shows around them. */
+function card(pptx: Pptx, slide: PSlide, x: number, y: number, w: number, h: number, fill = 'FFFFFF') {
+  slide.addShape(pptx.ShapeType.roundRect, { x, y, w, h, fill: { color: fill }, line: { color: fill }, rectRadius: 0.15, shadow: { ...SHADOW } });
+}
+
 /** The deck's motif: numbered accent circles, repeated on rows, timelines, dividers and the cover. */
 function circle(pptx: Pptx, slide: PSlide, x: number, y: number, d: number, label: string, fill: string, color: string, theme: Theme) {
   slide.addShape(pptx.ShapeType.ellipse, { x, y, w: d, h: d, fill: { color: fill }, line: { color: fill } });
@@ -31,8 +44,10 @@ function body(pptx: Pptx, slide: PSlide, s: PlannedSlide, theme: Theme) {
         const rowH = Math.min(1.1, (CH - 0.1) / b.items.length);
         b.items.forEach((item, i) => {
           const y = TOP + i * rowH;
-          circle(pptx, slide, X, y + (rowH - 0.55) / 2, 0.55, b.ordered === false ? '' : String(i + 1), theme.accent, 'FFFFFF', theme);
-          slide.addText(item, { ...text, x: X + 0.85, y, w: CW - 0.85, h: rowH, fontSize: pt, valign: 'middle', margin: 0 });
+          const h = rowH - 0.2;
+          card(pptx, slide, X, y, CW, h);
+          circle(pptx, slide, X + 0.25, y + (h - 0.55) / 2, 0.55, b.ordered === false ? '' : String(i + 1), theme.accent, 'FFFFFF', theme);
+          slide.addText(item, { ...text, x: X + 1.1, y, w: CW - 1.4, h, fontSize: pt, valign: 'middle', margin: 0 });
         });
         return;
       }
@@ -49,7 +64,7 @@ function body(pptx: Pptx, slide: PSlide, s: PlannedSlide, theme: Theme) {
       const y = TOP + 0.5;
       b.items.forEach((k, i) => {
         const x = X + i * (w + gap);
-        slide.addShape(pptx.ShapeType.roundRect, { x, y, w, h: 3.8, fill: { color: theme.soft }, line: { color: theme.soft }, rectRadius: 0.15 });
+        card(pptx, slide, x, y, w, 3.8);
         slide.addText(k.value, { ...text, x: x + 0.2, y: y + 0.45, w: w - 0.4, h: 1.5, fontFace: theme.headFont, fontSize: n > 3 ? 40 : 54, bold: true, color: theme.accent, align: 'center', valign: 'middle', fit: 'shrink' });
         slide.addText(k.label, { ...text, x: x + 0.2, y: y + 2.0, w: w - 0.4, h: 0.9, fontSize: 16, bold: true, align: 'center', valign: 'top' });
         if (k.note) slide.addText(k.note, { ...text, x: x + 0.2, y: y + 2.85, w: w - 0.4, h: 0.85, fontSize: 12, color: theme.muted, align: 'center', valign: 'top' });
@@ -62,7 +77,7 @@ function body(pptx: Pptx, slide: PSlide, s: PlannedSlide, theme: Theme) {
       const textH = heightFor(linesFor(b.text, textW, pt), pt) + (b.title ? heightFor(1, pt - 2) + 0.12 : 0);
       const h = Math.min(CH - 0.4, Math.max(1.9, textH + 1.0));
       const y = TOP + 0.3;
-      slide.addShape(pptx.ShapeType.roundRect, { x: X + 0.6, y, w: CW - 1.2, h, fill: { color: theme.soft }, line: { color: theme.soft }, rectRadius: 0.2 });
+      card(pptx, slide, X + 0.6, y, CW - 1.2, h);
       circle(pptx, slide, X + 1.1, y + h / 2 - 0.4, 0.8, b.tone === 'warn' ? '!' : '✓', color, 'FFFFFF', theme);
       slide.addText(
         [...(b.title ? [{ text: b.title, options: { bold: true, color, fontSize: pt - 2, breakLine: true } }] : []), { text: b.text, options: { fontSize: pt, color: theme.ink } }],
@@ -71,10 +86,13 @@ function body(pptx: Pptx, slide: PSlide, s: PlannedSlide, theme: Theme) {
       return;
     }
     case 'quote':
-      slide.addText('“', { ...text, x: X, y: TOP - 0.3, w: 1.4, h: 1.6, fontFace: 'Georgia', fontSize: 110, color: theme.accent });
+      slide.addText('“', { ...text, x: X + 0.1, y: 0.7, w: 2, h: 2, margin: 0, fontFace: 'Georgia', fontSize: 180, bold: true, color: theme.accent, valign: 'top' });
       slide.addText(
-        [{ text: b.text, options: { italic: true, fontSize: pt, breakLine: Boolean(b.by) } }, ...(b.by ? [{ text: `— ${b.by}`, options: { fontSize: 16, color: theme.muted } }] : [])],
-        { ...text, x: X + 1.2, y: TOP + 0.3, w: CW - 2.4, h: 4, valign: 'middle', fontFace: theme.headFont },
+        [
+          { text: b.text, options: { fontSize: pt, bold: true, breakLine: Boolean(b.by) } },
+          ...(b.by ? [{ text: `— ${b.by}`, options: { fontSize: 16, color: theme.soft, paraSpaceBefore: 18 } }] : []),
+        ],
+        { ...text, x: X + 0.3, y: 2.3, w: CW - 4.2, h: 3.6, margin: 0, valign: 'top', fontFace: theme.headFont, color: 'FFFFFF', lineSpacingMultiple: 1.2 },
       );
       return;
     case 'table': {
@@ -82,7 +100,7 @@ function body(pptx: Pptx, slide: PSlide, s: PlannedSlide, theme: Theme) {
       slide.addTable(
         [
           columns.map((c) => ({ text: c, options: { bold: true, color: 'FFFFFF', fill: { color: theme.accent } } })),
-          ...rows.map((r, ri) => columns.map((_, i) => ({ text: r[i] ?? '', options: ri % 2 ? { fill: { color: 'F6F7F9' } } : {} }))),
+          ...rows.map((r, ri) => columns.map((_, i) => ({ text: r[i] ?? '', options: { fill: { color: ri % 2 ? mix(theme.soft, 'FFFFFF', 0.45) : 'FFFFFF' } } }))),
         ],
         {
           x: X,
@@ -104,14 +122,15 @@ function body(pptx: Pptx, slide: PSlide, s: PlannedSlide, theme: Theme) {
       const c = b.chart;
       const type = c.kind === 'line' ? pptx.ChartType.line : c.kind === 'pie' ? pptx.ChartType.doughnut : pptx.ChartType.bar;
       const single = c.series.length === 1 && c.kind === 'bar';
+      card(pptx, slide, X, TOP - 0.1, CW, CH);
       slide.addChart(
         type,
         c.series.map((x) => ({ name: x.name, labels: c.labels, values: x.values })),
         {
-          x: X,
-          y: TOP,
-          w: CW,
-          h: CH,
+          x: X + 0.3,
+          y: TOP + 0.1,
+          w: CW - 0.6,
+          h: CH - 0.45,
           chartColors: single ? c.labels.map((_, i) => (i === c.series[0].values.indexOf(Math.max(...c.series[0].values)) ? theme.accent : theme.chart.at(-1)!)) : theme.chart,
           showValue: c.kind !== 'pie',
           showPercent: c.kind === 'pie',
@@ -144,7 +163,7 @@ function body(pptx: Pptx, slide: PSlide, s: PlannedSlide, theme: Theme) {
       const n = b.items.length;
       const step = CW / n;
       const lineY = TOP + 1.9;
-      slide.addShape(pptx.ShapeType.line, { x: X + step / 2, y: lineY, w: CW - step, h: 0, line: { color: theme.soft, width: 6 } });
+      slide.addShape(pptx.ShapeType.line, { x: X + step / 2, y: lineY, w: CW - step, h: 0, line: { color: mix(theme.soft, theme.accent, 0.3), width: 6 } });
       b.items.forEach((item, i) => {
         const cx = X + step * (i + 0.5);
         circle(pptx, slide, cx - 0.32, lineY - 0.32, 0.64, String(i + 1), theme.accent, 'FFFFFF', theme);
@@ -159,7 +178,7 @@ function body(pptx: Pptx, slide: PSlide, s: PlannedSlide, theme: Theme) {
       const h = Math.min(CH - 0.2, Math.max(2.8, listH + 1.7));
       [b.left, b.right].forEach((side, i) => {
         const x = X + i * (w + 1.2);
-        slide.addShape(pptx.ShapeType.roundRect, { x, y: TOP, w, h, fill: { color: i ? theme.soft : 'F6F7F9' }, line: { color: i ? theme.soft : 'F6F7F9' }, rectRadius: 0.15 });
+        card(pptx, slide, x, TOP, w, h);
         slide.addText(side.title, { ...text, x: x + 0.3, y: TOP + 0.25, w: w - 0.6, h: 0.7, fontFace: theme.headFont, fontSize: 22, bold: true, color: i ? theme.accent : theme.ink });
         slide.addText(
           side.items.map((t, j) => ({ text: t, options: { bullet: { code: '25CF' }, paraSpaceAfter: 8, breakLine: j < side.items.length - 1 } })),
@@ -180,6 +199,20 @@ function darkSlide(pptx: Pptx, theme: Theme) {
   return slide;
 }
 
+/** Content page: a faint palette tint with two large motif circles bleeding off the right edge, behind everything. */
+function lightSlide(pptx: Pptx, theme: Theme) {
+  const slide = pptx.addSlide({ masterName: 'BODY' });
+  const faint = (transparency: number) => ({ fill: { color: theme.accent, transparency }, line: { color: theme.accent, transparency: 100 } });
+  slide.addShape(pptx.ShapeType.ellipse, { x: W - 3.4, y: H - 3.0, w: 5.2, h: 5.2, ...faint(93) });
+  slide.addShape(pptx.ShapeType.ellipse, { x: W - 1.5, y: -0.9, w: 2.6, h: 2.6, ...faint(88) });
+  return slide;
+}
+
+function heading(slide: PSlide, title: string, pt: number, kicker: string, theme: Theme) {
+  if (kicker) slide.addText(kicker, { x: X, y: 0.3, w: CW, h: 0.35, fontFace: theme.font, fontSize: 12, bold: true, color: theme.accent, charSpacing: 1, margin: 0, isTextBox: true });
+  slide.addText(title, { x: X, y: kicker ? 0.6 : 0.45, w: CW, h: 0.95, fontFace: theme.headFont, fontSize: pt, bold: true, color: theme.ink, valign: 'middle', margin: 0, fit: 'shrink', isTextBox: true });
+}
+
 export async function renderPptx(deck: DeckSpec, theme: Theme): Promise<Buffer> {
   const pptx = new PptxGenJS();
   pptx.layout = 'LAYOUT_WIDE';
@@ -188,7 +221,7 @@ export async function renderPptx(deck: DeckSpec, theme: Theme): Promise<Buffer> 
   pptx.theme = { headFontFace: theme.headFont, bodyFontFace: theme.font };
   pptx.defineSlideMaster({
     title: 'BODY',
-    background: { color: 'FFFFFF' },
+    background: { color: mix(theme.soft, 'FFFFFF', 0.55) },
     slideNumber: { x: W - 1.0, y: H - 0.5, w: 0.6, h: 0.3, fontFace: theme.font, fontSize: 10, color: theme.muted },
   });
 
@@ -198,24 +231,28 @@ export async function renderPptx(deck: DeckSpec, theme: Theme): Promise<Buffer> 
 
   const { slides } = fitDeck(deck);
   let section = 0;
+  let sectionTitle = '';
   for (const s of slides) {
     if (!s.block) {
       section++;
+      sectionTitle = s.title;
       const divider = darkSlide(pptx, theme);
       circle(pptx, divider, X + 0.2, 2.75, 1.0, String(section), theme.accent, 'FFFFFF', theme);
       divider.addText(s.title, { x: X + 1.5, y: 2.5, w: CW - 5, h: 1.5, fontFace: theme.headFont, fontSize: 36, bold: true, color: 'FFFFFF', valign: 'middle', isTextBox: true });
       if (s.notes) divider.addNotes(s.notes);
       continue;
     }
-    const slide = pptx.addSlide({ masterName: 'BODY' });
-    slide.addText(s.title, { x: X, y: 0.45, w: CW, h: 1.0, fontFace: theme.headFont, fontSize: s.titlePt, bold: true, color: theme.ink, valign: 'middle', margin: 0, fit: 'shrink', isTextBox: true });
+    const kicker = section && sectionTitle !== s.title ? `${String(section).padStart(2, '0')}  ${sectionTitle}` : '';
+    const dark = s.block.type === 'quote';
+    const slide = dark ? darkSlide(pptx, theme) : lightSlide(pptx, theme);
+    if (!dark) heading(slide, s.title, s.titlePt, kicker, theme);
     body(pptx, slide, s, theme);
     if (s.notes) slide.addNotes(s.notes);
   }
 
   if (deck.sources.length) {
-    const slide = pptx.addSlide({ masterName: 'BODY' });
-    slide.addText('출처', { x: X, y: 0.45, w: CW, h: 1.0, fontFace: theme.headFont, fontSize: 30, bold: true, color: theme.ink, margin: 0, isTextBox: true });
+    const slide = lightSlide(pptx, theme);
+    heading(slide, '출처', 30, '', theme);
     slide.addText(
       deck.sources.slice(0, 14).map((t, i, all) => ({ text: t, options: { bullet: { type: 'number' as const }, paraSpaceAfter: 6, breakLine: i < all.length - 1 } })),
       { x: X, y: TOP, w: CW, h: CH, fontFace: theme.font, fontSize: 13, color: theme.muted, valign: 'top', isTextBox: true },

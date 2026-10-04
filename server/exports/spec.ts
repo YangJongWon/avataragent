@@ -120,6 +120,7 @@ export function deckFromDoc(doc: DocSpec): DeckSpec {
   }
   let section = doc.title;
   let sub = '';
+  const dividers = doc.blocks.filter((b) => b.type === 'heading').length >= 3;
   let pending: string[] = [];
   const flush = () => {
     for (const items of chunk(pending, BULLETS_PER_SLIDE)) slides.push({ title: sub || section, block: { type: 'bullets', items } });
@@ -131,6 +132,7 @@ export function deckFromDoc(doc: DocSpec): DeckSpec {
         flush();
         section = block.text;
         sub = '';
+        if (dividers) slides.push({ title: section });
         break;
       case 'subheading':
         flush();

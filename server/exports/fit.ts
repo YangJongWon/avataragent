@@ -132,9 +132,9 @@ function blockPt(b: Block, slide: number, issues: string[]) {
       return pt ?? 16;
     }
     case 'quote': {
-      const pt = [26, 22, 18].find((p) => heightFor(linesFor(b.text, SLIDE.CW - 2.4, p), p) <= 3.6);
+      const pt = [32, 28, 24, 20].find((p) => heightFor(linesFor(b.text, SLIDE.CW - 4.2, p), p, 1.4) <= 3.0);
       if (!pt) issues.push(`슬라이드 ${slide}: 인용문이 너무 길어요`);
-      return pt ?? 18;
+      return pt ?? 20;
     }
     case 'compare': {
       const w = (SLIDE.CW - 1.2) / 2 - 0.6;
