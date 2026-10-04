@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { TEAM_ORDER, TEAMS } from '../../../shared/teams.ts';
 import type { Snapshot } from '../../../shared/types.ts';
 import { api } from '../api.ts';
-import { krw, roi, roleTitle, TASK_STATUS_LABEL } from '../format.ts';
+import { krw, roi, roleTitle, statusLabel } from '../format.ts';
 
 export function ProfitTab({ snapshot, onError, onNotice }: { snapshot: Snapshot; onError: (m: string) => void; onNotice: (m: string) => void }) {
   const { budget, agents, tasks, offices } = snapshot;
@@ -171,7 +171,7 @@ export function ProfitTab({ snapshot, onError, onNotice }: { snapshot: Snapshot;
                   <td>
                     {TEAMS[offices.find((o) => o.id === t.officeId)?.team ?? 'dev'].emoji} {t.title}
                   </td>
-                  <td>{TASK_STATUS_LABEL[t.status]}</td>
+                  <td>{statusLabel(t.status)}</td>
                   <td className="num">{krw(t.costKrw)}</td>
                   <td className="num">{value ? krw(value) : '-'}</td>
                   <td className={`num ${value - t.costKrw < 0 ? 'neg' : 'pos'}`}>{value ? krw(value - t.costKrw) : '-'}</td>

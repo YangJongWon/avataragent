@@ -5,7 +5,7 @@ import { planHas } from '../../../shared/plans.ts';
 import { TEAMS } from '../../../shared/teams.ts';
 import type { ChatMessage, ForwardMode, Snapshot } from '../../../shared/types.ts';
 import { api } from '../api.ts';
-import { krw, TASK_STATUS_LABEL } from '../format.ts';
+import { krw, statusLabel } from '../format.ts';
 
 export const isMine = (snapshot: Snapshot, message: ChatMessage) =>
   snapshot.viewer.kind === 'owner' ? message.author.kind === 'owner' : snapshot.viewer.kind === 'member' && message.author.id === snapshot.viewer.memberId;
@@ -87,7 +87,7 @@ export function ChatPanel(props: {
       {threadTask && shareTarget && (
         <div className="chat-thread-bar small">
           <button className="link-btn" onClick={() => props.onOpenTask(threadTask.id)}>
-            [{TASK_STATUS_LABEL[threadTask.status]}] {threadTask.title}
+            [{statusLabel(threadTask.status)}] {threadTask.title}
           </button>
           <button
             className="pixel-btn small"
@@ -143,7 +143,7 @@ export function ChatPanel(props: {
                     <>
                       <b>{task.title}</b>
                       <span className="small muted">
-                        {officeName(task.officeId)} · {TASK_STATUS_LABEL[task.status]} · 비용 {krw(task.costKrw)}
+                        {officeName(task.officeId)} · {statusLabel(task.status)} · 비용 {krw(task.costKrw)}
                       </span>
                     </>
                   ) : (

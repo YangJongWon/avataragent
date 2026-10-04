@@ -1,3 +1,4 @@
+import { t } from './i18n.ts';
 import type { Role } from './types.ts';
 
 export type Personality = 'balanced' | 'careful' | 'fast' | 'creative' | 'friendly' | 'critical';
@@ -64,6 +65,10 @@ export const PERSONALITIES: PersonalityMeta[] = [
     mockNote: '비판형: 위험 요소와 반대 의견을 먼저 짚었어요.',
   },
 ];
+
+/** Korean in `PERSONALITIES` is the catalogue key, so display goes through `t()`. */
+export const personalityLabel = (id: Personality | undefined) => t(personalityOf(id).label);
+export const personalityDescription = (id: Personality | undefined) => t(personalityOf(id).description);
 
 export const DEFAULT_PERSONALITY_BY_ROLE: Record<Role, Personality> = {
   manager: 'balanced',

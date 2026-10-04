@@ -1,3 +1,4 @@
+import { t } from './i18n.ts';
 import type { ShareRole, Viewer } from './types.ts';
 
 /**
@@ -36,3 +37,7 @@ export function can(viewer: Viewer, action: Action, officeId?: string) {
 }
 
 export const seesEverything = (viewer: Viewer) => viewer.kind === 'owner' || viewer.officeIds === 'all';
+
+/** Korean in `SHARE_ROLES` is the catalogue key, so display goes through `t()`. */
+export const shareRoleLabel = (role: ShareRole) => t(SHARE_ROLES[role].label);
+export const shareRoleDescription = (role: ShareRole) => t(SHARE_ROLES[role].description);

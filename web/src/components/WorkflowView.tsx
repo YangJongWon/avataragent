@@ -12,10 +12,12 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { t, tpl } from '../../../shared/i18n.ts';
 import { TEAMS } from '../../../shared/teams.ts';
 import type { Agent, StepKind, StepStatus, Task, TeamId } from '../../../shared/types.ts';
-import { loopTargetLabel, PLAN_MODE_LABEL, STEP_KIND } from '../../../shared/workflow.ts';
+import { loopTargetLabel, planModeLabel, STEP_KIND } from '../../../shared/workflow.ts';
 
+/** `text` holds the Korean catalogue key, so it must be read through `t()` at render. */
 const STATUS_VIEW: Record<StepStatus, { icon: string; text: string; cls: string }> = {
   pending: { icon: '○', text: '대기', cls: 'st-pending' },
   running: { icon: '●', text: '작업 중', cls: 'st-running' },
@@ -52,7 +54,7 @@ function StepNode({ data }: NodeProps<Node<StepData>>) {
         </div>
         <div className="flow-owner">{data.owner}</div>
         <div className="flow-status">
-          {view.icon} {view.text}
+          {view.icon} {t(view.text)}
         </div>
         {data.loop && (
           <div className="flow-loop" title={data.loop}>
@@ -93,18 +95,18 @@ function flowItems(task: Task | undefined, agents: Agent[], team: TeamId): FlowI
     kind: s.kind,
     data: {
       icon: STEP_KIND[s.kind].icon,
-      label: s.label,
+      label: t(s.label),
       status: s.status,
-      owner: s.kind === 'approval' ? '사용자' : (agents.find((a) => a.id === s.agentId)?.name ?? '담당 없음'),
+      owner: s.kind === 'approval' ? t('사용자') : (agents.find((a) => a.id === s.agentId)?.name ?? t('담당 없음')),
       loop: s.loop
-        ? `${s.loop.when} → ${loopTargetLabel(task.plan, i, s.loop)} (${task.loopCounts?.[s.id] ?? 0}/${s.loop.max})`
+        ? `${t(s.loop.when)} → ${t(loopTargetLabel(task.plan, i, s.loop))} (${task.loopCounts?.[s.id] ?? 0}/${s.loop.max})`
         : undefined,
     },
   }));
   steps.push({
     id: `${task.id}-done`,
     kind: 'done',
-    data: { icon: '✅', label: TEAMS[team].stepLabels.done, status: task.status === 'completed' ? 'done' : 'pending', owner: '결과 보관' },
+    data: { icon: '✅', label: t(TEAMS[team].stepLabels.done), status: task.status === 'completed' ? 'done' : 'pending', owner: t('결과 보관') },
   });
   return steps;
 }
@@ -251,7 +253,7 @@ function WorkflowInner({ task, agents, team, onEdit }: Props) {
       target: task.plan[step.loop.to].id,
       targetHandle: review ? 't-in' : 'b-in',
       type: 'smoothstep',
-      label: `${review ? '반려' : '조건'} ${task.loopCounts?.[step.id] ?? 0}/${step.loop.max}`,
+      label: tpl(review ? '반려 {n}/{max}' : '조건 {n}/{max}', { n: task.loopCounts?.[step.id] ?? 0, max: step.loop.max }),
       animated: step.status === 'rejected' || step.status === 'looped',
       style: { stroke: color, strokeDasharray: '6 4' },
       labelStyle: { fill: color, fontWeight: 700 },
@@ -267,7 +269,7 @@ function WorkflowInner({ task, agents, team, onEdit }: Props) {
       target: draft.id,
       targetHandle: 'b-in',
       type: 'smoothstep',
-      label: `수정 요청 ${task.userChangeRequests.length}회`,
+      label: tpl('수정 요청 {n}회', { n: task.userChangeRequests.length }),
       animated: approval.status === 'rejected',
       style: { stroke: '#7f8c8d', strokeDasharray: '2 4' },
       labelStyle: { fill: '#7f8c8d', fontWeight: 700 },
@@ -285,29 +287,31 @@ function WorkflowInner({ task, agents, team, onEdit }: Props) {
   return (
     <div className="workflow">
       <div className="workflow-head">
-        <span>업무 여정 {task ? `· ${task.title}` : ''}</span>
+        <span>
+          {t('업무 여정')} {task ? `· ${task.title}` : ''}
+        </span>
         {task && (
           <span className={`plan-mode plan-${task.planMode}`} title={task.planNote || undefined}>
-            {PLAN_MODE_LABEL[task.planMode]}
+            {planModeLabel(task.planMode)}
           </span>
         )}
         {task && (
           <button
             className={`pixel-btn small ${editing ? 'primary' : ''}`}
             onClick={() => setEditing((v) => !v)}
-            title="단계 상자를 끌어서 옮기고, 모서리를 끌어서 크기를 바꿔요"
+            title={t('단계 상자를 끌어서 옮기고, 모서리를 끌어서 크기를 바꿔요')}
           >
-            {editing ? '✓ 배치 완료' : '✋ 배치 조정'}
+            {editing ? t('✓ 배치 완료') : t('✋ 배치 조정')}
           </button>
         )}
         {task && layout && (
-          <button className="pixel-btn small" onClick={resetLayout} title="화면 너비에 맞춰 자동으로 줄바꿈해요">
-            ↺ 자동 배치
+          <button className="pixel-btn small" onClick={resetLayout} title={t('화면 너비에 맞춰 자동으로 줄바꿈해요')}>
+            {t('↺ 자동 배치')}
           </button>
         )}
         {onEdit && (
           <button className="pixel-btn small" onClick={onEdit}>
-            ✏️ 여정 편집
+            {t('✏️ 여정 편집')}
           </button>
         )}
       </div>

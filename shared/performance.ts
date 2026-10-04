@@ -1,3 +1,4 @@
+import { tpl } from './i18n.ts';
 import type { ModelEntry } from './models.ts';
 import { personalityOf, type Personality } from './personality.ts';
 import type { Agent, Role } from './types.ts';
@@ -171,7 +172,12 @@ export function lessonsFor(records: PerfRecord[], officeId: string, taskType: st
 }
 
 const pct = (value: number | null) => (value === null ? '-' : `${Math.round(value * 100)}%`);
+
+/** For AI prompts, which stay Korean so agent behaviour does not depend on the UI language. */
 export const seconds = (ms: number | null) => (ms === null ? '-' : `${Math.round(ms / 1000)}초`);
+
+/** Same value for the screen, in the active display language. */
+export const secondsLabel = (ms: number | null) => (ms === null ? '-' : tpl('{n}초', { n: Math.round(ms / 1000) }));
 
 /** One line per agent for the manager's planning prompt. */
 export function perfLines(agents: Agent[], records: PerfRecord[]) {

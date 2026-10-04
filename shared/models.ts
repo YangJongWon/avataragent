@@ -1,3 +1,4 @@
+import { t } from './i18n.ts';
 import type { Role } from './types.ts';
 
 /** Company id. Built-in: claude, gpt, grok, gemini; registered companies get `co_…` ids. */
@@ -153,6 +154,12 @@ export const HATS: Record<HatShape, { name: string; color: string }> = {
   tophat: { name: '실크햇 + 리본', color: '#5b3a8c' },
   bandana: { name: '두건 + 물방울', color: '#16a085' },
 };
+
+/** Korean in these tables is the catalogue key, so display goes through `t()`. */
+export const tierLabel = (tier: Tier) => t(TIER_LABEL[tier]);
+export const tierHat = (tier: Tier) => t(TIER_HAT[tier]);
+export const hatName = (shape: HatShape) => t(HATS[shape].name);
+export const linkLabel = (label: string) => t(label);
 
 export const DEFAULT_COMPANIES: Company[] = [
   { id: 'claude', name: 'Claude', hat: 'beanie', color: HATS.beanie.color, api: 'anthropic', baseUrl: '', builtin: true },

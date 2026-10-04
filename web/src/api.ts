@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DesignKind, DesignReview, ExportFormat } from '../../shared/design.ts';
+import type { Language } from '../../shared/i18n.ts';
 import type { McpServer, McpTool, McpToolMode, PlannedAction } from '../../shared/mcp.ts';
 import { setCatalog, type ApiKind, type Company, type ModelEntry, type Tier } from '../../shared/models.ts';
 import type { Personality } from '../../shared/personality.ts';
@@ -43,6 +44,7 @@ export const api = {
     title?: string;
     description?: string;
     taskType?: string;
+    milestoneId?: string;
     planMode?: PlanMode;
     steps?: WorkflowStepInput[];
     planNote?: string;
@@ -50,12 +52,14 @@ export const api = {
   previewPlan: (officeId: string, input: { title: string; description: string; taskType: string }) =>
     call<{ steps: WorkflowStepInput[]; note: string }>('POST', `/api/offices/${officeId}/plan-preview`, input),
   updatePlan: (taskId: string, steps: WorkflowStepInput[]) => call('PUT', `/api/tasks/${taskId}/plan`, { steps }),
+  setTaskMilestone: (taskId: string, milestoneId: string | null) => call('PUT', `/api/tasks/${taskId}/milestone`, { milestoneId }),
   createShare: (input: { name: string; role: ShareRole; officeIds: string[] | 'all'; expiresInDays: number }) =>
     call<ShareLink>('POST', '/api/shares', input),
   deleteShare: (shareId: string) => call('DELETE', `/api/shares/${shareId}`),
-  updateOffice: (officeId: string, patch: { autoRun?: boolean; autoImprove?: boolean; budgetKrw?: number | null }) =>
+  updateOffice: (officeId: string, patch: { autoRun?: boolean; autoImprove?: boolean; budgetKrw?: number | null; theme?: string; themeCss?: boolean }) =>
     call('PUT', `/api/offices/${officeId}`, patch),
   setPlan: (plan: Plan) => call('PUT', '/api/plan', { plan }),
+  setLanguage: (language: Language) => call<{ language: Language }>('PUT', '/api/language', { language }),
   startCheckout: (plan: Plan) => call<{ url: string }>('POST', '/api/billing/checkout', { plan }),
   cancelSubscription: () => call('POST', '/api/billing/cancel'),
   resumeSubscription: () => call('POST', '/api/billing/resume'),
@@ -70,7 +74,7 @@ export const api = {
   applyPlaybook: (officeId: string, body: { playbook: Playbook; includeModel: boolean; acceptWarnings: boolean }) =>
     call<{ changes: PlaybookChange[] }>('POST', `/api/offices/${officeId}/playbook`, body),
   applyImprovement: (officeId: string, id: string) => call('POST', `/api/offices/${officeId}/improvements`, { id }),
-  createOffice: (input: { team: TeamId; name?: string }) => call<Office>('POST', '/api/offices', input),
+  createOffice: (input: { team: TeamId; name?: string; theme?: string }) => call<Office>('POST', '/api/offices', input),
   deleteOffice: (officeId: string) => call('DELETE', `/api/offices/${officeId}`),
   simulateMail: () => call('POST', '/api/sim/mail'),
   simulateInquiry: () => call('POST', '/api/sim/inquiry'),
@@ -82,7 +86,7 @@ export const api = {
     call('POST', `/api/tasks/${taskId}/request-changes`, { comment }),
   setActionEnabled: (taskId: string, actionId: string, enabled: boolean) =>
     call<PlannedAction>('PUT', `/api/tasks/${taskId}/actions/${actionId}`, { enabled }),
-  updateAgent: (agentId: string, patch: { name?: string; rules?: string; model?: string; skin?: Skin; personality?: Personality }) =>
+  updateAgent: (agentId: string, patch: { name?: string; rules?: string; model?: string; skin?: Skin; personality?: Personality; workPolicy?: Agent['workPolicy'] }) =>
     call('PUT', `/api/agents/${agentId}`, patch),
   hireAgent: (officeId: string, body: { role: Role; name?: string; personality?: Personality }) =>
     call<Agent>('POST', `/api/offices/${officeId}/agents`, body),

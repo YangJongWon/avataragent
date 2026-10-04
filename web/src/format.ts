@@ -1,24 +1,26 @@
 import { companyOf, modelOf, TIER_LABEL } from '../../shared/models.ts';
+import { currentLanguage, localeOf, num, t, tpl } from '../../shared/i18n.ts';
 import { TEAMS } from '../../shared/teams.ts';
 import type { Agent, Office, OfficeEvent, TaskStatus } from '../../shared/types.ts';
 
 export function modelLabel(id: string) {
   const m = modelOf(id);
-  return `${m.label} · ${TIER_LABEL[m.tier]} (${companyOf(m.vendor).name})`;
+  return `${m.label} · ${t(TIER_LABEL[m.tier])} (${companyOf(m.vendor).name})`;
 }
 
 export function krw(value: number) {
   const abs = Math.abs(value);
   const digits = abs > 0 && abs < 100 ? 2 : 0;
-  const text = abs.toLocaleString('ko-KR', { minimumFractionDigits: 0, maximumFractionDigits: digits });
+  const text = abs.toLocaleString(localeOf(currentLanguage()), { minimumFractionDigits: 0, maximumFractionDigits: digits });
   return `${value < 0 ? '-' : ''}₩${text}`;
 }
 
 export function roi(value: number, cost: number) {
   if (cost <= 0) return value > 0 ? '∞' : '-';
-  return `${Math.round(((value - cost) / cost) * 100).toLocaleString('ko-KR')}%`;
+  return `${num(Math.round(((value - cost) / cost) * 100))}%`;
 }
 
+/** Raw Korean labels; prefer `statusLabel()` so the active language applies. */
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   queued: '대기',
   running: '진행 중',
@@ -28,145 +30,184 @@ export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   failed: '중단',
 };
 
+export const statusLabel = (status: TaskStatus) => t(TASK_STATUS_LABEL[status]);
+
 export function roleTitle(agent: Agent, offices: Office[]) {
   const office = offices.find((o) => o.id === agent.officeId);
-  return office ? TEAMS[office.team].roleTitles[agent.role] : agent.role;
+  return office ? t(TEAMS[office.team].roleTitles[agent.role]) : agent.role;
 }
 
 export function eventLabel(event: OfficeEvent, agents: Map<string, Agent>) {
   const p = event.payload as Record<string, unknown>;
-  const name = (id: unknown) => agents.get(String(id))?.name ?? '직원';
+  const name = (id: unknown) => agents.get(String(id))?.name ?? t('직원');
   const who = event.agentId ? name(event.agentId) : '';
   switch (event.type) {
     case 'task.created':
-      return `${p.queued ? '대기열에 업무 추가' : '칠판에 업무 등록'}: ${p.title}`;
+      return tpl(p.queued ? '대기열에 업무 추가' : '칠판에 업무 등록', { title: String(p.title ?? '') });
     case 'queue.started':
-      return `업무 시작: ${p.title}`;
+      return tpl('업무 시작', { title: String(p.title ?? '') });
     case 'task.cancelled':
-      return `대기 업무 취소: ${p.title}`;
+      return tpl('대기 업무 취소', { title: String(p.title ?? '') });
     case 'task.assigned':
-      return `${who}에게 업무 배정`;
+      return tpl('{who}에게 업무 배정', { who });
     case 'task.started':
-      return `${who} 작업 시작${Number(p.attempt) > 1 ? ` (${p.attempt}번째)` : ''}`;
+      return Number(p.attempt) > 1
+        ? tpl('작업 시작 (재시도)', { who, attempt: Number(p.attempt) })
+        : tpl('{who} 작업 시작', { who });
     case 'tool.started':
-      return `${who} ${p.label ?? '도구'} 시작`;
+      return tpl('{who} 도구 시작', { who, tool: String(p.label ?? t('도구')) });
     case 'tool.completed':
-      return `${who} 도구 사용 완료`;
+      return tpl('{who} 도구 사용 완료', { who });
     case 'mcp.called':
-      return `${who} ${p.icon ?? '🧩'} ${p.server} · ${p.tool} ${p.approved ? '승인된 외부 작업 실행' : '호출'}`;
+      return tpl(p.approved ? '{who} 승인된 외부 작업 실행' : '{who} 도구 호출', {
+        who,
+        icon: String(p.icon ?? '🧩'),
+        server: String(p.server ?? ''),
+        tool: String(p.tool ?? ''),
+      });
     case 'mcp.result':
-      return `${who} ${p.server} · ${p.tool} 결과 받음 (${p.chars}자)`;
+      return tpl('{who} 결과 수신', { who, server: String(p.server ?? ''), tool: String(p.tool ?? ''), chars: num(Number(p.chars ?? 0)) });
     case 'mcp.failed':
-      return `${who} ${p.server} · ${p.tool} 실패: ${p.reason}`;
+      return tpl('{who} 실패', { who, server: String(p.server ?? ''), tool: String(p.tool ?? ''), reason: String(p.reason ?? '') });
     case 'mcp.changed':
-      return `${p.summary}`;
-    case 'task.designed':
-      return `${who} ✨ ${p.kind === 'deck' ? '슬라이드' : p.kind === 'sheet' ? 'Excel' : '문서'} 디자인 완료 (초안 v${p.version})${
-        p.reviewed ? ` · 화면 검수 ${p.rounds}회 ${p.passed ? '통과' : '지적 남음'}` : ''
-      }${Number(p.dropped) ? ` · 근거 없는 숫자 블록 ${p.dropped}개 제외` : ''}`;
+      return String(p.summary ?? '');
+    case 'task.designed': {
+      const kind = p.kind === 'deck' ? t('슬라이드') : p.kind === 'sheet' ? 'Excel' : t('문서');
+      const base = tpl('{who} {kind} 디자인 완료', { who, kind, version: Number(p.version ?? 1) });
+      const reviewed = p.reviewed
+        ? ` ${tpl('화면 검수 결과', { rounds: Number(p.rounds ?? 0), result: p.passed ? t('검수 통과') : t('검수 지적') })}`
+        : '';
+      const dropped = Number(p.dropped) ? ` ${tpl('근거 없는 숫자 제외', { count: Number(p.dropped) })}` : '';
+      return `${base}${reviewed}${dropped}`;
+    }
     case 'artifact.created':
-      return `${who} 산출물 생성: ${p.title}`;
+      return tpl('{who} 산출물 생성', { who, title: String(p.title ?? '') });
     case 'task.handed_off':
-      return `${name(p.from)} → ${name(p.to)}: ${p.label}`;
+      return tpl('{who} 업무 전달', { who, from: name(p.from), to: name(p.to), label: String(p.label ?? '') });
     case 'cost.recorded':
-      return `${who} AI 호출 비용 ${krw(Number(p.amountKrw))} (입력 ${p.inputTokens} / 출력 ${p.outputTokens} 토큰)`;
+      return tpl('{who} AI 호출 비용', {
+        who,
+        amount: krw(Number(p.amountKrw ?? 0)),
+        inputTokens: num(Number(p.inputTokens ?? 0)),
+        outputTokens: num(Number(p.outputTokens ?? 0)),
+      });
     case 'agent.help_requested':
-      return `${who} 도움 요청: ${p.question}`;
+      return tpl('{who} 도움 요청', { who, question: String(p.question ?? '') });
     case 'agent.help_received':
-      return `사용자가 ${who}를 도와줌: ${p.answer}`;
+      return tpl('사용자가 도움줌', { who, answer: String(p.answer ?? '') });
     case 'agent.help_timed_out':
-      return `응답이 없어 ${who}가 가정으로 진행: ${p.assumption}`;
+      return tpl('응답 없이 진행', { who, assumption: String(p.assumption ?? '') });
     case 'review.started':
-      return `${who} 검수 시작`;
+      return tpl('{who} 검수 시작', { who });
     case 'review.rejected':
-      return `${who} 반려 (${p.score}점): ${p.reason}`;
+      return tpl('{who} 반려', { who, score: Number(p.score ?? 0), reason: String(p.reason ?? '') });
     case 'review.approved':
-      return `${who} 검수 통과 (${p.score}점)`;
+      return tpl('{who} 검수 통과', { who, score: Number(p.score ?? 0) });
     case 'approval.requested':
-      return `사용자 승인 요청 (추정 가치 ${krw(Number(p.estimatedKrw ?? 0))})`;
+      return tpl('사용자 승인 요청', { value: krw(Number(p.estimatedKrw ?? 0)) });
     case 'approval.granted':
-      return '사용자 승인';
+      return t('사용자 승인');
     case 'approval.denied':
-      return `사용자 수정 요청: ${p.comment}`;
+      return tpl('사용자 수정 요청', { comment: String(p.comment ?? '') });
     case 'value.recognized':
-      return `가치 인정 ${krw(Number(p.amountKrw))} / 업무 이익 ${krw(Number(p.profitKrw))}`;
+      return tpl('가치 인정', { value: krw(Number(p.amountKrw ?? 0)), profit: krw(Number(p.profitKrw ?? 0)) });
     case 'task.completed':
-      return '업무 완료';
+      return t('업무 완료');
     case 'task.failed':
-      return `업무 중단: ${p.reason}`;
+      return tpl('업무 중단', { reason: String(p.reason ?? '') });
     case 'task.paused':
-      return `${who} 일시정지`;
+      return tpl('{who} 일시정지', { who });
     case 'task.resumed':
-      return `${who} 재개`;
+      return tpl('{who} 재개', { who });
     case 'rule.changed':
-      return `${who} 개인 규칙 변경`;
+      return tpl('{who} 개인 규칙 변경', { who });
     case 'agent.hired':
-      return `${String(p.name ?? who)} 입사`;
+      return tpl('{who} 입사', { who, name: String(p.name ?? who) });
     case 'agent.left':
-      return `${String(p.name ?? '')} 퇴사`;
+      return tpl('{who} 퇴사', { who, name: String(p.name ?? '') });
     case 'budget.threshold_reached':
-      return '월 예산 80% 사용 경고';
+      return t('월 예산 80% 사용 경고');
     case 'budget.exceeded':
-      return p.officeId ? '팀 예산 상한 초과로 실행 중지' : '월 예산 초과로 실행 중지';
+      return t(p.officeId ? '팀 예산 상한 초과' : '월 예산 초과');
     case 'team.applied':
-      return `반영 완료: ${p.summary}`;
+      return tpl('반영 완료', { summary: String(p.summary ?? '') });
     case 'mail.received':
-      return `새 메일 도착: ${p.subject}`;
+      return tpl('새 메일 도착', { subject: String(p.subject ?? '') });
     case 'inquiry.received':
-      return `새 문의 도착: ${p.subject}`;
+      return tpl('새 문의 도착', { subject: String(p.subject ?? '') });
     case 'office.updated':
-      return '사무실 설정 변경';
+      return t('사무실 설정 변경');
     case 'office.created':
-      return '사무실 개설';
+      return t('사무실 개설');
     case 'office.removed':
-      return '사무실 폐쇄';
-    case 'workflow.planned':
-      return `${who} 업무 여정 설계 (${p.steps}단계)${p.note ? `: ${p.note}` : ''}`;
+      return t('사무실 폐쇄');
+    case 'workflow.planned': {
+      const base = tpl('{who} 업무 여정 설계', { who, steps: num(Number(p.steps ?? 0)) });
+      return p.note ? `${base}: ${String(p.note)}` : base;
+    }
     case 'workflow.updated':
-      return `업무 여정 수정 (${p.steps}단계)`;
+      return tpl('업무 여정 수정', { steps: num(Number(p.steps ?? 0)) });
     case 'workflow.looped':
-      return `${who} 🔁 ${p.from} → ${p.to === p.from ? '다시' : p.to} (${p.count}/${p.max}): ${p.reason}`;
+      return tpl('{who} 되돌아감', {
+        who,
+        from: String(p.from ?? ''),
+        to: String(p.to === p.from ? t('다시') : (p.to ?? '')),
+        count: Number(p.count ?? 0),
+        max: Number(p.max ?? 0),
+        reason: String(p.reason ?? ''),
+      });
     case 'share.created':
-      return `공유 링크 생성: ${p.name}`;
+      return tpl('공유 링크 생성', { name: String(p.name ?? '') });
     case 'share.revoked':
-      return `공유 링크 취소: ${p.name}`;
+      return tpl('공유 링크 취소', { name: String(p.name ?? '') });
     case 'catalog.changed':
-      return `모델 관리 · ${p.summary}`;
+      return tpl('모델 관리', { summary: String(p.summary ?? '') });
     case 'playbook.applied':
-      return `플레이북 "${p.name}" 적용 (${p.changes}건 변경)`;
+      return tpl('플레이북 적용', { name: String(p.name ?? ''), changes: num(Number(p.changes ?? 0)) });
     case 'improvement.applied':
-      return `${who} 📈 ${p.auto ? '자율 개선' : '개선 적용'}: ${p.reason}`;
+      return `📈 ${tpl(p.auto ? '자율 개선' : '개선 적용', { reason: String(p.reason ?? '') })}`;
     case 'chat.forwarded':
-      return `💬 ${p.by}님이 대화를 ${p.label ?? ''} 전달: ${p.author}: ${p.text}`;
+      return tpl('대화 전달', {
+        by: String(p.by ?? ''),
+        label: String(p.label ?? ''),
+        author: String(p.author ?? ''),
+        text: String(p.text ?? ''),
+      });
     case 'task.assignee_changed':
-      return p.name ? `담당자 지정: ${p.name}` : '담당자 지정 해제';
-    case 'plan.changed':
-      return `플랜 변경: ${p.plan}${p.reason ? ` (${p.reason})` : ''}`;
+      return p.name ? tpl('담당자 지정', { name: String(p.name) }) : t('담당자 지정 해제');
+    case 'plan.changed': {
+      const base = tpl('플랜 변경', { plan: String(p.plan ?? '') });
+      return p.reason ? `${base} (${String(p.reason)})` : base;
+    }
     case 'member.created':
-      return `구성원 추가: ${p.name}`;
+      return tpl('구성원 추가', { name: String(p.name ?? '') });
     case 'member.updated':
-      return `구성원 정보 변경: ${p.name}`;
+      return tpl('구성원 정보 변경', { name: String(p.name ?? '') });
     case 'member.removed':
-      return `구성원 삭제: ${p.name}`;
+      return tpl('구성원 삭제', { name: String(p.name ?? '') });
     case 'billing.checkout_started':
-      return `결제 시작: ${p.plan} ${krw(Number(p.amountKrw))}`;
+      return tpl('결제 시작', { plan: String(p.plan ?? ''), amount: krw(Number(p.amountKrw ?? 0)) });
     case 'billing.subscribed':
-      return `구독 시작: ${p.plan} ${krw(Number(p.amountKrw))}`;
+      return tpl('구독 시작', { plan: String(p.plan ?? ''), amount: krw(Number(p.amountKrw ?? 0)) });
     case 'billing.renewed':
-      return `구독 갱신: ${p.plan} ${krw(Number(p.amountKrw))}`;
+      return tpl('구독 갱신', { plan: String(p.plan ?? ''), amount: krw(Number(p.amountKrw ?? 0)) });
     case 'billing.payment_failed':
-      return '결제 실패';
+      return t('결제 실패');
     case 'billing.checkout_canceled':
-      return '결제 취소';
+      return t('결제 취소');
     case 'billing.cancel_scheduled':
-      return `구독 해지 예약 (${p.plan})`;
+      return tpl('구독 해지 예약', { plan: String(p.plan ?? '') });
     case 'billing.resumed':
-      return `구독 해지 예약 취소 (${p.plan})`;
+      return tpl('구독 해지 예약 취소', { plan: String(p.plan ?? '') });
     default:
       return event.type;
   }
 }
 
 export function timeOf(iso: string) {
-  return new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return new Date(iso).toLocaleTimeString(localeOf(currentLanguage()), {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 }

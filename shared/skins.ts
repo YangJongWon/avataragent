@@ -1,3 +1,5 @@
+import { t } from './i18n.ts';
+
 export type Skin = 'pixel' | 'bishoujo' | 'pinkgirl';
 
 export interface SkinMeta {
@@ -21,3 +23,7 @@ export const SKINS: SkinMeta[] = [
 ];
 
 export const isSkin = (id: unknown): id is Skin => SKINS.some((s) => s.id === id);
+
+/** Korean in `SKINS` is the catalogue key, so display goes through `t()`. */
+export const skinName = (id: Skin | undefined) => t(SKINS.find((s) => s.id === id)?.name ?? '');
+export const skinNote = (id: Skin | undefined) => t(SKINS.find((s) => s.id === id)?.note ?? '');

@@ -7,7 +7,7 @@ import { currentStepLabel } from '../../../shared/workflow.ts';
 import type { PlannedAction } from '../../../shared/mcp.ts';
 import type { Agent, OfficeEvent, Person, Task, TeamId } from '../../../shared/types.ts';
 import { api } from '../api.ts';
-import { eventLabel, krw, TASK_STATUS_LABEL, timeOf } from '../format.ts';
+import { eventLabel, krw, statusLabel, timeOf } from '../format.ts';
 import { ExportBox } from './ExportBox.tsx';
 
 type Tab = 'team' | 'report' | 'artifacts' | 'reviews' | 'profit' | 'log';
@@ -111,12 +111,12 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
         <select className="task-select" value={task.id} onChange={(e) => onSelectTask(e.target.value)}>
           {tasks.map((t) => (
             <option key={t.id} value={t.id}>
-              [{TASK_STATUS_LABEL[t.status]}] {t.title}
+              [{statusLabel(t.status)}] {t.title}
             </option>
           ))}
         </select>
         <div className="report-meta">
-          <span className={`badge badge-${task.status}`}>{TASK_STATUS_LABEL[task.status]}</span>
+          <span className={`badge badge-${task.status}`}>{statusLabel(task.status)}</span>
           <span>현재 단계: {currentStepLabel(task)}</span>
           <span>비용 {krw(task.costKrw)}</span>
           {Boolean(task.toolCalls) && <span>🧩 도구 {task.toolCalls}회</span>}

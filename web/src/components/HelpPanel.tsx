@@ -11,6 +11,7 @@ const SUGGESTIONS: Record<string, string[]> = {
   models: ['실제 AI로 바꾸려면?', 'DeepSeek이나 Ollama를 연결하려면?', '키가 맞는지 확인하는 방법은?'],
   mcp: ['Slack 연결하려면?', '이 PC에서 실행(명령) MCP를 켜려면?', '도구의 "승인 후 실행"은 뭐야?'],
   profit: ['예산을 다 쓰면 어떻게 돼?', '사무실별 예산 상한은 어디서 바꿔?'],
+  settings: ['화면 언어 바꾸려면?', '설정에서 무엇을 바꿀 수 있어?'],
 };
 
 interface Turn extends HelpTurn {

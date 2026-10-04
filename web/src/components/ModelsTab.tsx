@@ -1,11 +1,14 @@
 import { useState } from 'react';
+import { t, tpl } from '../../../shared/i18n.ts';
 import {
   API_KINDS,
   COMPATIBLE_SERVICES,
   HATS,
   companyLinks,
-  TIER_HAT,
-  TIER_LABEL,
+  hatName,
+  linkLabel,
+  tierHat,
+  tierLabel,
   type ApiKind,
   type Company,
   type HatShape,
@@ -33,10 +36,10 @@ const PROVIDER_LABEL: Record<string, string> = {
 
 function KeyBadge({ company }: { company: Company }) {
   const key = company.key ?? { source: 'none', hint: '' };
-  if (key.source === 'saved') return <span className="key-badge ok">🔑 등록됨 {key.hint}</span>;
+  if (key.source === 'saved') return <span className="key-badge ok">🔑 {t('등록됨')} {key.hint}</span>;
   if (key.source === 'env') return <span className="key-badge ok">🔑 .env {key.hint}</span>;
-  if (company.api === 'openai_compatible') return <span className="key-badge">키 없음 (필요 없으면 괜찮아요)</span>;
-  return <span className="key-badge warn">키 없음</span>;
+  if (company.api === 'openai_compatible') return <span className="key-badge">{t('키 없음 (필요 없으면 괜찮아요)')}</span>;
+  return <span className="key-badge warn">{t('키 없음')}</span>;
 }
 
 function QuickKey({ company, onError, onNotice }: { company: Company } & Notify) {
@@ -48,12 +51,12 @@ function QuickKey({ company, onError, onNotice }: { company: Company } & Notify)
     try {
       await api.updateCompany(company.id, { apiKey: key.trim() });
       setKey('');
-      onNotice(`${company.name} API 키를 저장했어요.`);
+      onNotice(tpl('{name} API 키를 저장했어요.', { name: company.name }));
       try {
         const { models } = await api.discoverModels({ companyId: company.id });
-        onNotice(`${company.name} 연결 확인: 쓸 수 있는 모델 ${models.length}개`);
+        onNotice(tpl('{name} 연결 확인: 쓸 수 있는 모델 {n}개', { name: company.name, n: models.length }));
       } catch (e) {
-        onError(`키는 저장했지만 연결 확인에 실패했어요: ${message(e)}`);
+        onError(tpl('키는 저장했지만 연결 확인에 실패했어요: {msg}', { msg: message(e) }));
       }
     } catch (e) {
       onError(message(e));
@@ -74,12 +77,12 @@ function QuickKey({ company, onError, onNotice }: { company: Company } & Notify)
         type="password"
         autoComplete="off"
         value={key}
-        aria-label={`${company.name} API 키`}
-        placeholder={company.key?.source && company.key.source !== 'none' ? 'API 키 바꾸기' : 'API 키 입력'}
+        aria-label={tpl('{name} API 키', { name: company.name })}
+        placeholder={company.key?.source && company.key.source !== 'none' ? t('API 키 바꾸기') : t('API 키 입력')}
         onChange={(e) => setKey(e.target.value)}
       />
       <button className="pixel-btn small primary" type="submit" disabled={busy || !key.trim()}>
-        {busy ? '저장 중…' : '키 저장'}
+        {busy ? t('저장 중…') : t('키 저장')}
       </button>
     </form>
   );
@@ -102,7 +105,7 @@ function CompanyForm({ company, onDone, onError, onNotice }: { company: Company 
     try {
       const { models } = await api.discoverModels({ companyId: company?.id, api: form.api, baseUrl: form.baseUrl, apiKey: apiKey || undefined });
       setFound(models);
-      onNotice(`연결됐어요. 쓸 수 있는 모델 ${models.length}개를 확인했어요.`);
+      onNotice(tpl('연결됐어요. 쓸 수 있는 모델 {n}개를 확인했어요.', { n: models.length }));
     } catch (e) {
       setFound(null);
       onError(message(e));
@@ -115,7 +118,11 @@ function CompanyForm({ company, onDone, onError, onNotice }: { company: Company 
     try {
       if (company) await api.updateCompany(company.id, { ...form, ...(apiKey ? { apiKey } : {}) });
       else await api.createCompany({ ...form, apiKey: apiKey || undefined });
-      onNotice(company ? `${form.name} 정보를 저장했어요.` : `${form.name} 회사를 등록했어요. 이제 모델을 등록해 주세요.`);
+      onNotice(
+        company
+          ? tpl('{name} 정보를 저장했어요.', { name: form.name })
+          : tpl('{name} 회사를 등록했어요. 이제 모델을 등록해 주세요.', { name: form.name }),
+      );
       onDone();
     } catch (e) {
       onError(message(e));
@@ -123,10 +130,10 @@ function CompanyForm({ company, onDone, onError, onNotice }: { company: Company 
   };
 
   const removeKey = async () => {
-    if (!company || !window.confirm(`${company.name}에 등록한 API 키를 지울까요?`)) return;
+    if (!company || !window.confirm(tpl('{name}에 등록한 API 키를 지울까요?', { name: company.name }))) return;
     try {
       await api.updateCompany(company.id, { apiKey: null });
-      onNotice('API 키를 지웠어요.');
+      onNotice(t('API 키를 지웠어요.'));
     } catch (e) {
       onError(message(e));
     }
@@ -135,13 +142,13 @@ function CompanyForm({ company, onDone, onError, onNotice }: { company: Company 
   return (
     <div className="company-form">
       <div className="company-form-preview">
-        {TIERS.map((t) => (
-          <HatPreview key={t} hat={form.hat} color={form.color} tier={t} title={TIER_LABEL[t]} />
+        {TIERS.map((tier) => (
+          <HatPreview key={tier} hat={form.hat} color={form.color} tier={tier} title={tierLabel(tier)} />
         ))}
       </div>
       {!company && (
         <div className="row wrap link-row">
-          <span className="muted small">빠른 채우기</span>
+          <span className="muted small">{t('빠른 채우기')}</span>
           {COMPATIBLE_SERVICES.map((s) => (
             <button
               key={s.name}
@@ -155,27 +162,27 @@ function CompanyForm({ company, onDone, onError, onNotice }: { company: Company 
         </div>
       )}
       <label className="field">
-        회사 이름
-        <input value={form.name} maxLength={20} placeholder="예: DeepSeek" onChange={(e) => set({ name: e.target.value })} />
+        {t('회사 이름')}
+        <input value={form.name} maxLength={20} placeholder={t('예: DeepSeek')} onChange={(e) => set({ name: e.target.value })} />
       </label>
       <div className="row wrap">
         <label className="field grow">
-          모자 모양
+          {t('모자 모양')}
           <select value={form.hat} onChange={(e) => set({ hat: e.target.value as HatShape })}>
             {(Object.keys(HATS) as HatShape[]).map((h) => (
               <option key={h} value={h}>
-                {HATS[h].name}
+                {hatName(h)}
               </option>
             ))}
           </select>
         </label>
         <label className="field">
-          모자 색
+          {t('모자 색')}
           <input type="color" value={form.color} onChange={(e) => set({ color: e.target.value })} />
         </label>
       </div>
       <label className="field">
-        API 종류
+        {t('API 종류')}
         <select value={form.api} disabled={company?.builtin} onChange={(e) => set({ api: e.target.value as ApiKind })}>
           {(Object.keys(API_KINDS) as ApiKind[]).map((k) => (
             <option key={k} value={k}>
@@ -186,49 +193,49 @@ function CompanyForm({ company, onDone, onError, onNotice }: { company: Company 
       </label>
       {form.api === 'openai_compatible' && (
         <label className="field">
-          API 주소 (Base URL)
+          {t('API 주소 (Base URL)')}
           <input
             value={form.baseUrl}
-            placeholder="예: https://api.deepseek.com/v1 · http://localhost:11434/v1"
+            placeholder={t('예: https://api.deepseek.com/v1 · http://localhost:11434/v1')}
             onChange={(e) => set({ baseUrl: e.target.value })}
           />
         </label>
       )}
       <label className="field">
-        API 키 {company && <KeyBadge company={company} />}
+        {t('API 키')} {company && <KeyBadge company={company} />}
         <input
           type="password"
           autoComplete="off"
           value={apiKey}
-          placeholder={company?.key?.source && company.key.source !== 'none' ? '바꿀 때만 입력' : 'sk-…'}
+          placeholder={company?.key?.source && company.key.source !== 'none' ? t('바꿀 때만 입력') : 'sk-…'}
           onChange={(e) => setApiKey(e.target.value)}
         />
       </label>
-      <LinkRow links={companyLinks(form)} />
+      <LinkRow links={companyLinks(form).map((l) => ({ ...l, label: linkLabel(l.label) }))} />
       <p className="muted small">
-        키는 이 서버의 data 폴더에만 저장되고 화면으로는 다시 보내지 않아요.
-        {API_KINDS[form.api].env && ` 비워 두면 .env의 ${API_KINDS[form.api].env}를 써요.`}
+        {t('키는 이 서버의 data 폴더에만 저장되고 화면으로는 다시 보내지 않아요.')}
+        {API_KINDS[form.api].env && tpl(' 비워 두면 .env의 {env}를 써요.', { env: API_KINDS[form.api].env })}
       </p>
       {found && (
         <details className="found-models">
-          <summary>확인된 모델 {found.length}개</summary>
-          <p className="small">{found.join(', ') || '목록이 비어 있어요.'}</p>
+          <summary>{tpl('확인된 모델 {n}개', { n: found.length })}</summary>
+          <p className="small">{found.join(', ') || t('목록이 비어 있어요.')}</p>
         </details>
       )}
       <div className="row end wrap">
         {savedKey && (
           <button className="pixel-btn small danger" type="button" onClick={removeKey}>
-            키 삭제
+            {t('키 삭제')}
           </button>
         )}
         <button className="pixel-btn small" type="button" disabled={busy} onClick={test}>
-          {busy ? '확인 중…' : '🔌 연결 확인'}
+          {busy ? t('확인 중…') : `🔌 ${t('연결 확인')}`}
         </button>
         <button className="pixel-btn small" type="button" onClick={onDone}>
-          취소
+          {t('취소')}
         </button>
         <button className="pixel-btn small primary" type="button" disabled={!form.name.trim()} onClick={save}>
-          저장
+          {t('저장')}
         </button>
       </div>
     </div>
@@ -284,7 +291,7 @@ function ModelForm({
     try {
       const { models } = await api.discoverModels({ companyId: form.vendor });
       setOptions(models);
-      onNotice(`${company.name}에서 모델 ${models.length}개를 불러왔어요. API 모델 ID 칸에서 고를 수 있어요.`);
+      onNotice(tpl('{name}에서 모델 {n}개를 불러왔어요. API 모델 ID 칸에서 고를 수 있어요.', { name: company.name, n: models.length }));
     } catch (e) {
       onError(message(e));
     } finally {
@@ -296,7 +303,11 @@ function ModelForm({
     try {
       if (model) await api.updateModel(model.id, form);
       else await api.createModel(form);
-      onNotice(model ? `${form.label} 정보를 저장했어요.` : `${form.label} 모델을 등록했어요. 직원 관리 탭에서 고를 수 있어요.`);
+      onNotice(
+        model
+          ? tpl('{name} 정보를 저장했어요.', { name: form.label })
+          : tpl('{name} 모델을 등록했어요. 직원 관리 탭에서 고를 수 있어요.', { name: form.label }),
+      );
       onDone();
     } catch (e) {
       onError(message(e));
@@ -309,21 +320,21 @@ function ModelForm({
       <div className="model-form-fields">
         <div className="row wrap">
           <label className="field grow">
-            회사 (모자)
+            {t('회사 (모자)')}
             <select value={form.vendor} disabled={model?.builtin} onChange={(e) => set({ vendor: e.target.value })}>
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name} · {HATS[c.hat].name}
+                  {c.name} · {hatName(c.hat)}
                 </option>
               ))}
             </select>
           </label>
           <label className="field grow">
-            등급 (장식)
+            {t('등급 (장식)')}
             <select value={form.tier} onChange={(e) => set({ tier: Number(e.target.value) as Tier })}>
-              {TIERS.map((t) => (
-                <option key={t} value={t}>
-                  {TIER_LABEL[t]} · {TIER_HAT[t]}
+              {TIERS.map((tier) => (
+                <option key={tier} value={tier}>
+                  {tierLabel(tier)} · {tierHat(tier)}
                 </option>
               ))}
             </select>
@@ -331,20 +342,20 @@ function ModelForm({
         </div>
         <div className="row wrap">
           <label className="field grow">
-            화면에 보일 이름
-            <input value={form.label} maxLength={30} placeholder="예: DeepSeek Chat" onChange={(e) => set({ label: e.target.value })} />
+            {t('화면에 보일 이름')}
+            <input value={form.label} maxLength={30} placeholder={t('예: DeepSeek Chat')} onChange={(e) => set({ label: e.target.value })} />
           </label>
           <label className="field grow">
             <span className="row between">
-              API 모델 ID
+              {t('API 모델 ID')}
               <button className="link-btn" type="button" disabled={busy} onClick={load}>
-                {busy ? '불러오는 중…' : '목록 불러오기'}
+                {busy ? t('불러오는 중…') : t('목록 불러오기')}
               </button>
             </span>
             <input
               list={listId}
               value={form.apiModel}
-              placeholder="예: deepseek-chat"
+              placeholder={t('예: deepseek-chat')}
               onChange={(e) => {
                 set({ apiModel: e.target.value });
                 if (!model && options.includes(e.target.value)) void advise(e.target.value);
@@ -360,39 +371,48 @@ function ModelForm({
         </div>
         <div className="row wrap">
           <label className="field grow">
-            입력 단가 ($ / 100만 토큰)
+            {t('입력 단가 ($ / 100만 토큰)')}
             <input type="number" min={0} step="0.01" value={form.priceInPerMTokUsd} onChange={(e) => set({ priceInPerMTokUsd: Number(e.target.value) })} />
           </label>
           <label className="field grow">
-            출력 단가 ($ / 100만 토큰)
+            {t('출력 단가 ($ / 100만 토큰)')}
             <input type="number" min={0} step="0.01" value={form.priceOutPerMTokUsd} onChange={(e) => set({ priceOutPerMTokUsd: Number(e.target.value) })} />
           </label>
         </div>
-        {advising && <p className="muted small">🤖 {company.name}에 등급과 단가를 물어보는 중…</p>}
+        {advising && <p className="muted small">🤖 {tpl('{name}에 등급과 단가를 물어보는 중…', { name: company.name })}</p>}
         {advice && !advising && (
           <p className={`advice-note advice-${advice.source}`}>
-            {advice.source === 'ai' ? '🤖 AI 추정' : advice.source === 'table' ? '📋 참고 가격표' : '🔮 이름으로 추정'} · {advice.note}
+            {advice.source === 'ai' ? `🤖 ${t('AI 추정')}` : advice.source === 'table' ? `📋 ${t('참고 가격표')}` : `🔮 ${t('이름으로 추정')}`} ·{' '}
+            {advice.note}
             {advice.source === 'ai' &&
               advice.reference &&
               (advice.reference.priceInPerMTokUsd !== advice.priceInPerMTokUsd || advice.reference.priceOutPerMTokUsd !== advice.priceOutPerMTokUsd) && (
                 <>
                   {' '}
-                  내장 참고값은 ${advice.reference.priceInPerMTokUsd} / ${advice.reference.priceOutPerMTokUsd}예요.
+                  {tpl('내장 참고값은 ${in} / ${out}예요.', {
+                    in: advice.reference.priceInPerMTokUsd,
+                    out: advice.reference.priceOutPerMTokUsd,
+                  })}
                 </>
               )}{' '}
-            값이 다르면 그대로 고쳐서 저장하세요.
+            {t('값이 다르면 그대로 고쳐서 저장하세요.')}
           </p>
         )}
-        <LinkRow links={companyLinks(company).filter((l) => /가격|모델/.test(l.label))} label="단가 확인" />
+        <LinkRow
+          links={companyLinks(company)
+            .filter((l) => /가격|모델/.test(l.label))
+            .map((l) => ({ ...l, label: linkLabel(l.label) }))}
+          label={t('단가 확인')}
+        />
         <div className="row end">
           <button className="pixel-btn small" type="button" disabled={advising || !form.apiModel.trim()} onClick={() => void advise(form.apiModel, true)}>
-            {advising ? '물어보는 중…' : '🤖 AI에게 물어 채우기'}
+            {advising ? t('물어보는 중…') : `🤖 ${t('AI에게 물어 채우기')}`}
           </button>
           <button className="pixel-btn small" type="button" onClick={onDone}>
-            취소
+            {t('취소')}
           </button>
           <button className="pixel-btn small primary" type="button" disabled={!form.label.trim() || !form.apiModel.trim()} onClick={save}>
-            저장
+            {t('저장')}
           </button>
         </div>
       </div>
@@ -414,48 +434,57 @@ export function ModelsTab({ snapshot, onError, onNotice }: { snapshot: Snapshot 
   const changeMode = async (next: AiMode) => {
     try {
       await api.setAiMode(next);
-      onNotice('AI 실행 방식을 바꿨어요. 다음 AI 호출부터 적용돼요.');
+      onNotice(t('AI 실행 방식을 바꿨어요. 다음 AI 호출부터 적용돼요.'));
     } catch (e) {
       onError(message(e));
     }
   };
 
   const removeCompany = async (c: Company) => {
-    if (!window.confirm(`${c.name} 회사와 그 회사 모델을 모두 지울까요? 등록한 API 키도 함께 지워져요.`)) return;
+    if (!window.confirm(tpl('{name} 회사와 그 회사 모델을 모두 지울까요? 등록한 API 키도 함께 지워져요.', { name: c.name }))) return;
     try {
       await api.deleteCompany(c.id);
-      onNotice(`${c.name}을(를) 지웠어요.`);
+      onNotice(tpl('{name}을(를) 지웠어요.', { name: c.name }));
     } catch (e) {
       onError(message(e));
     }
   };
 
   const removeModel = async (m: ModelEntry) => {
-    if (!window.confirm(`${m.label} 모델을 지울까요?`)) return;
+    if (!window.confirm(tpl('{name} 모델을 지울까요?', { name: m.label }))) return;
     try {
       await api.deleteModel(m.id);
-      onNotice(`${m.label}을(를) 지웠어요.`);
+      onNotice(tpl('{name}을(를) 지웠어요.', { name: m.label }));
     } catch (e) {
       onError(message(e));
     }
   };
 
   const modes: [AiMode, string, string][] = [
-    ['env', `.env 설정 따르기 (AI_PROVIDER=${snapshot.envProvider ?? 'mock'})`, PROVIDER_LABEL[snapshot.envProvider ?? 'mock'] ?? ''],
-    ['mock', '시뮬레이션', 'API를 부르지 않아요. 비용은 모델 단가로 계산하고, 등급이 높을수록 검토 점수가 올라가요.'],
-    ['agents', '직원별 실제 AI', '직원마다 고른 모델의 회사 API로 호출해요. 회사마다 API 키가 필요해요.'],
+    [
+      'env',
+      tpl('.env 설정 따르기 (AI_PROVIDER={provider})', { provider: snapshot.envProvider ?? 'mock' }),
+      t(PROVIDER_LABEL[snapshot.envProvider ?? 'mock'] ?? ''),
+    ],
+    ['mock', t('시뮬레이션'), t('API를 부르지 않아요. 비용은 모델 단가로 계산하고, 등급이 높을수록 검토 점수가 올라가요.')],
+    ['agents', t('직원별 실제 AI'), t('직원마다 고른 모델의 회사 API로 호출해요. 회사마다 API 키가 필요해요.')],
   ];
 
   return (
     <div className="page">
-      <h2>모델 관리</h2>
+      <h2>{t('모델 관리')}</h2>
       <p className="muted">
-        회사를 등록하면 <b>모자 모양과 색</b>이 정해지고, 그 회사의 모델을 등록하면 <b>등급에 따라 장식</b>이 붙어요. 등록한 모델은 직원 관리
-        탭에서 직원에게 고를 수 있어요.
+        {t('회사를 등록하면 ')}
+        <b>{t('모자 모양과 색')}</b>
+        {t('이 정해지고, 그 회사의 모델을 등록하면 ')}
+        <b>{t('등급에 따라 장식')}</b>
+        {t('이 붙어요. 등록한 모델은 직원 관리 탭에서 직원에게 고를 수 있어요.')}
       </p>
 
       <section className="pixel-box section">
-        <h3>AI 실행 방식 · 지금: {PROVIDER_LABEL[snapshot.provider] ?? snapshot.provider}</h3>
+        <h3>
+          {t('AI 실행 방식')} · {t('지금')}: {t(PROVIDER_LABEL[snapshot.provider] ?? snapshot.provider)}
+        </h3>
         <div className="mode-options">
           {modes.map(([id, label, note]) => (
             <label key={id} className={`mode-option ${mode === id ? 'selected' : ''}`}>
@@ -468,16 +497,18 @@ export function ModelsTab({ snapshot, onError, onNotice }: { snapshot: Snapshot 
           ))}
         </div>
         {missingKeys.length > 0 && (
-          <p className="warn-line">⚠ {missingKeys.map((c) => c.name).join(', ')} 모델을 쓰는 직원이 있는데 API 키가 없어요. 아래에서 키를 등록해 주세요.</p>
+          <p className="warn-line">
+            ⚠ {tpl('{names} 모델을 쓰는 직원이 있는데 API 키가 없어요. 아래에서 키를 등록해 주세요.', { names: missingKeys.map((c) => c.name).join(', ') })}
+          </p>
         )}
       </section>
 
       <section className="pixel-box section">
         <div className="row between">
-          <h3>회사 · 모자 모양</h3>
+          <h3>{t('회사 · 모자 모양')}</h3>
           {editCompany !== 'new' && (
             <button className="pixel-btn small primary" onClick={() => setEditCompany('new')}>
-              + 회사 등록
+              {`+ ${t('회사 등록')}`}
             </button>
           )}
         </div>
@@ -495,31 +526,31 @@ export function ModelsTab({ snapshot, onError, onNotice }: { snapshot: Snapshot 
             ) : (
               <div key={c.id} className="company-card">
                 <div className="company-hats">
-                  {TIERS.map((t) => (
-                    <HatPreview key={t} hat={c.hat} color={c.color} tier={t} title={TIER_LABEL[t]} />
+                  {TIERS.map((tier) => (
+                    <HatPreview key={tier} hat={c.hat} color={c.color} tier={tier} title={tierLabel(tier)} />
                   ))}
                 </div>
                 <div className="company-name">
-                  {c.name} {c.builtin && <span className="muted small">기본</span>}
+                  {c.name} {c.builtin && <span className="muted small">{t('기본')}</span>}
                 </div>
                 <div className="muted small">
-                  {HATS[c.hat].name} · {API_KINDS[c.api].name}
+                  {hatName(c.hat)} · {API_KINDS[c.api].name}
                 </div>
                 {c.api === 'openai_compatible' && <div className="muted small ellipsis">{c.baseUrl}</div>}
                 <div className="row wrap">
                   <KeyBadge company={c} />
-                  <span className="muted small">모델 {models.filter((m) => m.vendor === c.id).length}개</span>
+                  <span className="muted small">{tpl('모델 {n}개', { n: models.filter((m) => m.vendor === c.id).length })}</span>
                 </div>
                 <QuickKey company={c} onError={onError} onNotice={onNotice} />
-                <LinkRow links={companyLinks(c)} label="" />
+                <LinkRow links={companyLinks(c).map((l) => ({ ...l, label: linkLabel(l.label) }))} label="" />
                 <div className="row end">
                   {!c.builtin && (
                     <button className="pixel-btn small danger" onClick={() => removeCompany(c)}>
-                      삭제
+                      {t('삭제')}
                     </button>
                   )}
                   <button className="pixel-btn small" onClick={() => setEditCompany(c.id)}>
-                    편집 · 키
+                    {t('편집 · 키')}
                   </button>
                 </div>
               </div>
@@ -530,10 +561,10 @@ export function ModelsTab({ snapshot, onError, onNotice }: { snapshot: Snapshot 
 
       <section className="pixel-box section">
         <div className="row between">
-          <h3>모델 · 등급</h3>
+          <h3>{t('모델 · 등급')}</h3>
           {editModel !== 'new' && (
             <button className="pixel-btn small primary" onClick={() => setEditModel('new')}>
-              + 모델 등록
+              {`+ ${t('모델 등록')}`}
             </button>
           )}
         </div>
@@ -551,20 +582,20 @@ export function ModelsTab({ snapshot, onError, onNotice }: { snapshot: Snapshot 
                   <div key={m.id} className="model-row">
                     <HatPreview hat={c.hat} color={c.color} tier={m.tier} />
                     <div className="model-row-main">
-                      <b>{m.label}</b> <span className="tier-chip">{TIER_LABEL[m.tier]}</span>
+                      <b>{m.label}</b> <span className="tier-chip">{tierLabel(m.tier)}</span>
                       <div className="muted small">
-                        <code>{m.apiModel}</code> · ${m.priceInPerMTokUsd} / ${m.priceOutPerMTokUsd} per 1M tok
+                        <code>{m.apiModel}</code> · ${m.priceInPerMTokUsd} / ${m.priceOutPerMTokUsd} {t('per 1M tok')}
                       </div>
                       {usersOf(m.id).length > 0 && <div className="small">👤 {usersOf(m.id).map((a) => a.name).join(', ')}</div>}
                     </div>
                     <div className="row">
                       {!m.builtin && (
                         <button className="pixel-btn small danger" onClick={() => removeModel(m)}>
-                          삭제
+                          {t('삭제')}
                         </button>
                       )}
                       <button className="pixel-btn small" onClick={() => setEditModel(m.id)}>
-                        편집
+                        {t('편집')}
                       </button>
                     </div>
                   </div>

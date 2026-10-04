@@ -1,3 +1,4 @@
+import { t } from './i18n.ts';
 import { TEAMS, taskTypeOf } from './teams.ts';
 import type {
   Agent,
@@ -178,9 +179,16 @@ export function currentStepOf(task: Task): WorkflowStep | undefined {
 }
 
 export function currentStepLabel(task: Task) {
-  if (task.status === 'queued') return '대기';
-  if (task.status === 'completed') return '완료';
-  return currentStepOf(task)?.label ?? task.plan[0]?.label ?? '';
+  if (task.status === 'queued') return t('대기');
+  if (task.status === 'completed') return t('완료');
+  const label = currentStepOf(task)?.label ?? task.plan[0]?.label ?? '';
+  return label ? t(label) : '';
 }
+
+/** Korean in these tables is the catalogue key, so display goes through `t()`. */
+export const stepKindTitle = (kind: StepKind) => t(STEP_KIND[kind].title);
+export const stepKindHint = (kind: StepKind) => t(STEP_KIND[kind].hint);
+export const stepLabel = (label: string) => t(label);
+export const planModeLabel = (mode: keyof typeof PLAN_MODE_LABEL) => t(PLAN_MODE_LABEL[mode]);
 
 export const PLAN_MODE_LABEL = { template: '유형 기본', ai: 'AI 설계', custom: '직접 설계' } as const;

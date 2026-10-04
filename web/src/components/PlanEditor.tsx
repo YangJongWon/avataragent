@@ -1,3 +1,4 @@
+import { t } from '../../../shared/i18n.ts';
 import { TEAMS } from '../../../shared/teams.ts';
 import type { Agent, StepKind, StepLoop, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
 import {
@@ -9,6 +10,8 @@ import {
   remapLoops,
   reviewLoop,
   STEP_KIND,
+  stepKindHint,
+  stepKindTitle,
   validatePlan,
 } from '../../../shared/workflow.ts';
 
@@ -77,8 +80,8 @@ export function PlanEditor({ team, agents, steps, onChange }: Props) {
           return (
             <li key={i} className={`plan-step kind-${step.kind}`}>
               <div className="plan-step-row">
-                <span className="plan-step-kind" title={meta.hint}>
-                  {meta.icon} {meta.title}
+                <span className="plan-step-kind" title={stepKindHint(step.kind)}>
+                  {meta.icon} {stepKindTitle(step.kind)}
                 </span>
                 <input
                   className="plan-step-label"
@@ -100,7 +103,7 @@ export function PlanEditor({ team, agents, steps, onChange }: Props) {
                   >
                     {agents.map((a) => (
                       <option key={a.id} value={a.id}>
-                        {a.name} ({roleTitles[a.role]})
+                        {a.name} ({t(roleTitles[a.role])})
                       </option>
                     ))}
                   </select>
