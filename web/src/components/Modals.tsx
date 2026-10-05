@@ -6,7 +6,9 @@ import { api } from '../api.ts';
 import { krw, modelLabel, roi } from '../format.ts';
 import { themeApi } from '../themeApi.ts';
 import { DEFAULT_THEME, type ThemeSummary } from '../../../shared/theme-pack.ts';
+import { t } from '../../../shared/i18n.ts';
 import { PlanEditor } from './PlanEditor.tsx';
+import { AgentPortrait } from './AgentPortrait.tsx';
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   useEffect(() => {
@@ -58,7 +60,8 @@ export function NewOfficeModal({
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [themes, setThemes] = useState<ThemeSummary[]>([]);
-  const [theme, setTheme] = useState(DEFAULT_THEME);
+  /** Empty follows the company theme. */
+  const [theme, setTheme] = useState('');
 
   useEffect(() => {
     themeApi.list().then(setThemes, () => setThemes([]));
@@ -67,7 +70,7 @@ export function NewOfficeModal({
   const submit = async () => {
     setBusy(true);
     try {
-      onCreated(await api.createOffice({ team, name, theme }));
+      onCreated(await api.createOffice({ team, name, theme: theme || undefined }));
       onClose();
     } catch (e) {
       onError(e instanceof Error ? e.message : String(e));
@@ -100,12 +103,13 @@ export function NewOfficeModal({
       </label>
       {themes.length > 0 && (
         <label className="field">
-          테마
+          {t('테마')}
           <select value={theme} onChange={(e) => setTheme(e.target.value)}>
-            <option value={DEFAULT_THEME}>기본 픽셀</option>
-            {themes.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
+            <option value="">{t('공통 테마 따르기')}</option>
+            <option value={DEFAULT_THEME}>{t('기본 픽셀')}</option>
+            {themes.map((th) => (
+              <option key={th.id} value={th.id}>
+                {th.name}
               </option>
             ))}
           </select>
@@ -359,9 +363,10 @@ export function HelpDialog({
   task,
   agent,
   roleTitle,
+  themeId,
   onClose,
   onError,
-}: { task: Task; agent: Agent; roleTitle: string; onClose: () => void } & ErrorProp) {
+}: { task: Task; agent: Agent; roleTitle: string; themeId?: string; onClose: () => void } & ErrorProp) {
   const help = task.help;
   const [answer, setAnswer] = useState('');
   const [now, setNow] = useState(Date.now());
@@ -386,7 +391,9 @@ export function HelpDialog({
   return (
     <Modal title={`🤝 ${agent.name}(${roleTitle}) 도와주기`} onClose={onClose}>
       <div className="help-question">
-        <span className="help-face">(・_・;)</span>
+        <span className="help-portrait">
+          <AgentPortrait agent={agent} themeId={themeId} expression="troubled" />
+        </span>
         <p>{help.question}</p>
       </div>
       <div className="help-options">
@@ -480,10 +487,13 @@ export function RulesModal({
   );
 }
 
-export function AgentCardModal({ agent, roleTitle, onClose }: { agent: Agent; roleTitle: string; onClose: () => void }) {
+export function AgentCardModal({ agent, roleTitle, themeId, onClose }: { agent: Agent; roleTitle: string; themeId?: string; onClose: () => void }) {
   const profit = agent.valueKrw - agent.costKrw;
   return (
     <Modal title={`💼 ${agent.name} 손익 카드`} onClose={onClose}>
+      <div className="agent-card-portrait">
+        <AgentPortrait agent={agent} themeId={themeId} expression={profit < 0 ? 'sweat' : 'smile'} />
+      </div>
       <table className="table">
         <tbody>
           <tr>

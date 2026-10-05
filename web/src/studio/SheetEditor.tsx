@@ -1,3 +1,4 @@
+import { t, tpl } from '../../../shared/i18n.ts';
 import { STATE_FALLBACK, type StateClip, type ThemeState } from '../../../shared/theme-pack.ts';
 import { gridSize, type StudioCharacter } from './buildPackage.ts';
 
@@ -9,6 +10,8 @@ export const STATE_GROUPS: { label: string; states: { id: ThemeState; label: str
       { id: 'idle', label: '서 있기 (필수)' },
       { id: 'walk', label: '걷기' },
       { id: 'sit', label: '앉기' },
+      { id: 'back', label: '뒷모습' },
+      { id: 'walk_back', label: '뒷모습 걷기' },
     ],
   },
   {
@@ -49,7 +52,8 @@ export const STATE_GROUPS: { label: string; states: { id: ThemeState; label: str
   },
 ];
 
-export const stateLabel = (id: ThemeState) => STATE_GROUPS.flatMap((g) => g.states).find((s) => s.id === id)?.label ?? id;
+/** Labels are Korean catalogue keys, shown through t(). */
+export const stateLabel = (id: ThemeState) => t(STATE_GROUPS.flatMap((g) => g.states).find((s) => s.id === id)?.label ?? id);
 
 interface Props {
   character: StudioCharacter;
@@ -77,37 +81,37 @@ export function SheetEditor({ character, sheetUrl, state, onState, onChange }: P
     <div className="sheet-editor">
       <div className="row studio-fields">
         <label>
-          프레임 너비
+          {t('프레임 너비')}
           <input type="number" min={1} value={character.frameW} onChange={(e) => onChange({ frameW: num(e.target.value, 0) })} />
         </label>
         <label>
-          프레임 높이
+          {t('프레임 높이')}
           <input type="number" min={1} value={character.frameH} onChange={(e) => onChange({ frameH: num(e.target.value, 0) })} />
         </label>
         <label>
-          크기 배율
+          {t('크기 배율')}
           <input type="number" min={0.05} max={16} step={0.05} value={character.scale} onChange={(e) => onChange({ scale: num(e.target.value, 1) })} />
         </label>
-        <label title="프레임 안에서 발이 닿는 위치 (0~1)">
-          발 위치 y
+        <label title={t('프레임 안에서 발이 닿는 위치 (0~1)')}>
+          {t('발 위치 y')}
           <input type="number" min={0} max={1} step={0.01} value={character.anchor.y} onChange={(e) => onChange({ anchor: { ...character.anchor, y: num(e.target.value, 1) } })} />
         </label>
-        <label title="프레임 안에서 머리 꼭대기 위치 (0~1). 모자를 여기에 얹어요">
-          머리 위치 y
+        <label title={t('프레임 안에서 머리 꼭대기 위치 (0~1). 모자를 여기에 얹어요')}>
+          {t('머리 위치 y')}
           <input type="number" min={0} max={1} step={0.01} value={character.head.y} onChange={(e) => onChange({ head: { ...character.head, y: num(e.target.value, 0) } })} />
         </label>
         <span className="muted small">
-          {cols}×{rows} = {cols * rows}칸
+          {tpl('{cols}×{rows} = {n}칸', { cols, rows, n: cols * rows })}
         </span>
       </div>
 
       <div className="state-picker">
         {STATE_GROUPS.map((group) => (
           <div key={group.label} className="state-group">
-            <span className="muted small">{group.label}</span>
+            <span className="muted small">{t(group.label)}</span>
             {group.states.map((s) => (
               <button key={s.id} className={`state-chip${s.id === state ? ' selected' : ''}${character.states[s.id] ? ' filled' : ''}`} onClick={() => onState(s.id)}>
-                {s.label}
+                {t(s.label)}
                 {character.states[s.id] && <b> {character.states[s.id]!.frames.length}</b>}
               </button>
             ))}
@@ -121,26 +125,26 @@ export function SheetEditor({ character, sheetUrl, state, onState, onChange }: P
           <>
             <span className="clip-frames">
               {clip.frames.map((f, i) => (
-                <button key={`${f}-${i}`} className="state-chip filled" title="눌러서 빼기" onClick={() => setClip({ ...clip, frames: clip.frames.filter((_, j) => j !== i) })}>
+                <button key={`${f}-${i}`} className="state-chip filled" title={t('눌러서 빼기')} onClick={() => setClip({ ...clip, frames: clip.frames.filter((_, j) => j !== i) })}>
                   {f}
                 </button>
               ))}
             </span>
             <label>
-              초당
-              <input type="number" min={1} max={30} value={clip.fps} onChange={(e) => setClip({ ...clip, fps: num(e.target.value, 6) })} /> 장
+              {t('초당 장 수')}
+              <input type="number" min={1} max={30} value={clip.fps} onChange={(e) => setClip({ ...clip, fps: num(e.target.value, 6) })} />
             </label>
             <label className="toggle">
               <input type="checkbox" checked={clip.loop} onChange={(e) => setClip({ ...clip, loop: e.target.checked })} />
-              반복
+              {t('반복')}
             </label>
             <button className="pixel-btn small" onClick={() => setClip(null)}>
-              비우기
+              {t('비우기')}
             </button>
           </>
         ) : (
           <span className="muted small">
-            아래 칸을 눌러 프레임을 넣으세요.{fallback && ` 비워 두면 '${stateLabel(fallback)}' 동작으로 보여요.`}
+            {t('아래 칸을 눌러 프레임을 넣으세요.')}{fallback && ` ${tpl('비워 두면 “{state}” 동작으로 보여요.', { state: stateLabel(fallback) })}`}
           </span>
         )}
       </div>

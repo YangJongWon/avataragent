@@ -8,7 +8,7 @@ import { isSafePath, THEME_LIMITS } from '../shared/theme-pack.ts';
  * - it cannot cover or restyle approval, sharing, billing or key screens, and cannot float over the page.
  */
 
-const ALLOWED_AT_RULES = new Set(['media', 'supports', 'keyframes', '-webkit-keyframes', 'container']);
+const ALLOWED_AT_RULES = new Set(['media', 'supports', 'keyframes', '-webkit-keyframes', 'container', 'font-face']);
 const DROPPED_PROPERTIES = new Set(['behavior', '-moz-binding']);
 /** Screens a theme must not restyle: things people approve, share or pay with. */
 const PROTECTED = /\.(approval|share|modal|billing|key|login)[\w-]*/i;

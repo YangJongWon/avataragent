@@ -1,29 +1,37 @@
 import { Assets, Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
 import { companyOf, modelOf } from '../../../../shared/models.ts';
 import {
+  accessoriesFor,
+  activeVariant,
+  applyVariant,
+  characterFor,
   isThemeState,
   parseThemeManifest,
   resolveState,
-  splitPackSkin,
+  manifestFiles,
+  type AccessoryLayer,
   type ThemeCharacter,
   type ThemeManifest,
   type ThemeState,
 } from '../../../../shared/theme-pack.ts';
-import type { Agent, Role } from '../../../../shared/types.ts';
+import type { Agent } from '../../../../shared/types.ts';
 import { drawHat, drawHatGlow, HAT_TOP, S } from '../pixelArt.ts';
-import { mergeLayout, type CharacterArt, type CharacterLook, type OfficeTheme, type RoomArt } from '../theme.ts';
+import { mergeLayout, type CharacterArt, type CharacterLook, type OfficeTheme, type PropArt, type RoomArt } from '../theme.ts';
 
 /** A theme built from an installed package: picture layers for the room, sprite sheets for people. */
 
-const ROLES: Role[] = ['manager', 'researcher', 'writer', 'reviewer'];
 /** Statuses that should show even over a happy face. */
 const URGENT = new Set<string>(['help_requested', 'error', 'paused', 'awaiting_approval']);
 
-/** The state a character wants to show; the package may not have it, so resolveState picks what it does have. */
-export function wantedState(look: CharacterLook): ThemeState {
+/**
+ * The state a character wants to show; the package may not have it, so resolveState picks what it does have.
+ * Facing away only asks for a back view the package has: without one, walking stays a walk and standing stays a face.
+ */
+export function wantedState(look: CharacterLook, has: (state: ThemeState) => boolean = () => false): ThemeState {
   if (look.moment) return look.moment;
-  if (look.walking) return 'walk';
+  if (look.walking) return !look.back ? 'walk' : has('walk_back') ? 'walk_back' : has('back') ? 'back' : 'walk';
   if (URGENT.has(look.status) && isThemeState(look.status)) return look.status;
+  if (look.back && has('back')) return 'back';
   if (look.expression !== 'normal' && isThemeState(look.expression)) return look.expression;
   if (isThemeState(look.status) && look.status !== 'idle') return look.status;
   return look.place === 'desk' ? 'sit' : 'idle';
@@ -33,6 +41,7 @@ type Frames = Map<string, Texture>;
 
 class PackCharacter implements CharacterArt {
   view = new Container();
+  characterId?: string;
   tagY = 0;
   hit = { halfW: 30, h: 100 };
   private sprite = new Sprite();
@@ -43,31 +52,48 @@ class PackCharacter implements CharacterArt {
   private state: ThemeState | null = null;
   private stateStart = 0;
   private headY = 0;
+  private headX = 0;
+  private hand = { x: 0, y: 0 };
+  /** The theme's own accessories for the agent's company and tier, shown instead of the pixel hat. */
+  private worn = new Container();
+  private wornKey = '';
 
-  constructor(private theme: ThemeManifest, private sheets: Map<string, Frames>) {
-    this.view.addChild(this.glow, this.sprite, this.hat);
+  constructor(
+    private theme: ThemeManifest,
+    private sheets: Map<string, Frames>,
+    private textures: Map<string, Texture>,
+  ) {
+    this.view.addChild(this.glow, this.sprite, this.worn, this.hat);
   }
 
   apply(agent: Agent) {
-    const own = splitPackSkin(agent.skin);
-    const character =
-      (own?.themeId === this.theme.id && this.theme.characters.find((c) => c.id === own.characterId)) ||
-      this.theme.characters[ROLES.indexOf(agent.role) % this.theme.characters.length];
+    const character = characterFor(this.theme, agent.skin, agent.role);
     if (character !== this.character) {
       this.character = character;
+      this.characterId = character.id;
       this.frames = this.sheets.get(character.id)!;
       this.sprite.anchor.set(character.anchor.x, character.anchor.y);
       this.sprite.scale.set(character.scale);
       this.state = null;
       const idle = character.frames[character.states.idle.frames[0]];
-      const { scale, anchor, head } = character;
+      const { scale, anchor, head, hand } = character;
       this.headY = (head.y - anchor.y) * idle.h * scale;
-      this.hat.x = this.glow.x = (head.x - anchor.x) * idle.w * scale;
+      this.headX = (head.x - anchor.x) * idle.w * scale;
+      this.hand = { x: (hand.x - anchor.x) * idle.w * scale, y: (hand.y - anchor.y) * idle.h * scale };
+      this.hat.x = this.glow.x = this.headX;
       this.hit = { halfW: (idle.w * scale) / 2, h: anchor.y * idle.h * scale };
+      this.wornKey = '';
     }
-    // Until packages bring their own accessories, the model's hat sits on the character's head.
     const model = modelOf(agent.model);
     const company = companyOf(model.vendor);
+    const own = accessoriesFor(this.theme.accessories, company.id, model.tier);
+    const seasonal = this.theme.wear ?? [];
+    const layers = own || seasonal.length ? [...(own ?? []), ...seasonal] : null;
+    this.hat.visible = this.glow.visible = !layers;
+    if (layers) return this.wear(layers, `${company.id}:${model.tier}`);
+    this.worn.removeChildren();
+    this.wornKey = '';
+    // Themes without accessories for this company show the model's pixel hat on the character's head.
     drawHat(this.hat, company.hat, company.color, model.tier);
     if (model.tier === 3) drawHatGlow(this.glow, company.hat);
     else this.glow.clear();
@@ -78,7 +104,8 @@ class PackCharacter implements CharacterArt {
 
   update(phase: number, look: CharacterLook) {
     if (!this.character || !this.frames) return;
-    const state = resolveState(this.character.states, wantedState(look));
+    const states = this.character.states;
+    const state = resolveState(states, wantedState(look, (s) => Boolean(states[s])));
     if (state !== this.state) {
       this.state = state;
       this.stateStart = phase;
@@ -88,6 +115,26 @@ class PackCharacter implements CharacterArt {
     const index = clip.loop ? step % clip.frames.length : Math.min(step, clip.frames.length - 1);
     this.sprite.texture = this.frames.get(clip.frames[index])!;
     if (this.glow.visible) this.glow.alpha = 0.55 + Math.sin(phase * 3) * 0.35;
+  }
+
+  private wear(layers: AccessoryLayer[], key: string) {
+    let top = this.headY;
+    for (const layer of layers) {
+      const texture = this.textures.get(layer.image)!;
+      if (layer.at === 'head') top = Math.min(top, this.headY + layer.y - (texture.height * layer.scale) / 2);
+    }
+    this.tagY = top - 14;
+    if (key === this.wornKey) return;
+    this.wornKey = key;
+    this.worn.removeChildren().forEach((child) => child.destroy());
+    for (const layer of layers) {
+      const sprite = new Sprite(this.textures.get(layer.image)!);
+      sprite.anchor.set(0.5);
+      sprite.scale.set(layer.scale);
+      const at = layer.at === 'hand' ? this.hand : { x: this.headX, y: this.headY };
+      sprite.position.set(at.x + layer.x, at.y + layer.y);
+      this.worn.addChild(sprite);
+    }
   }
 }
 
@@ -100,11 +147,17 @@ export async function loadPackTheme(id: string, base: string): Promise<OfficeThe
   return createPackTheme(theme, (path) => Assets.load<Texture>(url(path)));
 }
 
+const isPortrait = (theme: ThemeManifest, path: string) => theme.characters.some((c) => Object.values(c.portraits).includes(path));
+
 /** Gets the texture for a package file; installed themes load by URL, the theme studio from images in memory. */
 export type TextureLoader = (path: string) => Promise<Texture>;
 
-export async function createPackTheme(theme: ThemeManifest, loadTexture: TextureLoader): Promise<OfficeTheme> {
-  const images = [...new Set([...theme.scene.layers.map((l) => l.image), ...theme.characters.map((c) => c.sheet)])];
+/** Builds the theme as it looks at `now`, with the dated variant (Halloween…) that holds then. */
+export async function createPackTheme(base: ThemeManifest, loadTexture: TextureLoader, now: Date = new Date()): Promise<OfficeTheme> {
+  const variant = activeVariant(base, now);
+  const theme = { ...applyVariant(base, variant), variants: [] };
+  const pageOnly = new Set([theme.preview, theme.css, theme.site.background?.image, typeof theme.site.font === 'object' ? theme.site.font.file : null]);
+  const images = [...new Set(manifestFiles(theme).filter((path) => !pageOnly.has(path) && !isPortrait(theme, path)))];
   const loaded = new Map<string, Texture>();
   await Promise.all(
     images.map(async (path) => {
@@ -129,15 +182,36 @@ export async function createPackTheme(theme: ThemeManifest, loadTexture: Texture
     buildRoom(team): RoomArt {
       const back = new Container();
       const front = new Container();
+      // Team colors go on the work space; themes without spaces tint their first layer, the whole room.
+      const hasAreas = theme.scene.layers.some((l) => l.area);
       theme.scene.layers.forEach((layer, i) => {
         const sprite = new Sprite(loaded.get(layer.image)!);
         sprite.position.set(layer.x, layer.y);
         const tint = theme.scene.teamTint[team.id];
-        if (i === 0 && tint) sprite.tint = tint;
+        if (tint && (hasAreas ? layer.area === 'work' : i === 0)) sprite.tint = tint;
         (layer.front ? front : back).addChild(sprite);
       });
-      return { back, front, extraDesks: [] };
+      const props = new Map<string, PropArt>();
+      for (const prop of theme.props) {
+        const sprite = new Sprite(loaded.get(prop.image)!);
+        sprite.position.set(prop.x, prop.y);
+        (prop.front ? front : back).addChild(sprite);
+        props.set(prop.id, {
+          spot: prop.spot,
+          has: (state) => state in prop.states,
+          setState: (state) => {
+            sprite.texture = loaded.get((state && prop.states[state]) || prop.image)!;
+          },
+        });
+      }
+      return { back, front, extraDesks: [], props };
     },
-    createCharacter: () => new PackCharacter(theme, sheets),
+    createCharacter: () => new PackCharacter(theme, sheets, loaded),
+    emotes: theme.emotes,
+    interactions: theme.interactions,
+    events: theme.events,
+    texture: (path) => loaded.get(path),
+    variant: variant?.id ?? null,
+    variantAt: (at) => activeVariant(base, at)?.id ?? null,
   };
 }

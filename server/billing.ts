@@ -1,7 +1,9 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { freeSubscription, GRACE_DAYS, PERIOD_DAYS, type BillingInfo, type BillingProviderId, type Checkout, type Subscription } from '../shared/billing.ts';
+import type { LicensePayload } from '../shared/license.ts';
 import { planOf, type Plan } from '../shared/plans.ts';
 import { config } from './config.ts';
+import { installId, readLicense, refreshFromSite, saveLicense, savedLicense } from './license.ts';
 import { store } from './store.ts';
 
 export type BillingEvent = { id: string } & (
@@ -20,14 +22,16 @@ type Headers = Record<string, string | string[] | undefined>;
 export interface BillingProvider {
   id: Exclude<BillingProviderId, 'none'>;
   label: string;
-  /** Returns the page the owner is sent to for paying. */
-  createCheckout(checkout: Checkout): Promise<{ url: string }>;
+  /** Returns the page the owner is sent to for paying; `returnUrl` is where this install takes the result back. */
+  createCheckout(checkout: Checkout, context: { returnUrl: string }): Promise<{ url: string }>;
   cancelSubscription(subscriptionId: string): Promise<void>;
   resumeSubscription(subscriptionId: string): Promise<void>;
   /** Verifies the signature and maps the payload to an event; throws on a bad signature, null for events we ignore. */
   parseWebhook(rawBody: string, headers: Headers): BillingEvent | null;
   /** Only for providers without renewal webhooks (the mock): the renewal event for a due subscription. */
   renewal?(subscription: Subscription, now: Date): BillingEvent | null;
+  /** Only for providers the install has to ask (the site): fetches the subscription's current state when due. */
+  sync?(subscription: Subscription, now: Date): Promise<BillingEvent | null>;
 }
 
 const DAY_MS = 86_400_000;
@@ -71,7 +75,74 @@ export const mockProvider: BillingProvider = {
   },
 };
 
-const PROVIDERS: Record<BillingProvider['id'], BillingProvider> = { mock: mockProvider };
+/**
+ * What a site license means for this install's subscription. A license the install does not hold yet is a
+ * completed checkout; for the held one, a later period is a renewal, past_due a failed payment, canceled the end.
+ */
+export function licenseEvent(license: LicensePayload, sub: Subscription, checkoutId: string | null): BillingEvent | null {
+  const id = `lic:${license.lic}:${license.status}:${license.periodEnd}:${license.plan}`;
+  if (sub.subscriptionId !== license.lic) {
+    if (license.status !== 'active' || !checkoutId) return null;
+    return { id, kind: 'checkout.completed', checkoutId, customerId: license.account, subscriptionId: license.lic, periodEnd: license.periodEnd };
+  }
+  if (license.status === 'canceled') return { id, kind: 'subscription.canceled', subscriptionId: license.lic };
+  if (license.status === 'past_due') return sub.status === 'past_due' ? null : { id, kind: 'payment.failed', subscriptionId: license.lic };
+  const later = Date.parse(license.periodEnd) > Date.parse(sub.currentPeriodEnd ?? '1970-01-01');
+  if (!later && sub.status === 'active') return null;
+  return { id, kind: 'payment.succeeded', subscriptionId: license.lic, amountKrw: planOf(license.plan).priceKrw, periodEnd: license.periodEnd };
+}
+
+const REFRESH_BEFORE_DAYS = 3;
+const SYNC_EVERY_MS = 6 * 3_600_000;
+/** When the site was last asked; tests reset it. */
+export const siteSync = { last: 0 };
+
+/**
+ * Plans bought on the project site as signed licenses. The install sends the owner to the site to pay, takes
+ * the license back (return link or pasted key) and asks the site for a fresh one near the end of each period.
+ */
+export const siteProvider: BillingProvider = {
+  id: 'site',
+  label: '공식 사이트 라이선스',
+  async createCheckout(checkout, { returnUrl }) {
+    if (!config.siteUrl) throw new Error('SITE_URL이 설정되지 않았어요.');
+    const query = new URLSearchParams({ plan: checkout.plan, install: installId(), ref: checkout.id, return: returnUrl });
+    return { url: `${config.siteUrl}/checkout?${query}` };
+  },
+  async cancelSubscription() {
+    throw new Error('구독 해지와 재개는 사이트의 내 계정에서 해요.');
+  },
+  async resumeSubscription() {
+    throw new Error('구독 해지와 재개는 사이트의 내 계정에서 해요.');
+  },
+  parseWebhook() {
+    throw new Error('사이트 라이선스는 웹훅을 쓰지 않아요.');
+  },
+  async sync(sub, now) {
+    const token = savedLicense();
+    if (!token || !sub.subscriptionId || sub.status === 'canceled' || sub.status === 'none') return null;
+    const end = Date.parse(sub.currentPeriodEnd ?? '');
+    const due = sub.status !== 'active' || end - REFRESH_BEFORE_DAYS * DAY_MS <= now.getTime();
+    if (!due || now.getTime() - siteSync.last < SYNC_EVERY_MS) return null;
+    siteSync.last = now.getTime();
+    try {
+      const result = await refreshFromSite(token);
+      if ('gone' in result) return { id: `lic:${sub.subscriptionId}:gone`, kind: 'subscription.canceled', subscriptionId: sub.subscriptionId };
+      const license = readLicense(result.token);
+      saveLicense(result.token);
+      return licenseEvent(license, sub, null);
+    } catch (error) {
+      console.warn('license refresh failed:', error instanceof Error ? error.message : error);
+      // Unreachable past the paid period counts as a failed payment, so the usual grace period applies.
+      if (now.getTime() > end && sub.status === 'active') {
+        return { id: `lic:${sub.subscriptionId}:unreachable:${sub.currentPeriodEnd}`, kind: 'payment.failed', subscriptionId: sub.subscriptionId };
+      }
+      return null;
+    }
+  },
+};
+
+const PROVIDERS: Record<BillingProvider['id'], BillingProvider> = { mock: mockProvider, site: siteProvider };
 
 export const providerId = (): BillingProviderId => config.billingProvider;
 export const billingProvider = (): BillingProvider | null => (providerId() === 'none' ? null : PROVIDERS[providerId() as BillingProvider['id']]);
@@ -83,6 +154,7 @@ export function billingInfo(): BillingInfo {
     providerLabel: provider?.label ?? '연결 안 됨',
     subscription: store.data.billing.subscription,
     invoices: store.data.billing.invoices,
+    ...(provider?.id === 'site' ? { site: { url: config.siteUrl, installId: installId() } } : {}),
   };
 }
 
@@ -112,7 +184,7 @@ const invoice = (plan: Plan, amountKrw: number, status: 'paid' | 'failed') => ({
   provider: providerId(),
 });
 
-export async function startCheckout(plan: Plan) {
+export async function startCheckout(plan: Plan, returnUrl: string) {
   const provider = billingProvider();
   if (!provider) throw new Error('결제가 아직 연결되지 않았어요. 플랜을 바로 바꿀 수 있어요.');
   const meta = planOf(plan);
@@ -124,7 +196,34 @@ export async function startCheckout(plan: Plan) {
     b.checkouts.unshift(checkout);
   });
   store.emit('billing.checkout_started', { payload: { plan, amountKrw: checkout.amountKrw } });
-  return provider.createCheckout(checkout);
+  return provider.createCheckout(checkout, { returnUrl });
+}
+
+/**
+ * Applies a license from the site (the return link after paying, or a pasted key). A new license completes the
+ * open checkout for its plan, or one made on the spot for a pasted key; the held license updates the subscription.
+ */
+export async function applyLicense(token: string, checkoutRef?: string) {
+  if (providerId() !== 'site') throw new Error('사이트 라이선스 결제가 켜져 있지 않아요 (BILLING_PROVIDER=site).');
+  const license = readLicense(token);
+  const sub = store.data.billing.subscription;
+  let checkoutId: string | null = null;
+  if (sub.subscriptionId !== license.lic) {
+    if (license.status !== 'active') throw new Error('만료되었거나 해지된 라이선스예요.');
+    const open = store.data.billing.checkouts.filter((c) => c.status === 'open' && c.plan === license.plan);
+    checkoutId = (open.find((c) => c.id === checkoutRef) ?? open[0])?.id ?? null;
+    if (!checkoutId) {
+      const made: Checkout = { id: `chk_${randomUUID().slice(0, 12)}`, plan: license.plan, amountKrw: planOf(license.plan).priceKrw, status: 'open', createdAt: new Date().toISOString() };
+      updateBilling((b) => {
+        b.checkouts.unshift(made);
+      });
+      checkoutId = made.id;
+    }
+  }
+  saveLicense(token);
+  const event = licenseEvent(license, sub, checkoutId);
+  if (event) await applyBillingEvent(event);
+  return license;
 }
 
 /** Cancels at the end of the paid period; the plan keeps working until then. */
@@ -178,7 +277,8 @@ export async function applyBillingEvent(event: BillingEvent) {
         };
         b.invoices.unshift(invoice(checkout.plan, checkout.amountKrw, 'paid'));
       });
-      if (previous) await billingProvider()?.cancelSubscription(previous);
+      // Best effort: some providers (the site) manage old subscriptions themselves.
+      if (previous) await billingProvider()?.cancelSubscription(previous).catch((error) => console.warn('previous subscription not canceled:', error instanceof Error ? error.message : error));
       setPlan(checkout.plan, '결제 완료');
       store.emit('billing.subscribed', { payload: { plan: checkout.plan, amountKrw: checkout.amountKrw } });
       return;
@@ -233,6 +333,8 @@ export async function billingTick(now = new Date()) {
   const sub = store.data.billing.subscription;
   const renewal = provider.renewal?.(sub, now);
   if (renewal) return applyBillingEvent(renewal);
+  const synced = await provider.sync?.(sub, now);
+  if (synced) return applyBillingEvent(synced);
   const end = sub.currentPeriodEnd ? Date.parse(sub.currentPeriodEnd) : null;
   if (end === null) return;
   const lapsed = (sub.status === 'active' && sub.cancelAtPeriodEnd && end <= now.getTime()) || (sub.status === 'past_due' && end + GRACE_DAYS * DAY_MS <= now.getTime());

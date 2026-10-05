@@ -51,7 +51,11 @@ export const config = {
   tenantId: tenantId(process.env.TENANT_ID),
   accessPassword: process.env.ACCESS_PASSWORD ?? '',
   /** 'none' until a payment company is connected; 'mock' runs the full flow with a fake checkout page. */
-  billingProvider: process.env.BILLING_PROVIDER === 'mock' ? ('mock' as const) : ('none' as const),
+  billingProvider: process.env.BILLING_PROVIDER === 'mock' ? ('mock' as const) : process.env.BILLING_PROVIDER === 'site' ? ('site' as const) : ('none' as const),
+  /** The project site that sells plan licenses (BILLING_PROVIDER=site). */
+  siteUrl: (process.env.SITE_URL ?? '').replace(/\/+$/, ''),
+  /** Extra license keys to trust, JSON {"kid": "PEM"}: a local or private site. */
+  licensePublicKeys: process.env.LICENSE_PUBLIC_KEYS ?? '',
   billingWebhookSecret: process.env.BILLING_WEBHOOK_SECRET ?? '',
   publicUrl: (process.env.PUBLIC_URL ?? '').replace(/\/+$/, ''),
   /** stdio MCP servers run commands on this PC, so registering them must be switched on explicitly. */

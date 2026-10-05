@@ -107,6 +107,10 @@ const LOCALIZED_SOURCES = [
   'web/src/components/HireTab.tsx',
   'web/src/components/ModelsTab.tsx',
   'web/src/components/PerformanceTab.tsx',
+  'web/src/components/ThemesTab.tsx',
+  'web/src/studio/ThemeStudio.tsx',
+  'web/src/studio/SheetEditor.tsx',
+  'web/src/studio/StudioPreview.tsx',
 ];
 
 const SENTINELS = [
@@ -115,6 +119,7 @@ const SENTINELS = [
   'attempt', 'tool', 'question', 'answer', 'assumption', 'kind', 'version', 'rounds', 'result',
   'comment', 'amount', 'inputTokens', 'outputTokens', 'profit', 'icon', 'server', 'chars',
   'subject', 'plan', 'changes', 'by', 'author', 'text',
+  'theme', 'spot', 'state', 'cols', 'rows',
 ].reduce<Record<string, string>>((acc, key) => ({ ...acc, [key]: `<${key}>` }), {});
 
 test('번역한 탭의 t/tpl 키가 네 개 언어 모두에 등록돼 있다', () => {

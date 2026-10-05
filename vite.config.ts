@@ -14,6 +14,8 @@ export default defineConfig({
       '/login': `http://localhost:${serverPort}`,
       '/logout': `http://localhost:${serverPort}`,
       '/themes': `http://localhost:${serverPort}`,
+      // Checkout returns and the mock payment page are server pages, not app routes.
+      '/billing': `http://localhost:${serverPort}`,
       '/ws': { target: `ws://localhost:${serverPort}`, ws: true },
     },
   },

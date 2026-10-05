@@ -2,12 +2,15 @@ import { zipSync } from 'fflate';
 import {
   parseThemeManifest,
   THEME_FORMAT,
+  THEME_SCENE,
+  type AreaName,
   type Point,
   type Rect,
   type SpotName,
   type StateClip,
   type ThemeManifest,
   type ThemeState,
+  type SiteFont,
   type TokenName,
 } from '../../../shared/theme-pack.ts';
 import type { Role } from '../../../shared/types.ts';
@@ -30,6 +33,8 @@ export interface StudioLayer {
   x: number;
   y: number;
   front: boolean;
+  /** The background of one space; the space's area is where this picture lies. */
+  area?: AreaName;
 }
 
 export interface StudioCharacter {
@@ -60,6 +65,8 @@ export interface StudioDraft {
   door: Point | null;
   spots: Partial<Record<SpotName, Rect>>;
   tokens: Partial<Record<TokenName, string>>;
+  font: SiteFont;
+  radius: number;
   css: string;
 }
 
@@ -81,6 +88,8 @@ export const emptyDraft = (): StudioDraft => ({
   door: null,
   spots: {},
   tokens: {},
+  font: 'default',
+  radius: 0,
   css: '',
 });
 
@@ -114,6 +123,20 @@ export function assetPath(fileName: string, taken: Iterable<string>, ext: 'png' 
   return path;
 }
 
+/** Each space covers the first background picture marked for it, clipped to the scene. */
+function areasOf(layers: StudioLayer[]) {
+  const areas: Partial<Record<AreaName, Rect>> = {};
+  for (const l of layers) {
+    if (!l.area || l.front || areas[l.area]) continue;
+    const x = Math.max(0, Math.round(l.x));
+    const y = Math.max(0, Math.round(l.y));
+    const w = Math.min(Math.round(l.x) + l.image.w, THEME_SCENE.w) - x;
+    const h = Math.min(Math.round(l.y) + l.image.h, THEME_SCENE.h) - y;
+    if (w >= 1 && h >= 1 && x < THEME_SCENE.w && y < THEME_SCENE.h) areas[l.area] = { x, y, w, h };
+  }
+  return areas;
+}
+
 function draftManifest(draft: StudioDraft) {
   return {
     format: THEME_FORMAT,
@@ -126,11 +149,12 @@ function draftManifest(draft: StudioDraft) {
     description: draft.description.trim(),
     preview: PREVIEW_PATH,
     scene: {
-      layers: draft.layers.map((l) => ({ image: l.image.path, x: Math.round(l.x), y: Math.round(l.y), front: l.front })),
+      layers: draft.layers.map((l) => ({ image: l.image.path, x: Math.round(l.x), y: Math.round(l.y), front: l.front, ...(l.area && { area: l.area }) })),
       seats: draft.seats,
       lounge: draft.lounge,
       door: draft.door,
       spots: draft.spots,
+      areas: areasOf(draft.layers),
       scaleMode: draft.scaleMode,
     },
     characters: draft.characters.map((c) => ({
@@ -144,6 +168,7 @@ function draftManifest(draft: StudioDraft) {
       states: c.states,
     })),
     tokens: draft.tokens,
+    site: { ...(draft.font !== 'default' && { font: draft.font }), ...(draft.radius > 0 && { radius: draft.radius }) },
     css: draft.css.trim() ? CSS_PATH : null,
   };
 }

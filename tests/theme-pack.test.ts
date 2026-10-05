@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const { STATE_FALLBACK, THEME_STATES, isSafePath, parseThemeManifest, resolveState, splitPackSkin } = await import('../shared/theme-pack.ts');
+const { STATE_FALLBACK, THEME_STATES, accessoriesFor, adoptCompanyTheme, characterFor, officeTheme, isSafePath, manifestFiles, parseThemeManifest, portraitFor, resolveState, splitPackSkin } = await import(
+  '../shared/theme-pack.ts'
+);
 const { DEFAULT_LAYOUT, mergeLayout } = await import('../web/src/office/theme.ts');
 
 const minimal = () => ({
@@ -91,12 +93,84 @@ test('a theme layout only overrides what it gives', () => {
   assert.deepEqual(mergeLayout({}), DEFAULT_LAYOUT);
 });
 
+test('work and lounge spaces get their own backgrounds, and people walk straight between them', () => {
+  const scene = {
+    ...minimal().scene,
+    layers: [
+      { image: 'assets/room.png', x: 0, y: 0, area: 'work' },
+      { image: 'assets/room.png', x: 760, y: 0, area: 'lounge' },
+      { image: 'assets/room.png', x: 0, y: 0, area: 'kitchen' },
+    ],
+    areas: { work: { x: 0, y: 0, w: 760, h: 480 }, lounge: { x: 760, y: 0, w: 240, h: 480 }, kitchen: { x: 0, y: 0, w: 1, h: 1 } },
+  };
+  const parsed = parseThemeManifest({ ...minimal(), scene }, files).scene;
+  assert.deepEqual(parsed.layers.map((l) => l.area), ['work', 'lounge', undefined]);
+  assert.deepEqual(Object.keys(parsed.areas), ['work', 'lounge']);
+  assert.equal(mergeLayout(parsed).passage, null);
+  assert.deepEqual(mergeLayout({ door: { x: 5, y: 6 } }).passage, { x: 5, y: 6 }, 'without spaces the door is the way through');
+  assert.throws(() => parseThemeManifest({ ...minimal(), scene: { ...scene, areas: { lounge: { x: 900, y: 0, w: 240, h: 480 } } } }, files), /벗어났어요/);
+});
+
 test('characters without a head anchor wear hats at the top of the frame', () => {
   assert.deepEqual(parseThemeManifest(minimal(), files).characters[0].head, { x: 0.5, y: 0 });
+});
+
+test('agents appear as the character they picked, otherwise one by role', () => {
+  const t = minimal() as any;
+  t.characters.push({ ...t.characters[0], id: 'jun', name: 'Jun' });
+  const theme = parseThemeManifest(t, files);
+  assert.equal(characterFor(theme, 'cozy-office:jun', 'manager').id, 'jun');
+  assert.equal(characterFor(theme, 'other-theme:jun', 'manager').id, 'mina', 'a pick from another theme falls back to the role');
+  assert.equal(characterFor(theme, 'pixel', 'researcher').id, 'jun');
+  assert.equal(characterFor(theme, 'cozy-office:gone', 'writer').id, 'mina');
+});
+
+test('portraits fall back along the expression chain, then to normal', () => {
+  const character = { portraits: { smile: 'a/smile.png', troubled: 'a/troubled.png' } } as any;
+  assert.equal(portraitFor(character, 'smile'), 'a/smile.png');
+  assert.equal(portraitFor(character, 'celebrate'), 'a/smile.png');
+  assert.equal(portraitFor(character, 'panic'), 'a/troubled.png');
+  assert.equal(portraitFor(character, 'focus'), null);
+  assert.equal(portraitFor({ portraits: { normal: 'n.png' } } as any, 'focus'), 'n.png');
+});
+
+test('accessories stack by tier and fall back to the any-company set', () => {
+  const t = minimal() as any;
+  t.accessories = {
+    claude: { '1': [{ image: 'assets/room.png', at: 'head', x: -8, y: 2 }], '3': [{ image: 'assets/mina.png', at: 'hand', scale: 0.5 }] },
+    '*': { '2': [{ image: 'assets/room.png' }] },
+  };
+  const theme = parseThemeManifest(t, files);
+  assert.equal(accessoriesFor(theme.accessories, 'claude', 1)?.length, 1);
+  assert.equal(accessoriesFor(theme.accessories, 'claude', 2)?.length, 1, 'claude has no tier 2 layer of its own');
+  assert.deepEqual(accessoriesFor(theme.accessories, 'claude', 3)?.map((l) => l.at), ['head', 'hand']);
+  assert.deepEqual(accessoriesFor(theme.accessories, 'gpt', 1), [], 'the any-company set starts at tier 2, so tier 1 wears nothing, not a pixel hat');
+  assert.equal(accessoriesFor(theme.accessories, 'gpt', 3)?.length, 1);
+  assert.equal(accessoriesFor(parseThemeManifest(minimal(), files).accessories, 'claude', 3), null);
+  assert.deepEqual(theme.characters[0].hand, { x: 0.8, y: 0.6 });
+  assert.ok(manifestFiles(theme).includes('assets/mina.png'));
+
+  const broken = (accessories: unknown, message: RegExp) => assert.throws(() => parseThemeManifest({ ...minimal(), accessories }, files), message);
+  broken({ 'Bad Name': { '1': [] } }, /모델사 이름/);
+  broken({ claude: { '1': [{ image: '../x.png' }] } }, /경로/);
+  broken({ claude: { '1': 'nope' } }, /목록/);
 });
 
 test('pack skins are told apart from built-in skins', () => {
   assert.deepEqual(splitPackSkin('cozy-office:mina'), { themeId: 'cozy-office', characterId: 'mina' });
   assert.equal(splitPackSkin('pinkgirl'), null);
   assert.equal(splitPackSkin('a:b:c'), null);
+});
+
+test('offices share the company theme unless they picked their own', () => {
+  assert.equal(officeTheme({}, 'cozy-office'), 'cozy-office');
+  assert.equal(officeTheme({ theme: 'pixel' }, 'cozy-office'), 'pixel');
+  assert.equal(officeTheme({}, undefined), 'pixel');
+});
+
+test('per-office themes from before become the shared one most offices used', () => {
+  const offices: { theme?: string }[] = [{ theme: 'cozy-office' }, {}, { theme: 'cozy-office' }, { theme: 'night' }];
+  assert.equal(adoptCompanyTheme(offices), 'cozy-office');
+  assert.deepEqual(offices, [{}, {}, {}, { theme: 'night' }]);
+  assert.equal(adoptCompanyTheme([{}, {}]), 'pixel');
 });

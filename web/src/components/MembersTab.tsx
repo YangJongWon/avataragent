@@ -86,9 +86,17 @@ function PlanSection(props: { snapshot: Snapshot; busy: boolean; run: (work: () 
   const connected = Boolean(billing && billing.provider !== 'none');
   const sub = billing?.subscription;
 
+  const site = billing?.site;
+  const [key, setKey] = useState('');
+
   const choose = (target: Plan) => {
     if (target === plan.id && !(connected && sub?.cancelAtPeriodEnd)) return;
     if (!connected) return run(() => api.setPlan(target), `${planOf(target).label} 플랜으로 바꿨어요.`);
+    // Site licenses are cancelled and resumed on the site, where the subscription lives.
+    if (site && (planOf(target).priceKrw === 0 || (target === sub?.plan && sub.cancelAtPeriodEnd))) {
+      window.open(`${site.url}/account`, '_blank', 'noopener');
+      return;
+    }
     if (planOf(target).priceKrw === 0) {
       if (!window.confirm('구독을 해지할까요? 이번 결제 기간이 끝날 때까지는 지금 플랜을 그대로 써요.')) return;
       return run(() => api.cancelSubscription(), '구독 해지를 예약했어요.');
@@ -131,6 +139,39 @@ function PlanSection(props: { snapshot: Snapshot; busy: boolean; run: (work: () 
             )}
           </div>
           {sub!.status === 'past_due' && <p className="neg small">결제가 실패했어요. {GRACE_DAYS}일 안에 결제되지 않으면 개인 플랜으로 바뀌어요. 플랜을 다시 결제해 주세요.</p>}
+          {site && (
+            <div className="site-license small">
+              <p>
+                플랜은{' '}
+                <a href={`${site.url}/account`} target="_blank" rel="noopener">
+                  공식 사이트
+                </a>
+                에서 사고 관리해요. 결제가 끝나면 이 화면으로 돌아와 바로 적용되고, 기간이 끝나기 전에 앱이 알아서 갱신해요.
+              </p>
+              <p>
+                이 설치의 ID: <code>{site.installId}</code>{' '}
+                <button className="pixel-btn small" onClick={() => void navigator.clipboard.writeText(site.installId)}>
+                  복사
+                </button>
+                <span className="muted"> (라이선스를 다른 컴퓨터에서 옮겨 올 때 사이트에 붙여 넣어요)</span>
+              </p>
+              <div className="row">
+                <input value={key} onChange={(e) => setKey(e.target.value)} placeholder="라이선스 키 붙여 넣기" style={{ flex: 1, minWidth: 220 }} />
+                <button
+                  className="pixel-btn small primary"
+                  disabled={busy || !key.trim()}
+                  onClick={() =>
+                    run(async () => {
+                      await api.applyLicense(key.trim());
+                      setKey('');
+                    }, '라이선스를 적용했어요.')
+                  }
+                >
+                  적용
+                </button>
+              </div>
+            </div>
+          )}
           {billing!.invoices.length > 0 && (
             <table className="table small">
               <thead>

@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
-import { TOKEN_NAMES, type Point, type Rect, type ThemeState, type TokenName } from '../../../shared/theme-pack.ts';
+import { t, tpl } from '../../../shared/i18n.ts';
+import { SITE_FONTS, TOKEN_NAMES, type Point, type Rect, type SiteFont, type ThemeState, type TokenName } from '../../../shared/theme-pack.ts';
 import { mergeLayout } from '../office/theme.ts';
 import { assetPath, buildPackage, checkDraft, emptyDraft, previewManifest, type StudioCharacter, type StudioDraft, type StudioImage, type StudioLayer } from './buildPackage.ts';
 import { SheetEditor, stateLabel, STATE_GROUPS } from './SheetEditor.tsx';
@@ -7,6 +8,7 @@ import { ROLES, ROLE_LABEL, SPOT_LABEL, StudioPreview, type PlaceTarget } from '
 import './studio.css';
 
 const LICENSES = ['CC-BY-4.0', 'CC-BY-SA-4.0', 'CC-BY-NC-4.0', 'CC0-1.0', 'MIT'];
+/** Korean labels are catalogue keys; they are shown through t(). */
 const TOKEN_LABEL: Record<TokenName, string> = {
   ink: '글자',
   paper: '종이',
@@ -19,7 +21,16 @@ const TOKEN_LABEL: Record<TokenName, string> = {
   blue: '파랑',
   yellow: '노랑',
   muted: '흐린 글자',
+  surface: '버튼·입력칸',
+  topbar: '상단 바',
+  topbarInk: '상단 바 글자',
+  topbarLine: '상단 바 테두리',
+  tabBar: '탭 줄',
+  tab: '탭',
+  note: '선택·메모',
+  hover: '마우스 올림',
 };
+const FONT_LABEL: Record<SiteFont, string> = { default: '기본 글꼴', rounded: '둥근 글꼴', serif: '명조', mono: '고정폭' };
 
 const urls = new WeakMap<Uint8Array, string>();
 const urlOf = (image: StudioImage) => {
@@ -34,7 +45,7 @@ const urlOf = (image: StudioImage) => {
 /** PNG and WebP are kept as they are; anything else the browser can open is turned into PNG. */
 async function readImage(file: File, taken: Iterable<string>): Promise<StudioImage> {
   const bitmap = await createImageBitmap(file).catch(() => {
-    throw new Error(`${file.name}은(는) 이미지로 열 수 없어요.`);
+    throw new Error(tpl('{name}은(는) 이미지로 열 수 없어요.', { name: file.name }));
   });
   const { width: w, height: h } = bitmap;
   if (file.type === 'image/png' || file.type === 'image/webp') {
@@ -47,7 +58,7 @@ async function readImage(file: File, taken: Iterable<string>): Promise<StudioIma
   canvas.getContext('2d')!.drawImage(bitmap, 0, 0);
   bitmap.close();
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
-  if (!blob) throw new Error(`${file.name}을(를) PNG로 바꾸지 못했어요.`);
+  if (!blob) throw new Error(tpl('{name}을(를) PNG로 바꾸지 못했어요.', { name: file.name }));
   return { path: assetPath(file.name, taken), bytes: new Uint8Array(await blob.arrayBuffer()), w, h };
 }
 
@@ -60,7 +71,7 @@ function download(bytes: Uint8Array, name: string) {
   URL.revokeObjectURL(url);
 }
 
-const targetKey = (t: PlaceTarget | null) => (!t ? '' : t.kind === 'seat' || t.kind === 'lounge' ? `${t.kind}:${t.role}` : t.kind === 'spot' ? `spot:${t.spot}` : 'door');
+const targetKey = (tg: PlaceTarget | null) => (!tg ? '' : tg.kind === 'seat' || tg.kind === 'lounge' ? `${tg.kind}:${tg.role}` : tg.kind === 'spot' ? `spot:${tg.spot}` : 'door');
 
 interface Props {
   /** Installs the finished package right away (owner only); without it the studio only downloads the zip. */
@@ -116,7 +127,7 @@ export function ThemeStudio({ onInstall, onError, onNotice }: Props) {
       const n = draft.characters.length + 1;
       const next: StudioCharacter = {
         id: `char-${n}`,
-        name: `캐릭터 ${n}`,
+        name: tpl('캐릭터 {n}', { n }),
         sheet,
         frameW: sheet.w,
         frameH: sheet.h,
@@ -138,24 +149,24 @@ export function ThemeStudio({ onInstall, onError, onNotice }: Props) {
       characters: next ? d.characters.map((c, i) => (i === characterIndex ? { ...c, ...next } : c)) : d.characters.filter((_, i) => i !== characterIndex),
     }));
 
-  const place = (t: PlaceTarget, value: Point | Rect) =>
+  const place = (tg: PlaceTarget, value: Point | Rect) =>
     setDraft((d) => {
-      if (t.kind === 'door') return { ...d, door: value };
-      if (t.kind === 'spot') return { ...d, spots: { ...d.spots, [t.spot]: value as Rect } };
-      return t.kind === 'seat' ? { ...d, seats: { ...d.seats, [t.role]: value } } : { ...d, lounge: { ...d.lounge, [t.role]: value } };
+      if (tg.kind === 'door') return { ...d, door: value };
+      if (tg.kind === 'spot') return { ...d, spots: { ...d.spots, [tg.spot]: value as Rect } };
+      return tg.kind === 'seat' ? { ...d, seats: { ...d.seats, [tg.role]: value } } : { ...d, lounge: { ...d.lounge, [tg.role]: value } };
     });
 
   const finish = async (install: boolean) => {
-    if (!capture.current) return onError('미리보기가 준비되면 다시 눌러 주세요.');
+    if (!capture.current) return onError(t('미리보기가 준비되면 다시 눌러 주세요.'));
     setBusy(true);
     try {
       const zip = buildPackage(draft, await capture.current());
       if (install && onInstall) {
         await onInstall(new Blob([zip as BlobPart], { type: 'application/zip' }));
-        onNotice(`"${draft.name}" 테마를 설치했어요.`);
+        onNotice(tpl('"{name}" 테마를 설치했어요.', { name: draft.name }));
       } else {
         download(zip, `${draft.id}-${draft.themeVersion}.zip`);
-        onNotice('테마 패키지를 내려받았어요. 커뮤니티에 올리거나 다른 사무실에서 설치할 수 있어요.');
+        onNotice(t('테마 패키지를 내려받았어요. 커뮤니티에 올리거나 다른 사무실에서 설치할 수 있어요.'));
       }
     } catch (e) {
       fail(e);
@@ -164,37 +175,37 @@ export function ThemeStudio({ onInstall, onError, onNotice }: Props) {
     }
   };
 
-  const targets: { t: PlaceTarget; label: string }[] = [
-    ...ROLES.map((role) => ({ t: { kind: 'seat', role } as PlaceTarget, label: `${ROLE_LABEL[role]} 좌석` })),
-    ...ROLES.map((role) => ({ t: { kind: 'lounge', role } as PlaceTarget, label: `${ROLE_LABEL[role]} 휴식` })),
-    { t: { kind: 'door' }, label: '문' },
-    ...(['board', 'shelf', 'safe', 'archive'] as const).map((spot) => ({ t: { kind: 'spot', spot } as PlaceTarget, label: `${SPOT_LABEL[spot]} 영역` })),
+  const targets: { tg: PlaceTarget; label: string }[] = [
+    ...ROLES.map((role) => ({ tg: { kind: 'seat', role } as PlaceTarget, label: tpl('{role} 좌석', { role: t(ROLE_LABEL[role]) }) })),
+    ...ROLES.map((role) => ({ tg: { kind: 'lounge', role } as PlaceTarget, label: tpl('{role} 휴식', { role: t(ROLE_LABEL[role]) }) })),
+    { tg: { kind: 'door' }, label: t('문') },
+    ...(['board', 'shelf', 'safe', 'archive'] as const).map((spot) => ({ tg: { kind: 'spot', spot } as PlaceTarget, label: tpl('{spot} 영역', { spot: t(SPOT_LABEL[spot]) }) })),
   ];
 
   return (
     <div className="studio">
       <div className="studio-forms">
         <section className="pixel-box section">
-          <h3>1. 기본 정보</h3>
+          <h3>{t('1. 기본 정보')}</h3>
           <div className="studio-fields">
             <label>
-              이름
-              <input value={draft.name} maxLength={60} onChange={(e) => patch({ name: e.target.value })} placeholder="아늑한 사무실" />
+              {t('이름')}
+              <input value={draft.name} maxLength={60} onChange={(e) => patch({ name: e.target.value })} placeholder={t('아늑한 사무실')} />
             </label>
-            <label title="영어 소문자·숫자·하이픈 2~40자. 같은 id로 다시 설치하면 덮어써요">
+            <label title={t('영어 소문자·숫자·하이픈 2~40자. 같은 id로 다시 설치하면 덮어써요')}>
               id
               <input value={draft.id} maxLength={40} onChange={(e) => patch({ id: e.target.value.toLowerCase() })} placeholder="cozy-office" />
             </label>
             <label>
-              만든 사람
+              {t('만든 사람')}
               <input value={draft.author} maxLength={60} onChange={(e) => patch({ author: e.target.value })} />
             </label>
             <label>
-              버전
+              {t('버전')}
               <input value={draft.themeVersion} maxLength={20} onChange={(e) => patch({ themeVersion: e.target.value })} />
             </label>
             <label>
-              라이선스
+              {t('라이선스')}
               <select value={draft.license} onChange={(e) => patch({ license: e.target.value })}>
                 {LICENSES.map((l) => (
                   <option key={l}>{l}</option>
@@ -202,24 +213,25 @@ export function ThemeStudio({ onInstall, onError, onNotice }: Props) {
               </select>
             </label>
             <label>
-              그림 느낌
+              {t('그림 느낌')}
               <select value={draft.scaleMode} onChange={(e) => patch({ scaleMode: e.target.value as StudioDraft['scaleMode'] })}>
-                <option value="linear">일러스트 (부드럽게)</option>
-                <option value="nearest">도트 (픽셀 그대로)</option>
+                <option value="linear">{t('일러스트 (부드럽게)')}</option>
+                <option value="nearest">{t('도트 (픽셀 그대로)')}</option>
               </select>
             </label>
           </div>
           <label className="studio-wide">
-            소개
+            {t('소개')}
             <textarea value={draft.description} maxLength={500} rows={2} onChange={(e) => patch({ description: e.target.value })} />
           </label>
         </section>
 
         <section className="pixel-box section">
-          <h3>2. 배경</h3>
-          <p className="muted small">사무실 화면은 1000×480이에요. 위에 있는 레이어가 먼저(뒤에) 그려지고, "앞" 레이어는 책상 앞판처럼 직원을 가려요.</p>
+          <h3>{t('2. 배경')}</h3>
+          <p className="muted small">{t('사무실 화면은 1000×480이에요. 위에 있는 레이어가 먼저(뒤에) 그려지고, "앞" 레이어는 책상 앞판처럼 직원을 가려요.')}</p>
+          <p className="muted small">{t('업무 공간과 휴게 공간 배경을 따로 올리고 각각 공간을 정해 주면, 팀 색은 업무 공간에만 입혀지고 직원은 두 공간 사이를 바로 오가요.')}</p>
           <label className="pixel-btn small">
-            이미지 추가…
+            {t('이미지 추가…')}
             <input type="file" accept="image/*" multiple hidden onChange={(e) => void addLayers(e.target.files).finally(() => (e.target.value = ''))} />
           </label>
           <ul className="studio-layers">
@@ -236,22 +248,34 @@ export function ThemeStudio({ onInstall, onError, onNotice }: Props) {
                   y <input type="number" value={layer.y} onChange={(e) => updateLayer(i, { y: Number(e.target.value) || 0 })} />
                 </label>
                 <label className="toggle">
-                  <input type="checkbox" checked={layer.front} onChange={(e) => updateLayer(i, { front: e.target.checked })} />앞
+                  <input type="checkbox" checked={layer.front} onChange={(e) => updateLayer(i, { front: e.target.checked })} />
+                  {t('앞')}
                 </label>
-                <button className="pixel-btn small" onClick={() => moveLayer(i, -1)} aria-label="위로">↑</button>
-                <button className="pixel-btn small" onClick={() => moveLayer(i, 1)} aria-label="아래로">↓</button>
-                <button className="pixel-btn small" onClick={() => updateLayer(i, null)}>빼기</button>
+                <select value={layer.area ?? ''} onChange={(e) => updateLayer(i, { area: (e.target.value || undefined) as StudioLayer['area'] })} aria-label={t('공간')}>
+                  <option value="">{t('공통')}</option>
+                  <option value="work">{t('업무 공간')}</option>
+                  <option value="lounge">{t('휴게 공간')}</option>
+                </select>
+                <button className="pixel-btn small" onClick={() => moveLayer(i, -1)} aria-label={t('위로')}>
+                  ↑
+                </button>
+                <button className="pixel-btn small" onClick={() => moveLayer(i, 1)} aria-label={t('아래로')}>
+                  ↓
+                </button>
+                <button className="pixel-btn small" onClick={() => updateLayer(i, null)}>
+                  {t('빼기')}
+                </button>
               </li>
             ))}
           </ul>
         </section>
 
         <section className="pixel-box section">
-          <h3>3. 자리 정하기</h3>
-          <p className="muted small">고른 다음 미리보기를 누르세요. 영역은 끌어서 그려요. 정하지 않은 자리는 기본 사무실 배치를 따라요.</p>
+          <h3>{t('3. 자리 정하기')}</h3>
+          <p className="muted small">{t('고른 다음 미리보기를 누르세요. 영역은 끌어서 그려요. 정하지 않은 자리는 기본 사무실 배치를 따라요.')}</p>
           <div className="studio-targets">
-            {targets.map(({ t, label }) => (
-              <button key={targetKey(t)} className={`state-chip${targetKey(t) === targetKey(target) ? ' selected' : ''}`} onClick={() => setTarget(targetKey(t) === targetKey(target) ? null : t)}>
+            {targets.map(({ tg, label }) => (
+              <button key={targetKey(tg)} className={`state-chip${targetKey(tg) === targetKey(target) ? ' selected' : ''}`} onClick={() => setTarget(targetKey(tg) === targetKey(target) ? null : tg)}>
                 {label}
               </button>
             ))}
@@ -259,8 +283,8 @@ export function ThemeStudio({ onInstall, onError, onNotice }: Props) {
         </section>
 
         <section className="pixel-box section">
-          <h3>4. 캐릭터</h3>
-          <p className="muted small">스프라이트 시트(같은 크기 프레임을 격자로 붙인 그림)를 올리고, 동작마다 프레임을 눌러 넣으세요. "서 있기"만 있어도 동작해요.</p>
+          <h3>{t('4. 캐릭터')}</h3>
+          <p className="muted small">{t('스프라이트 시트(같은 크기 프레임을 격자로 붙인 그림)를 올리고, 동작마다 프레임을 눌러 넣으세요. "서 있기"만 있어도 동작해요.')}</p>
           <div className="row studio-characters">
             {draft.characters.map((c, i) => (
               <button key={c.sheet.path} className={`state-chip${i === characterIndex ? ' selected' : ''}`} onClick={() => setCharacterIndex(i)}>
@@ -268,7 +292,7 @@ export function ThemeStudio({ onInstall, onError, onNotice }: Props) {
               </button>
             ))}
             <label className="pixel-btn small">
-              캐릭터 추가…
+              {t('캐릭터 추가…')}
               <input type="file" accept="image/*" hidden onChange={(e) => void addCharacter(e.target.files?.[0]).finally(() => (e.target.value = ''))} />
             </label>
           </div>
@@ -276,7 +300,7 @@ export function ThemeStudio({ onInstall, onError, onNotice }: Props) {
             <>
               <div className="row studio-fields">
                 <label>
-                  이름
+                  {t('이름')}
                   <input value={character.name} maxLength={40} onChange={(e) => updateCharacter({ name: e.target.value })} />
                 </label>
                 <label>
@@ -284,7 +308,7 @@ export function ThemeStudio({ onInstall, onError, onNotice }: Props) {
                   <input value={character.id} maxLength={40} onChange={(e) => updateCharacter({ id: e.target.value.toLowerCase() })} />
                 </label>
                 <button className="pixel-btn small" onClick={() => (updateCharacter(null), setCharacterIndex(0))}>
-                  캐릭터 빼기
+                  {t('캐릭터 빼기')}
                 </button>
               </div>
               <SheetEditor character={character} sheetUrl={urlOf(character.sheet)} state={state} onState={setState} onChange={updateCharacter} />
@@ -293,7 +317,7 @@ export function ThemeStudio({ onInstall, onError, onNotice }: Props) {
         </section>
 
         <section className="pixel-box section">
-          <h3>5. 색과 CSS (선택)</h3>
+          <h3>{t('5. 색과 CSS (선택)')}</h3>
           <div className="studio-tokens">
             {TOKEN_NAMES.map((name) => (
               <label key={name} className="toggle">
@@ -307,13 +331,29 @@ export function ThemeStudio({ onInstall, onError, onNotice }: Props) {
                     patch({ tokens });
                   }}
                 />
-                {TOKEN_LABEL[name]}
+                {t(TOKEN_LABEL[name])}
                 {name in draft.tokens && <input type="color" value={draft.tokens[name]} onChange={(e) => patch({ tokens: { ...draft.tokens, [name]: e.target.value } })} />}
               </label>
             ))}
           </div>
+          <div className="row">
+            <label>
+              {t('글꼴')}{' '}
+              <select value={draft.font} onChange={(e) => patch({ font: e.target.value as SiteFont })}>
+                {SITE_FONTS.map((font) => (
+                  <option key={font} value={font}>
+                    {t(FONT_LABEL[font])}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              {t('모서리 둥글기')}{' '}
+              <input type="range" min={0} max={20} value={draft.radius} onChange={(e) => patch({ radius: Number(e.target.value) })} /> {draft.radius}px
+            </label>
+          </div>
           <label className="studio-wide">
-            커스텀 CSS
+            {t('커스텀 CSS')}
             <textarea
               value={draft.css}
               rows={4}
@@ -322,20 +362,20 @@ export function ThemeStudio({ onInstall, onError, onNotice }: Props) {
               placeholder=".pixel-box { border-radius: 12px; }"
             />
           </label>
-          <p className="muted small">설치할 때 서버가 이 테마를 쓰는 사무실 안으로만 적용되게 정리해요. 외부 주소, 화면을 덮는 고정 배치, 승인·공유·결제 화면을 바꾸는 규칙은 빠져요.</p>
+          <p className="muted small">{t('설치할 때 서버가 이 테마를 쓰는 사무실 안으로만 적용되게 정리해요. 외부 주소, 화면을 덮는 고정 배치, 승인·공유·결제 화면을 바꾸는 규칙은 빠져요.')}</p>
         </section>
       </div>
 
       <div className="studio-side">
         <section className="pixel-box section studio-sticky">
           <div className="row studio-preview-head">
-            <h3>미리보기</h3>
-            <select value={state} onChange={(e) => setState(e.target.value as ThemeState)} aria-label="미리 볼 동작">
+            <h3>{t('미리보기')}</h3>
+            <select value={state} onChange={(e) => setState(e.target.value as ThemeState)} aria-label={t('미리 볼 동작')}>
               {STATE_GROUPS.map((g) => (
-                <optgroup key={g.label} label={g.label}>
+                <optgroup key={g.label} label={t(g.label)}>
                   {g.states.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.label}
+                      {t(s.label)}
                     </option>
                   ))}
                 </optgroup>
@@ -343,17 +383,15 @@ export function ThemeStudio({ onInstall, onError, onNotice }: Props) {
             </select>
           </div>
           <StudioPreview manifest={preview} images={images} layout={layout} state={state} target={target} onPlace={place} onCapture={(c) => (capture.current = c)} />
-          <p className="muted small">
-            모든 직원이 '{stateLabel(state)}' 동작을 보여요. 없는 동작은 가까운 동작으로 대신 보여요.
-          </p>
-          {check.error ? <p className="neg small">고칠 점: {check.error}</p> : <p className="pos small">내보낼 준비가 됐어요.</p>}
+          <p className="muted small">{tpl('모든 직원이 “{state}” 동작을 보여요. 없는 동작은 가까운 동작으로 대신 보여요.', { state: stateLabel(state) })}</p>
+          {check.error ? <p className="neg small">{tpl('고칠 점: {reason}', { reason: check.error })}</p> : <p className="pos small">{t('내보낼 준비가 됐어요.')}</p>}
           <div className="row">
             <button className="pixel-btn small" disabled={busy || !!check.error} onClick={() => void finish(false)}>
-              zip 내려받기
+              {t('zip 내려받기')}
             </button>
             {onInstall && (
               <button className="pixel-btn small primary" disabled={busy || !!check.error} onClick={() => void finish(true)}>
-                바로 설치
+                {t('바로 설치')}
               </button>
             )}
           </div>

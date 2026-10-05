@@ -1,16 +1,19 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { unzipSync, zipSync } from 'fflate';
 import {
   DEFAULT_THEME,
   isSafePath,
+  manifestFiles,
   parseThemeManifest,
+  splitPackSkin,
   themeSummary,
   THEME_LIMITS,
   type ThemeManifest,
   type ThemeSummary,
 } from '../shared/theme-pack.ts';
+import { isSkin, type AgentSkin } from '../shared/skins.ts';
 import { config } from './config.ts';
 import { sanitizeThemeCss } from './theme-css.ts';
 
@@ -33,6 +36,7 @@ export const CONTENT_TYPES: Record<string, string> = {
   json: 'application/json; charset=utf-8',
   css: 'text/css; charset=utf-8',
   txt: 'text/plain; charset=utf-8',
+  woff2: 'font/woff2',
 };
 const extOf = (path: string) => path.split('.').pop()!.toLowerCase();
 
@@ -98,13 +102,7 @@ export function readThemePackage(zip: Uint8Array): { manifest: ThemeManifest; fi
   }
   const manifest = parseThemeManifest(json, new Set(all.keys()));
 
-  const used = new Set([
-    manifest.preview,
-    ...manifest.scene.layers.map((l) => l.image),
-    ...manifest.characters.flatMap((c) => [c.sheet, ...Object.values(c.portraits)]),
-    ...(manifest.css ? [manifest.css] : []),
-    ...[...all.keys()].filter((p) => /^(LICENSE|CREDITS)(\.txt)?$/i.test(p)),
-  ]);
+  const used = new Set([...manifestFiles(manifest), ...[...all.keys()].filter((p) => /^(LICENSE|CREDITS)(\.txt)?$/i.test(p))]);
   const files = new Map<string, Uint8Array>();
   for (const path of used) {
     const bytes = all.get(path)!;
@@ -113,6 +111,10 @@ export function readThemePackage(zip: Uint8Array): { manifest: ThemeManifest; fi
       const size = imageSize(bytes, ext);
       if (!size) fail(`${path}은(는) 올바른 ${ext.toUpperCase()} 이미지가 아니에요.`);
       if (size!.w > THEME_LIMITS.imagePx || size!.h > THEME_LIMITS.imagePx) fail(`${path}이(가) ${THEME_LIMITS.imagePx}px보다 커요.`);
+    } else if (ext === 'woff2') {
+      // Browsers check font files themselves before using them; here only that it is one, and not huge.
+      if (bytes.length < 48 || String.fromCharCode(...bytes.subarray(0, 4)) !== 'wOF2') fail(`${path}은(는) 올바른 WOFF2 글꼴이 아니에요.`);
+      if (bytes.length > 4 * 1024 * 1024) fail(`${path}은(는) 4MB까지예요.`);
     } else {
       try {
         new TextDecoder('utf-8', { fatal: true }).decode(bytes);
@@ -170,6 +172,13 @@ export function themeManifest(id: string): ThemeManifest | null {
 /** Whether an office may use this theme: the built-in one or an installed package. */
 export const isUsableTheme = (id: unknown): id is string => typeof id === 'string' && (id === DEFAULT_THEME || themeManifest(id) !== null);
 
+/** A built-in skin, or a character that exists in an installed theme. */
+export function isUsableSkin(skin: unknown): skin is AgentSkin {
+  if (isSkin(skin)) return true;
+  const pack = typeof skin === 'string' ? splitPackSkin(skin) : null;
+  return Boolean(pack && themeManifest(pack.themeId)?.characters.some((c) => c.id === pack.characterId));
+}
+
 export function listThemes(): ThemeSummary[] {
   if (!existsSync(root())) return [];
   return readdirSync(root(), { withFileTypes: true })
@@ -196,7 +205,8 @@ export function removeTheme(id: string) {
 export function themeFile(id: string, path: string): { file: string; contentType: string } | null {
   const folder = folderOf(id);
   if (!folder || !isSafePath(path)) return null;
-  const file = join(folder, path);
+  // DATA_DIR may be relative, and res.sendFile only takes absolute paths.
+  const file = resolve(folder, path);
   return existsSync(file) ? { file, contentType: CONTENT_TYPES[extOf(path)] } : null;
 }
 

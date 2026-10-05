@@ -1,5 +1,6 @@
 import { companyOf, modelOf, TIER_LABEL } from '../../shared/models.ts';
-import { currentLanguage, localeOf, num, t, tpl } from '../../shared/i18n.ts';
+import { currentLanguage, localeOf, num, t, tpl, type Vars } from '../../shared/i18n.ts';
+import { improvementReasonVars } from '../../shared/performance.ts';
 import { TEAMS } from '../../shared/teams.ts';
 import type { Agent, Office, OfficeEvent, TaskStatus } from '../../shared/types.ts';
 
@@ -137,6 +138,12 @@ export function eventLabel(event: OfficeEvent, agents: Map<string, Agent>) {
       return tpl('새 문의 도착', { subject: String(p.subject ?? '') });
     case 'office.updated':
       return t('사무실 설정 변경');
+    case 'theme.changed':
+      return t('공통 테마 변경');
+    case 'theme.booked':
+      return t('기간별 테마 변경');
+    case 'theme.site':
+      return t('사이트 테마 변경');
     case 'office.created':
       return t('사무실 개설');
     case 'office.removed':
@@ -165,7 +172,9 @@ export function eventLabel(event: OfficeEvent, agents: Map<string, Agent>) {
     case 'playbook.applied':
       return tpl('플레이북 적용', { name: String(p.name ?? ''), changes: num(Number(p.changes ?? 0)) });
     case 'improvement.applied':
-      return `📈 ${tpl(p.auto ? '자율 개선' : '개선 적용', { reason: String(p.reason ?? '') })}`;
+      return `📈 ${tpl(p.auto ? '자율 개선' : '개선 적용', {
+        reason: p.reasonKey ? tpl(String(p.reasonKey), improvementReasonVars((p.reasonVars ?? {}) as Vars)) : String(p.reason ?? ''),
+      })}`;
     case 'chat.forwarded':
       return tpl('대화 전달', {
         by: String(p.by ?? ''),

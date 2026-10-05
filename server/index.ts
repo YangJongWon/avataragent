@@ -22,7 +22,7 @@ import { parsePlaybook, playbookChanges } from '../shared/playbook.ts';
 import { isPlan, planOf } from '../shared/plans.ts';
 import { isLanguage, type Language } from '../shared/i18n.ts';
 import { exportActivity } from './activity.ts';
-import { billingInfo, billingProvider, billingTick, cancelSubscription, completeMockCheckout, handleWebhook, resumeSubscription, startCheckout } from './billing.ts';
+import { applyLicense, billingInfo, billingProvider, billingTick, cancelSubscription, completeMockCheckout, handleWebhook, resumeSubscription, startCheckout } from './billing.ts';
 import { isSkin } from '../shared/skins.ts';
 import { TEAMS } from '../shared/teams.ts';
 import type { AiMode, ServerMessage, ShareLink, ShareRole, TeamId, Viewer } from '../shared/types.ts';
@@ -42,8 +42,8 @@ import { adviseModel } from './model-advice.ts';
 import { finishLogin, logout, OAUTH_CALLBACK_PATH, startLogin } from './mcp-oauth.ts';
 import { apiKeyFor, dropMcpSecrets, setApiKey, setMcpSecrets } from './secrets.ts';
 import { store } from './store.ts';
-import { exportTheme, importTheme, isUsableTheme, listThemes, removeTheme, themeFile } from './themes.ts';
-import { DEFAULT_THEME, THEME_LIMITS } from '../shared/theme-pack.ts';
+import { exportTheme, importTheme, isUsableSkin, isUsableTheme, listThemes, removeTheme, themeFile } from './themes.ts';
+import { DEFAULT_THEME, parseBookings, THEME_LIMITS } from '../shared/theme-pack.ts';
 import { toStepInputs, workflowRuntime } from './workflow-runtime.ts';
 
 const app = express();
@@ -138,7 +138,7 @@ app.post('/api/offices', (req, res) => {
   const sameTeam = store.data.offices.filter((o) => o.team === team).length;
   const title = typeof name === 'string' && name.trim() ? name.trim().slice(0, 20) : `${meta.name} ${sameTeam + 1}`;
   let office = store.addOffice(team as TeamId, title);
-  if (theme && theme !== DEFAULT_THEME) {
+  if (theme && theme !== store.data.theme) {
     store.updateOffice(office.id, (o) => {
       o.theme = theme;
     });
@@ -163,11 +163,12 @@ app.put('/api/offices/:id', async (req, res) => {
   guard(res, 'manage', req.params.id);
   const { autoRun, autoImprove, budgetKrw, theme, themeCss } = req.body ?? {};
   if (budgetKrw !== undefined) guard(res, 'owner');
-  if (theme !== undefined && !isUsableTheme(theme)) throw new Error('설치되지 않은 테마예요.');
+  if (theme !== undefined && theme !== null && !isUsableTheme(theme)) throw new Error('설치되지 않은 테마예요.');
   store.updateOffice(req.params.id, (o) => {
     if (typeof autoRun === 'boolean') o.autoRun = autoRun;
     if (typeof autoImprove === 'boolean') o.autoImprove = autoImprove;
-    if (theme === DEFAULT_THEME) delete o.theme;
+    // null goes back to the company theme; a theme id, even the built-in one, is this office's own pick.
+    if (theme === null) delete o.theme;
     else if (typeof theme === 'string') o.theme = theme;
     if (themeCss === true) delete o.themeCss;
     else if (themeCss === false) o.themeCss = false;
@@ -209,14 +210,57 @@ app.post('/api/themes/import', express.raw({ type: ['application/zip', 'applicat
   res.json(theme);
 });
 
+// The company theme is what every office shows unless it picked its own.
+app.put('/api/theme', (req, res) => {
+  guard(res, 'owner');
+  const theme = req.body?.theme;
+  if (!isUsableTheme(theme)) throw new Error('설치되지 않은 테마예요.');
+  store.mutate((s) => {
+    s.theme = theme;
+  });
+  store.emit('theme.changed', { payload: { themeId: theme } });
+  res.json({ theme });
+});
+
+app.put('/api/theme-bookings', (req, res) => {
+  guard(res, 'owner');
+  const bookings = parseBookings(req.body?.bookings);
+  const missing = bookings.find((b) => !isUsableTheme(b.theme));
+  if (missing) throw new Error(`설치되지 않은 테마예요 (${missing.theme}).`);
+  store.mutate((s) => {
+    s.themeBookings = bookings;
+  });
+  store.emit('theme.booked', { payload: { count: bookings.length } });
+  res.json({ bookings });
+});
+
+app.put('/api/site-theme', (req, res) => {
+  guard(res, 'owner');
+  const theme = req.body?.theme ?? null;
+  if (theme !== null && !isUsableTheme(theme)) throw new Error('설치되지 않은 테마예요.');
+  store.mutate((s) => {
+    s.siteTheme = theme;
+  });
+  store.emit('theme.site', { payload: { themeId: theme } });
+  res.json({ theme });
+});
+
 app.delete('/api/themes/:id', (req, res) => {
   guard(res, 'owner');
   removeTheme(req.params.id);
+  if (store.data.theme === req.params.id || store.data.siteTheme === req.params.id || store.data.themeBookings.some((b) => b.theme === req.params.id)) {
+    store.mutate((s) => {
+      if (s.theme === req.params.id) s.theme = DEFAULT_THEME;
+      if (s.siteTheme === req.params.id) s.siteTheme = null;
+      s.themeBookings = s.themeBookings.filter((b) => b.theme !== req.params.id);
+    });
+  }
   for (const office of store.data.offices.filter((o) => o.theme === req.params.id)) {
     store.updateOffice(office.id, (o) => {
       delete o.theme;
     });
   }
+  for (const agent of store.data.agents.filter((a) => a.skin.startsWith(`${req.params.id}:`))) store.updateAgent(agent.id, { skin: 'pixel' });
   store.emit('theme.removed', { payload: { themeId: req.params.id } });
   res.json({ ok: true });
 });
@@ -356,7 +400,7 @@ app.put('/api/agents/:id', (req, res) => {
     patch.model = model;
   }
   if (skin !== undefined) {
-    if (!isSkin(skin)) throw new Error('알 수 없는 스킨입니다.');
+    if (!isUsableSkin(skin)) throw new Error('알 수 없는 스킨입니다.');
     patch.skin = skin;
   }
   if (typeof rules === 'string' && rules !== before.rules) {
@@ -388,7 +432,7 @@ app.post('/api/offices/:id/agents', (req, res) => {
   const { role, name, model, skin, personality } = req.body ?? {};
   if (!['manager', 'researcher', 'writer', 'reviewer'].includes(role)) throw new Error('알 수 없는 역할입니다.');
   if (model !== undefined && !isModelId(model)) throw new Error('알 수 없는 모델입니다.');
-  if (skin !== undefined && !isSkin(skin)) throw new Error('알 수 없는 스킨입니다.');
+  if (skin !== undefined && !isUsableSkin(skin)) throw new Error('알 수 없는 스킨입니다.');
   if (personality !== undefined && !isPersonality(personality)) throw new Error('알 수 없는 성격이에요.');
   const agent = store.hireAgent(req.params.id, role, typeof name === 'string' ? name : undefined);
   if (model !== undefined || skin !== undefined || personality !== undefined) {
@@ -887,7 +931,29 @@ app.get('/api/activity/export', async (req, res) => {
 app.post('/api/billing/checkout', async (req, res) => {
   guard(res, 'owner');
   if (!isPlan(req.body?.plan)) throw new Error('알 수 없는 플랜이에요.');
-  res.json(await startCheckout(req.body.plan));
+  // The site sends the browser back here with the license; PUBLIC_URL when set, else the address in use.
+  const base = config.publicUrl || `${req.protocol}://${req.get('host')}`;
+  res.json(await startCheckout(req.body.plan, `${base}/billing/return`));
+});
+
+// The browser comes back from the site's checkout with the license in the query.
+app.get('/billing/return', async (req, res) => {
+  guard(res, 'owner');
+  try {
+    await applyLicense(String(req.query.license ?? ''), typeof req.query.ref === 'string' ? req.query.ref : undefined);
+    res.redirect('/?billing=success');
+  } catch (error) {
+    console.warn('license from checkout refused:', error instanceof Error ? error.message : error);
+    res.redirect('/?billing=failed');
+  }
+});
+
+// A license key pasted by hand (an install the browser cannot reach back to, or moving a license).
+app.post('/api/billing/license', async (req, res) => {
+  guard(res, 'owner');
+  if (typeof req.body?.token !== 'string') throw new Error('라이선스 키를 붙여 넣어 주세요.');
+  await applyLicense(req.body.token);
+  res.json(billingInfo());
 });
 
 app.post('/api/billing/cancel', async (_req, res) => {

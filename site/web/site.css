@@ -1,0 +1,439 @@
+:root {
+  --ink: #3d3449;
+  --muted: #7a6f86;
+  --bg: #f6ecdb;
+  --paper: #fffaf0;
+  --line: #3d3449;
+  --accent: #d9822b;
+  --primary: #4a7bd0;
+  --red: #c0392b;
+  --green: #1e8449;
+  font-family: 'Pretendard', 'Malgun Gothic', 'Apple SD Gothic Neo', system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  line-height: 1.6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+}
+
+a {
+  color: var(--primary);
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.3;
+}
+
+.site {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+main {
+  flex: 1;
+}
+
+/* ── header & footer ───────────────────────────────────── */
+.site-head {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 24px;
+  background: var(--ink);
+  border-bottom: 4px solid #241e2b;
+}
+
+.site-head a {
+  color: #fff;
+  text-decoration: none;
+}
+
+.brand {
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.site-head nav {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+  overflow-x: auto;
+}
+
+.site-head nav a {
+  opacity: 0.85;
+  white-space: nowrap;
+}
+
+.site-head nav a.active,
+.site-head nav a:hover {
+  opacity: 1;
+  text-decoration: underline;
+  text-underline-offset: 6px;
+}
+
+.site-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 20px 24px;
+  font-size: 13px;
+  color: var(--muted);
+  border-top: 2px solid rgba(61, 52, 73, 0.15);
+}
+
+/* ── layout ────────────────────────────────────────────── */
+.page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.page.narrow {
+  max-width: 720px;
+}
+
+.lead {
+  font-size: 18px;
+  color: var(--muted);
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.row.center {
+  justify-content: center;
+}
+
+.card {
+  background: var(--paper);
+  border: 3px solid var(--line);
+  box-shadow: 4px 4px 0 rgba(61, 52, 73, 0.25);
+  padding: 18px 20px;
+  margin: 16px 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 13px;
+}
+
+.error {
+  color: var(--red);
+  font-weight: 600;
+}
+
+.badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 8px;
+  font-size: 12px;
+  border: 2px solid var(--accent);
+  color: var(--accent);
+}
+
+/* ── buttons ───────────────────────────────────────────── */
+.button {
+  display: inline-block;
+  padding: 8px 16px;
+  font: inherit;
+  font-weight: 700;
+  color: #fff;
+  background: var(--primary);
+  border: 3px solid var(--line);
+  box-shadow: 3px 3px 0 var(--line);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--line);
+}
+
+.button.ghost {
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.site-head .button.ghost {
+  color: var(--ink);
+}
+
+.button.big {
+  padding: 12px 22px;
+  font-size: 17px;
+}
+
+.button.small {
+  padding: 4px 10px;
+  font-size: 13px;
+  box-shadow: 2px 2px 0 var(--line);
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ── home ──────────────────────────────────────────────── */
+.hero {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 48px 24px 24px;
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 32px;
+  align-items: center;
+}
+
+.hero h1 {
+  font-size: 44px;
+  margin: 0 0 12px;
+}
+
+.hero-shot {
+  width: 100%;
+  max-width: 340px;
+  justify-self: center;
+  border: 3px solid var(--line);
+  box-shadow: 6px 6px 0 rgba(61, 52, 73, 0.3);
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.features .card {
+  margin: 0;
+}
+
+.feature-icon {
+  font-size: 30px;
+}
+
+.features h3 {
+  margin: 6px 0;
+}
+
+.features p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.cta {
+  text-align: center;
+}
+
+/* ── pricing ───────────────────────────────────────────── */
+.plans {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.plan h2 {
+  margin: 0;
+}
+
+.plan.featured {
+  border-color: var(--accent);
+  box-shadow: 6px 6px 0 var(--accent);
+}
+
+.price {
+  font-size: 15px;
+  margin: 8px 0;
+}
+
+.price b {
+  font-size: 30px;
+}
+
+.checks {
+  list-style: none;
+  padding: 0;
+}
+
+.checks li::before {
+  content: '✓ ';
+  color: var(--green);
+  font-weight: 800;
+}
+
+/* ── install ───────────────────────────────────────────── */
+.command {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: #241e2b;
+  color: #f6ecdb;
+  padding: 10px 12px;
+  overflow-x: auto;
+}
+
+.command code {
+  flex: 1;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+/* ── docs ──────────────────────────────────────────────── */
+.docs {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 32px;
+}
+
+.docs aside ul {
+  list-style: none;
+  padding: 0;
+}
+
+.docs aside a.active {
+  font-weight: 800;
+}
+
+.markdown {
+  min-width: 0;
+}
+
+.markdown pre {
+  background: #241e2b;
+  color: #f6ecdb;
+  padding: 12px;
+  overflow-x: auto;
+}
+
+.markdown table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid rgba(61, 52, 73, 0.3);
+  padding: 4px 8px;
+}
+
+/* ── login & account ───────────────────────────────────── */
+.login form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.login input {
+  font: inherit;
+  padding: 8px 10px;
+  border: 3px solid var(--line);
+}
+
+.or {
+  text-align: center;
+  color: var(--muted);
+  margin: 14px 0;
+}
+
+.oauth {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.oauth .button {
+  text-align: center;
+}
+
+.account {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.avatar {
+  width: 56px;
+  height: 56px;
+  border: 3px solid var(--line);
+}
+
+/* ── licenses ──────────────────────────────────────────── */
+.row.between {
+  justify-content: space-between;
+}
+
+.pos {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.license code,
+.card code {
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.license .row {
+  margin: 8px 0;
+}
+
+.move input {
+  flex: 1;
+  min-width: 200px;
+  font: inherit;
+  padding: 6px 8px;
+  border: 3px solid var(--line);
+}
+
+/* ── small screens ─────────────────────────────────────── */
+@media (max-width: 760px) {
+  .site-head {
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    padding: 10px 16px;
+  }
+
+  .site-head nav {
+    order: 3;
+    flex-basis: 100%;
+  }
+
+  .hero {
+    grid-template-columns: 1fr;
+    padding: 28px 16px 8px;
+  }
+
+  .hero h1 {
+    font-size: 32px;
+  }
+
+  .page {
+    padding: 24px 16px;
+  }
+
+  .docs {
+    grid-template-columns: 1fr;
+  }
+}

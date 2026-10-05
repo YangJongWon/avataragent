@@ -1191,7 +1191,7 @@ function applyImprovementChange(item: Improvement, auto: boolean) {
   const agent = store.agent(item.agentId);
   const to = item.field === 'personality' ? personalityOf(item.to as Personality).label : modelOf(item.to).label;
   setAgent(agent, 'idle', 'smile', `${auto ? '지난 성과를 보고' : '요청대로'} ${to}(으)로 바꿨어요.`);
-  store.emit('improvement.applied', { agentId: item.agentId, payload: { officeId: item.officeId, field: item.field, from: item.from, to: item.to, reason: item.reason, auto } });
+  store.emit('improvement.applied', { agentId: item.agentId, payload: { officeId: item.officeId, field: item.field, from: item.from, to: item.to, reasonKey: item.reasonKey, reasonVars: item.reasonVars, auto } });
 }
 
 /** Applies one current suggestion by id; throws when it no longer applies. */

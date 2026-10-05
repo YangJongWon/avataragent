@@ -10,9 +10,30 @@
   --blue: #3498db;
   --yellow: #f4d03f;
   --muted: #7d7486;
-  font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', system-ui, sans-serif;
+  --surface: #fff;
+  --topbar: #3d3449;
+  --topbarInk: #fff;
+  --topbarLine: #241e2b;
+  --tabBar: #e8dcc4;
+  --tab: #eee4d2;
+  --note: #fff3c4;
+  --hover: #fdebd0;
+  --radius: 0px;
+  --font: 'Malgun Gothic', 'Apple SD Gothic Neo', system-ui, sans-serif;
+  font-family: var(--font);
   color: var(--ink);
   background: var(--bg);
+}
+
+.app {
+  min-height: 100vh;
+  font-family: var(--font);
+  color: var(--ink);
+  background-color: var(--bg);
+  background-image: var(--page-bg, none);
+  background-repeat: var(--page-repeat, no-repeat);
+  background-size: var(--page-size, cover);
+  background-attachment: fixed;
 }
 
 * {
@@ -42,12 +63,14 @@ textarea {
 .pixel-box {
   background: var(--paper);
   border: 3px solid var(--line);
+  border-radius: var(--radius);
   box-shadow: 4px 4px 0 rgba(61, 52, 73, 0.25);
 }
 
 .pixel-btn {
-  background: #fff;
+  background: var(--surface);
   border: 2px solid var(--line);
+  border-radius: var(--radius);
   box-shadow: 2px 2px 0 var(--line);
   padding: 6px 12px;
   cursor: pointer;
@@ -86,9 +109,9 @@ textarea {
   align-items: center;
   gap: 16px;
   padding: 8px 16px;
-  background: #3d3449;
-  color: #fff;
-  border-bottom: 4px solid #241e2b;
+  background: var(--topbar);
+  color: var(--topbarInk);
+  border-bottom: 4px solid var(--topbarLine);
 }
 .brand {
   font-weight: 800;
@@ -101,9 +124,10 @@ textarea {
   overflow-x: auto;
 }
 .main-tab {
-  background: #554a63;
-  color: #fff;
-  border: 2px solid #241e2b;
+  background: color-mix(in srgb, var(--topbar) 88%, var(--topbarInk));
+  color: var(--topbarInk);
+  border: 2px solid var(--topbarLine);
+  border-radius: var(--radius);
   padding: 5px 10px;
   cursor: pointer;
   white-space: nowrap;
@@ -212,7 +236,7 @@ textarea {
 .bubble {
   position: absolute;
   transform: translate(-50%, -100%);
-  background: #fff;
+  background: var(--surface);
   border: 3px solid var(--line);
   box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.2);
   padding: 6px 10px;
@@ -265,7 +289,7 @@ textarea {
 .context-menu {
   position: absolute;
   z-index: 6;
-  background: #fff;
+  background: var(--surface);
   border: 3px solid var(--line);
   box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.25);
   min-width: 150px;
@@ -313,7 +337,7 @@ textarea {
   font-size: 13px;
 }
 .context-item:hover:not(:disabled) {
-  background: #fdebd0;
+  background: var(--hover);
 }
 .context-item:disabled {
   color: #bbb;
@@ -325,6 +349,14 @@ textarea {
 }
 .context-item.danger:not(:disabled) {
   color: #c0392b;
+}
+.context-item.friendly {
+  color: #b0406f;
+}
+.context-sep {
+  height: 1px;
+  margin: 3px 6px;
+  background: #e5d8c8;
 }
 .context-hint {
   display: block;
@@ -353,7 +385,7 @@ textarea {
   font-size: 13px;
   padding: 4px 10px;
   border-bottom: 2px solid var(--line);
-  background: #fdebd0;
+  background: var(--hover);
   white-space: nowrap;
   display: flex;
   align-items: center;
@@ -372,7 +404,7 @@ textarea {
   font-size: 11px;
   padding: 0 6px;
   border: 2px solid var(--line);
-  background: #fff;
+  background: var(--surface);
   cursor: default;
 }
 .plan-ai {
@@ -429,7 +461,7 @@ p.plan-note {
   box-sizing: border-box;
   overflow: hidden;
   border: 3px solid var(--line);
-  background: #fff;
+  background: var(--surface);
   padding: 5px 8px;
   font-size: 12px;
   box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.15);
@@ -503,7 +535,7 @@ p.plan-note {
 .report-head {
   padding: 10px;
   border-bottom: 3px solid var(--line);
-  background: #fdebd0;
+  background: var(--hover);
 }
 .task-select {
   width: 100%;
@@ -631,7 +663,8 @@ p.plan-note {
 .tab {
   border: 2px solid var(--line);
   border-bottom: none;
-  background: #eee4d2;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: var(--tab);
   padding: 4px 6px;
   cursor: pointer;
   font-size: 12px;
@@ -664,7 +697,7 @@ p.plan-note {
 .artifact {
   border: 2px solid var(--line);
   margin-bottom: 8px;
-  background: #fff;
+  background: var(--surface);
 }
 .artifact summary {
   cursor: pointer;
@@ -756,7 +789,7 @@ p.plan-note {
   border: 2px solid var(--line);
   padding: 6px;
   font-weight: 400;
-  background: #fff;
+  background: var(--surface);
 }
 .hat-legend {
   display: flex;
@@ -850,7 +883,7 @@ p.plan-note {
 }
 .diff pre {
   white-space: pre-wrap;
-  background: #fff;
+  background: var(--surface);
   border: 2px solid var(--line);
   padding: 6px;
   margin: 2px 0;
@@ -996,12 +1029,12 @@ p.plan-note {
   gap: 2px;
   padding: 6px 8px;
   border: 2px solid #d8cdb8;
-  background: #fff;
+  background: var(--surface);
   cursor: pointer;
   font: inherit;
 }
 .model-pick:hover {
-  background: #fdebd0;
+  background: var(--hover);
 }
 .model-pick.selected {
   border-color: var(--primary);
@@ -1022,7 +1055,7 @@ p.plan-note {
 .cand {
   padding: 4px;
   border: 2px solid #d8cdb8;
-  background: #fff;
+  background: var(--surface);
   cursor: pointer;
   line-height: 0;
 }
@@ -1030,7 +1063,7 @@ p.plan-note {
   margin: 0;
 }
 .cand:hover {
-  background: #fdebd0;
+  background: var(--hover);
 }
 .cand.selected {
   border-color: var(--primary);
@@ -1048,7 +1081,7 @@ p.plan-note {
   align-items: flex-start;
   padding: 8px 10px;
   border: 2px solid #d8cdb8;
-  background: #fff;
+  background: var(--surface);
   cursor: pointer;
   font-size: 13px;
 }
@@ -1081,7 +1114,7 @@ p.plan-note {
   gap: 6px;
   padding: 10px;
   border: 2px solid var(--line);
-  background: #fff;
+  background: var(--surface);
 }
 .company-card.editing {
   grid-column: 1 / -1;
@@ -1131,7 +1164,7 @@ p.plan-note {
   min-width: 0;
   border: 2px solid var(--line);
   padding: 4px 6px;
-  background: #fff;
+  background: var(--surface);
 }
 .found-models {
   font-size: 12px;
@@ -1272,7 +1305,7 @@ p.plan-note {
   gap: 4px;
   text-align: left;
   border: 2px solid var(--line);
-  background: #fff;
+  background: var(--surface);
   padding: 8px 10px;
 }
 .team-pick-option.selected {
@@ -1291,13 +1324,13 @@ p.plan-note {
   align-items: center;
   gap: 4px;
   border: 2px solid var(--line);
-  background: #fff;
+  background: var(--surface);
   padding: 8px 12px;
   font-size: 12px;
   font-weight: 700;
 }
 .skin-option.selected {
-  background: #fff3c4;
+  background: var(--note);
 }
 .skin-option.locked {
   opacity: 0.7;
@@ -1345,7 +1378,7 @@ p.plan-note {
   height: 8px;
   border: 2px solid var(--line);
   margin-top: 6px;
-  background: #fff;
+  background: var(--surface);
 }
 .meter-fill {
   height: 100%;
@@ -1378,7 +1411,7 @@ p.plan-note {
   z-index: 100;
 }
 .toast {
-  background: #fff;
+  background: var(--surface);
   border: 3px solid var(--line);
   box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.25);
   padding: 8px 12px;
@@ -1396,7 +1429,7 @@ p.plan-note {
   align-items: flex-end;
   gap: 4px;
   padding: 6px 16px 0;
-  background: #e8dcc4;
+  background: var(--tabBar);
   border-bottom: 3px solid var(--line);
   overflow-x: auto;
   overflow-y: hidden;
@@ -1409,7 +1442,8 @@ p.plan-note {
   padding: 6px 14px;
   border: 2px solid var(--line);
   border-bottom: none;
-  background: #d6c8ab;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: color-mix(in srgb, var(--tabBar) 92%, var(--ink));
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
@@ -1457,7 +1491,7 @@ p.plan-note {
   font-size: 9px;
   padding: 0 3px;
   border: 1px solid var(--line);
-  background: #fff3c4;
+  background: var(--note);
 }
 .office-tab-desc {
   margin-left: auto;
@@ -1496,7 +1530,7 @@ p.plan-note {
   gap: 6px;
   padding: 6px 8px;
   border: 2px dashed var(--line);
-  background: #fffdf5;
+  background: var(--paper);
   font-weight: 700;
 }
 .perf-offices {
@@ -1520,7 +1554,7 @@ p.plan-note {
   gap: 10px;
   padding: 6px 8px;
   border: 2px solid var(--line);
-  background: #fffdf5;
+  background: var(--paper);
 }
 .perf-tag {
   margin-left: 6px;
@@ -1554,7 +1588,7 @@ p.plan-note {
   flex-direction: column;
   gap: 6px;
   padding: 8px;
-  background: #fffdf5;
+  background: var(--paper);
 }
 .chat-head {
   display: flex;
@@ -1578,7 +1612,7 @@ p.plan-note {
   gap: 6px;
   padding: 4px;
   border: 2px solid var(--line);
-  background: #fff;
+  background: var(--surface);
 }
 .chat-msg {
   align-self: flex-start;
@@ -1589,7 +1623,7 @@ p.plan-note {
 }
 .chat-msg.mine {
   align-self: flex-end;
-  background: #fff3c4;
+  background: var(--note);
 }
 .chat-msg.system {
   align-self: stretch;
@@ -1609,7 +1643,7 @@ p.plan-note {
   margin-top: 4px;
   padding: 4px 6px;
   border: 2px solid var(--line);
-  background: #fff;
+  background: var(--surface);
   cursor: pointer;
   text-align: left;
 }
@@ -1636,12 +1670,12 @@ p.plan-note {
   gap: 4px;
   padding: 10px;
   border: 3px solid var(--line);
-  background: #fffdf5;
+  background: var(--paper);
   text-align: left;
   cursor: pointer;
 }
 .plan-option.selected {
-  background: #fff3c4;
+  background: var(--note);
   box-shadow: 3px 3px 0 var(--line);
 }
 .plan-emoji {
@@ -1664,19 +1698,19 @@ p.plan-note {
   gap: 4px;
   padding: 10px;
   border: 3px solid var(--line);
-  background: #fffdf5;
+  background: var(--paper);
   text-align: left;
   cursor: pointer;
   font: inherit;
 }
 .lang-option:hover:not(:disabled) {
-  background: #fdebd0;
+  background: var(--hover);
 }
 .lang-option:disabled {
   cursor: wait;
 }
 .lang-option.selected {
-  background: #fff3c4;
+  background: var(--note);
   box-shadow: 3px 3px 0 var(--line);
 }
 .lang-flag {
@@ -1736,7 +1770,7 @@ p.plan-note {
   gap: 6px;
   padding: 6px 8px;
   border: 2px solid var(--line);
-  background: #fffdf5;
+  background: var(--paper);
 }
 .member-row > div:first-child {
   flex: 1 1 200px;
@@ -1774,7 +1808,7 @@ p.plan-note {
 .data-list li {
   padding: 5px 8px;
   border: 2px solid var(--line);
-  background: #fff;
+  background: var(--surface);
 }
 .data-list li.done {
   opacity: 0.55;
@@ -1822,7 +1856,7 @@ p.plan-note {
 .proposal {
   padding: 8px;
   border: 2px dashed var(--blue);
-  background: #fff;
+  background: var(--surface);
 }
 .proposal ul {
   margin: 6px 0 0;
@@ -1837,7 +1871,7 @@ p.plan-note {
   margin-top: 6px;
   padding: 8px;
   border: 2px dashed var(--red);
-  background: #fff;
+  background: var(--surface);
 }
 .actions-box ul {
   list-style: none;
@@ -1863,6 +1897,9 @@ p.plan-note {
 .context-menu.flip {
   transform: translateX(-100%);
 }
+.office .context-menu {
+  overflow-y: auto;
+}
 .hint-touch {
   display: none;
 }
@@ -1880,7 +1917,7 @@ p.plan-note {
   padding: 5px 12px;
   border: 0;
   border-right: 2px solid var(--line);
-  background: #fff;
+  background: var(--surface);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -1901,7 +1938,7 @@ p.plan-note {
 }
 .plan-chain li {
   border: 2px solid var(--line);
-  background: #fff;
+  background: var(--surface);
   padding: 2px 6px;
 }
 .plan-chain-loop {
@@ -1931,7 +1968,7 @@ p.plan-note {
 }
 .plan-step {
   border: 2px solid var(--line);
-  background: #fff;
+  background: var(--surface);
   padding: 6px;
   display: flex;
   flex-direction: column;
@@ -1964,7 +2001,7 @@ p.plan-note {
   font: inherit;
   border: 2px solid var(--line);
   padding: 4px 6px;
-  background: #fff;
+  background: var(--surface);
 }
 .plan-step-note {
   border-style: dashed;
@@ -2008,7 +2045,7 @@ p.plan-note {
 
 /* ───── 공유 ───── */
 .share-viewer {
-  background: #fff3c4;
+  background: var(--note);
   color: var(--line);
   border: 2px solid var(--line);
   padding: 1px 8px;
@@ -2063,7 +2100,7 @@ p.plan-note {
 .help-a {
   margin-top: 8px;
   padding: 8px 12px;
-  background: #fff;
+  background: var(--surface);
   border: 2px solid var(--line);
   box-shadow: 2px 2px 0 rgba(61, 52, 73, 0.25);
 }
@@ -2092,7 +2129,7 @@ p.plan-note {
 .help-input input {
   border: 2px solid var(--line);
   padding: 6px;
-  background: #fff;
+  background: var(--surface);
 }
 .personality-row {
   display: grid;
@@ -2107,12 +2144,12 @@ p.plan-note {
   text-align: left;
   padding: 6px 8px;
   border: 2px solid var(--line);
-  background: #fff;
+  background: var(--surface);
   font: inherit;
   cursor: pointer;
 }
 .personality-option.selected {
-  background: #fff3c4;
+  background: var(--note);
   box-shadow: 2px 2px 0 var(--line);
 }
 .personality-emoji {
@@ -2122,7 +2159,7 @@ p.plan-note {
   margin: 4px 0;
   padding: 6px 8px;
   border: 2px dashed var(--line);
-  background: #fffdf0;
+  background: var(--paper);
   font-size: 12px;
 }
 .advice-note.advice-guess {
@@ -2235,12 +2272,12 @@ p.plan-note {
   gap: 6px;
   border: 2px solid var(--line);
   padding: 6px 8px;
-  background: #fff;
+  background: var(--surface);
   font-weight: 400;
   cursor: pointer;
 }
 .share-role.selected {
-  background: #fff3c4;
+  background: var(--note);
 }
 .share-list {
   list-style: none;
@@ -2252,7 +2289,7 @@ p.plan-note {
 }
 .share-item {
   border: 2px solid var(--line);
-  background: #fff;
+  background: var(--surface);
   padding: 8px;
   display: flex;
   flex-direction: column;
@@ -2295,7 +2332,7 @@ p.plan-note {
   height: 220px;
   image-rendering: pixelated;
   border: 2px solid var(--line);
-  background: #fff;
+  background: var(--surface);
 }
 .share-url {
   font-size: 11px;
@@ -2372,13 +2409,11 @@ p.plan-note {
     width: 100%;
     max-height: 100%;
     padding-top: 24px;
-    overflow: auto;
-    -webkit-overflow-scrolling: touch;
   }
+  /* The whole room fits on the stage, so it never scrolls: the height leaves room for the 24px above, the hint bar and borders. */
   .office {
     max-width: none;
-    width: min(100cqw, (100cqh - 30px) * 1000 / 480);
-    min-width: 640px;
+    width: min(100cqw, (100cqh - 60px) * 1000 / 480);
     margin: 0 auto;
     border-width: 3px;
   }
@@ -2404,7 +2439,7 @@ p.plan-note {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    background: #fdebd0;
+    background: var(--hover);
     border: 3px solid var(--line);
     cursor: grab;
     touch-action: none;
@@ -2713,7 +2748,7 @@ p.plan-note {
 .project-model-card {
   border: 3px solid #3f4054;
   box-shadow: 5px 5px 0 #3f4054;
-  background: #fffdf4;
+  background: var(--paper);
 }
 .lounge-hero {
   max-width: 1280px;
@@ -2815,7 +2850,7 @@ p.plan-note {
   align-items: center;
   padding: 10px;
   border: 2px solid #d3cfbf;
-  background: #fff;
+  background: var(--surface);
 }
 .contribution-row.mine { border-color: #8d75df; background: #f2eeff; }
 .person-avatar { font-size: 24px; }
@@ -2826,7 +2861,7 @@ p.plan-note {
 .person-share { text-align: right; }
 .person-done { font-size: 12px; text-align: right; }
 .lounge-locked { display: grid; place-items: center; }
-.lounge-lock-card { max-width: 520px; padding: 30px; text-align: center; border: 3px solid #3f4054; box-shadow: 6px 6px 0 #3f4054; background: #fffdf4; }
+.lounge-lock-card { max-width: 520px; padding: 30px; text-align: center; border: 3px solid #3f4054; box-shadow: 6px 6px 0 #3f4054; background: var(--paper); }
 .lounge-lock-model { font-size: 80px; }
 
 @media (max-width: 700px) {

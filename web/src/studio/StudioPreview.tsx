@@ -1,5 +1,6 @@
 import { Application, Container, Texture } from 'pixi.js';
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { t, tpl } from '../../../shared/i18n.ts';
 import { TEAMS } from '../../../shared/teams.ts';
 import { THEME_SCENE, type Point, type Rect, type SpotName, type ThemeManifest, type ThemeState } from '../../../shared/theme-pack.ts';
 import type { Agent, Role } from '../../../shared/types.ts';
@@ -10,6 +11,7 @@ import type { StudioImage } from './buildPackage.ts';
 export type PlaceTarget = { kind: 'seat' | 'lounge'; role: Role } | { kind: 'door' } | { kind: 'spot'; spot: SpotName };
 
 export const ROLES: Role[] = ['manager', 'researcher', 'writer', 'reviewer'];
+/** Korean labels are catalogue keys, shown through t(). */
 export const ROLE_LABEL: Record<Role, string> = { manager: '매니저', researcher: '리서처', writer: '작가', reviewer: '리뷰어' };
 export const SPOT_LABEL: Record<SpotName, string> = { board: '칠판', shelf: '자료실', safe: '금고', archive: '보관함' };
 
@@ -22,7 +24,7 @@ function textureOf(image: StudioImage) {
     texture = new Promise<Texture>((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve(Texture.from(img));
-      img.onerror = () => reject(new Error(`${image.path} 이미지를 읽지 못했어요.`));
+      img.onerror = () => reject(new Error(tpl('{name} 이미지를 읽지 못했어요.', { name: image.path })));
       img.src = URL.createObjectURL(new Blob([image.bytes as BlobPart], { type: image.path.endsWith('.webp') ? 'image/webp' : 'image/png' }));
     });
     textures.set(image.bytes, texture);
@@ -109,7 +111,7 @@ export function StudioPreview({ manifest, images, layout, state, target, onPlace
           small.height = THEME_SCENE.h / 2;
           small.getContext('2d')!.drawImage(canvas, 0, 0, small.width, small.height);
           const blob = await new Promise<Blob | null>((resolve) => small.toBlob(resolve, 'image/png'));
-          if (!blob) throw new Error('미리보기 이미지를 만들지 못했어요.');
+          if (!blob) throw new Error(t('미리보기 이미지를 만들지 못했어요.'));
           return new Uint8Array(await blob.arrayBuffer());
         });
       })
@@ -166,19 +168,19 @@ export function StudioPreview({ manifest, images, layout, state, target, onPlace
             <g key={name} className={`studio-spot${target?.kind === 'spot' && target.spot === name ? ' active' : ''}`}>
               <rect x={r.x} y={r.y} width={r.w} height={r.h} />
               <text x={r.x + 4} y={r.y + 14}>
-                {SPOT_LABEL[name]}
+                {t(SPOT_LABEL[name])}
               </text>
             </g>
           );
         })}
-        {ROLES.map((role) => marker(layout.seats[role], `${ROLE_LABEL[role]} 좌석`, 'seat'))}
-        {ROLES.map((role) => marker(layout.lounge[role], `${ROLE_LABEL[role]} 휴식`, 'lounge'))}
-        {marker(layout.door, '문', 'door')}
+        {ROLES.map((role) => marker(layout.seats[role], tpl('{role} 좌석', { role: t(ROLE_LABEL[role]) }), 'seat'))}
+        {ROLES.map((role) => marker(layout.lounge[role], tpl('{role} 휴식', { role: t(ROLE_LABEL[role]) }), 'lounge'))}
+        {marker(layout.door, t('문'), 'door')}
         {drag && (
           <rect className="studio-drag" x={Math.min(drag.from.x, drag.to.x)} y={Math.min(drag.from.y, drag.to.y)} width={Math.abs(drag.to.x - drag.from.x)} height={Math.abs(drag.to.y - drag.from.y)} />
         )}
       </svg>
-      {!manifest && <div className="studio-empty">배경 이미지와 idle 프레임이 있는 캐릭터를 하나 이상 넣으면 여기에 보여요.</div>}
+      {!manifest && <div className="studio-empty">{t('배경 이미지와 서 있기 프레임이 있는 캐릭터를 하나 이상 넣으면 여기에 보여요.')}</div>}
       {error && <div className="studio-empty neg">{error}</div>}
     </div>
   );

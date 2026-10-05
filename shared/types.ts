@@ -5,8 +5,9 @@ import type { Personality } from './personality.ts';
 import type { Plan } from './plans.ts';
 import type { BillingInfo } from './billing.ts';
 import type { Company, ModelEntry } from './models.ts';
-import type { Skin } from './skins.ts';
+import type { AgentSkin, Skin } from './skins.ts';
 import type { Language } from './i18n.ts';
+import type { ThemeBooking } from './theme-pack.ts';
 
 /** 'env' follows AI_PROVIDER in .env; the others override it from the model settings page. */
 export type AiMode = 'env' | 'mock' | 'agents';
@@ -29,7 +30,7 @@ export type AgentStatus =
 
 export type Expression = 'normal' | 'smile' | 'focus' | 'sweat' | 'troubled' | 'panic' | 'thanks' | 'celebrate';
 
-export type { Skin };
+export type { AgentSkin, Skin };
 
 export interface Office {
   id: string;
@@ -44,7 +45,7 @@ export interface Office {
   valueKrw: number;
   /** Fixed project scope used for a stable, meaningful completion percentage. */
   milestones?: ProjectMilestone[];
-  /** Installed theme id; missing means the built-in pixel theme. */
+  /** A theme for this office only; missing follows the company theme (`Snapshot.theme`). */
   theme?: string;
   /** false turns off the theme's custom CSS here; its pictures and colors stay. */
   themeCss?: boolean;
@@ -66,7 +67,7 @@ export interface Agent {
   rules: string;
   /** Default working style added to every prompt of this agent. */
   personality: Personality;
-  skin: Skin;
+  skin: AgentSkin;
   status: AgentStatus;
   expression: Expression;
   activity: string;
@@ -384,6 +385,12 @@ export interface Snapshot {
   /** Owner only: base address to put in share links. */
   publicUrl?: string;
   companyName: string;
+  /** The theme every office shows unless it picked its own. */
+  theme: string;
+  /** Company themes booked for seasons, shown instead of `theme` on those dates. */
+  themeBookings: ThemeBooking[];
+  /** The theme for the page around the offices; null follows the office being viewed. */
+  siteTheme: string | null;
   provider: string;
   model: string;
   /** Owner only. */

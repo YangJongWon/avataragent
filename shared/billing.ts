@@ -1,7 +1,7 @@
 import type { Plan } from './plans.ts';
 
-/** 'none' means billing is not connected: the owner switches plans directly. */
-export type BillingProviderId = 'none' | 'mock';
+/** 'none' means billing is not connected: the owner switches plans directly. 'site' sells licenses on the project site. */
+export type BillingProviderId = 'none' | 'mock' | 'site';
 
 export type SubscriptionStatus = 'none' | 'active' | 'past_due' | 'canceled';
 
@@ -39,6 +39,8 @@ export interface BillingInfo {
   providerLabel: string;
   subscription: Subscription;
   invoices: Invoice[];
+  /** With the site provider: where licenses are bought and managed, and this install's id. */
+  site?: { url: string; installId: string };
 }
 
 export const PERIOD_DAYS = 30;

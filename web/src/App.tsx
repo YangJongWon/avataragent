@@ -29,7 +29,9 @@ import { krw, roleTitle } from './format.ts';
 import { OfficeView } from './office/OfficeView.tsx';
 import { useDemoPlayback } from './demoPlayback.ts';
 import { useCompact } from './useCompact.ts';
-import { LanguageProvider, useLanguage } from './LanguageProvider.tsx';
+import { useLanguage } from './LanguageProvider.tsx';
+import { tpl } from '../../shared/i18n.ts';
+import { officeTheme } from '../../shared/theme-pack.ts';
 import { ThemesTab } from './components/ThemesTab.tsx';
 import { ThemeStudio } from './studio/ThemeStudio.tsx';
 import { themeApi } from './themeApi.ts';
@@ -64,7 +66,7 @@ function officeIdOfEvent(event: OfficeEvent, snapshot: Snapshot) {
 }
 
 export function App() {
-  const { t } = useLanguage();
+  const { t, setLanguage } = useLanguage();
   const { snapshot, events, connected, onEvent } = useOffice();
   const [tab, setTab] = useState<Tab>('office');
   const [officeId, setOfficeId] = useState('office_dev');
@@ -86,6 +88,11 @@ export function App() {
     setChatSeenAt(latestChatAt);
     localStorage.setItem('chatSeenAt', latestChatAt);
   }, [chatOpen, latestChatAt, chatSeenAt]);
+  // 서버가 들고 있는 언어를 provider에 밀어넣는다. provider가 App 위에 있어서
+  // 컨텍스트로는 값을 내려줄 수 없다. snapshot이 오기 전까지는 시드 언어로 그린다.
+  useEffect(() => {
+    if (snapshot?.language) setLanguage(snapshot.language);
+  }, [snapshot?.language, setLanguage]);
   const demoPress = useRef<number | null>(null);
   const compact = useCompact();
   const snapshotRef = useRef(snapshot);
@@ -181,9 +188,13 @@ export function App() {
     if (officeMissing && firstOfficeId) setOfficeId(firstOfficeId);
   }, [officeMissing, firstOfficeId]);
 
-  // The office being looked at sets the look of the whole page: its theme's colors and cleaned custom CSS.
+  // The whole page wears the site theme when one is set, otherwise the theme of the office being looked at.
   const themedOffice = snapshot?.offices.find((o) => o.id === officeId) ?? snapshot?.offices[0];
-  const themePack = useThemePack(themedOffice?.theme, themedOffice?.themeCss !== false);
+  const siteTheme = snapshot?.siteTheme ?? null;
+  const themePack = useThemePack(
+    siteTheme ?? (themedOffice && officeTheme(themedOffice, snapshot?.theme, snapshot?.themeBookings)),
+    siteTheme !== null || themedOffice?.themeCss !== false,
+  );
 
   if (!snapshot || !view) {
     return <div className="loading">사무실 문을 여는 중… {connected ? '' : '(서버 연결 대기)'}</div>;
@@ -199,6 +210,7 @@ export function App() {
   const viewer = snapshot.viewer;
   const isOwner = viewer.kind === 'owner';
   const office = snapshot.offices.find((o) => o.id === officeId) ?? snapshot.offices[0];
+  const themeId = officeTheme(office, snapshot.theme, snapshot.themeBookings);
   const allowed = (action: Action) => can(viewer, action, office.id);
   const denied = (what: string) => toast(`지금 권한으로는 ${what}할 수 없어요.`, 'error');
   const chatOn = planHas(snapshot.plan, 'chat') && viewer.kind !== 'share';
@@ -399,8 +411,7 @@ export function App() {
   );
 
   return (
-    <LanguageProvider language={snapshot.language}>
-      <div className="app" {...themePack.attrs}>
+    <div className="app" {...themePack.attrs}>
         <header className="topbar">
           <div className="brand">🏢 {snapshot.companyName}</div>
           <nav className="main-tabs">
@@ -526,7 +537,7 @@ export function App() {
               { label: '🔗 이 사무실 공유', run: () => setDialog({ kind: 'share', officeIds: [menuOffice.id] }) },
               { label: '🏢 전체 사무실 공유', run: () => setDialog({ kind: 'share' }) },
               {
-                label: '🎨 테마 바꾸기',
+                label: t('🎨 테마 바꾸기'),
                 run: () => {
                   switchOffice(menuOffice.id);
                   setTab('themes');
@@ -590,7 +601,7 @@ export function App() {
           </main>
         )}
         {tab === 'hire' && (
-          <HireTab key={office.id} office={office} agents={view.agents} onError={showError} onNotice={toast} onManageModels={() => setTab('models')} />
+          <HireTab key={office.id} office={office} themeId={themeId} agents={view.agents} onError={showError} onNotice={toast} onManageModels={() => setTab('models')} />
         )}
         {tab === 'lounge' && (
           <ProjectLounge
@@ -615,11 +626,52 @@ export function App() {
           <main className="page">
           <ThemesTab
             isOwner={isOwner}
-            current={office.theme}
-            onUse={(themeId) =>
-              void api
-                .updateOffice(office.id, { theme: themeId })
-                .then(() => toast(`${office.name}의 테마를 바꿨어요.`), (e) => showError(e instanceof Error ? e.message : String(e)))
+            companyTheme={snapshot.theme}
+            bookings={snapshot.themeBookings ?? []}
+            onBook={
+              isOwner
+                ? (bookings) =>
+                    api
+                      .setThemeBookings(bookings)
+                      .then(() => toast(t('기간별 테마를 저장했어요.')))
+                      .catch((e) => {
+                        showError(e instanceof Error ? e.message : String(e));
+                        throw e;
+                      })
+                : undefined
+            }
+            siteTheme={snapshot.siteTheme ?? null}
+            onUseSite={
+              isOwner
+                ? (id) =>
+                    void api
+                      .setSiteTheme(id)
+                      .then(
+                        () => toast(id === null ? t('사이트 화면이 다시 사무실 테마를 따라요.') : t('사이트 화면 테마를 바꿨어요.')),
+                        (e) => showError(e instanceof Error ? e.message : String(e)),
+                      )
+                : undefined
+            }
+            officeName={office.name}
+            ownTheme={office.theme}
+            onUseCompany={
+              isOwner
+                ? (id) =>
+                    void api
+                      .setCompanyTheme(id)
+                      .then(() => toast(t('모든 사무실의 테마를 바꿨어요.')), (e) => showError(e instanceof Error ? e.message : String(e)))
+                : undefined
+            }
+            onUseOffice={
+              allowed('manage')
+                ? (id) =>
+                    void api
+                      .updateOffice(office.id, { theme: id })
+                      .then(
+                        () => toast(id === null ? tpl('{name}이(가) 다시 공통 테마를 따라요.', { name: office.name }) : tpl('{name}에만 다른 테마를 쓰도록 바꿨어요.', { name: office.name })),
+                        (e) => showError(e instanceof Error ? e.message : String(e)),
+                      )
+                : undefined
             }
             cssOn={office.themeCss !== false}
             onCssOn={(on) => void api.updateOffice(office.id, { themeCss: on }).catch((e) => showError(e instanceof Error ? e.message : String(e)))}
@@ -633,7 +685,7 @@ export function App() {
           <main className="page">
             <div className="row studio-back">
               <button className="pixel-btn small" onClick={() => setTab('themes')}>
-                ← 테마 목록
+                {t('← 테마 목록')}
               </button>
             </div>
             <ThemeStudio
@@ -693,6 +745,7 @@ export function App() {
             task={helpTask}
             agent={agentById(helpTask.help.agentId)!}
             roleTitle={roleTitle(agentById(helpTask.help.agentId)!, snapshot.offices)}
+            themeId={themeId}
             onClose={() => setDialog(null)}
             onError={showError}
           />
@@ -709,6 +762,7 @@ export function App() {
           <AgentCardModal
             agent={agentById(dialog.agentId)!}
             roleTitle={roleTitle(agentById(dialog.agentId)!, snapshot.offices)}
+            themeId={themeId}
             onClose={() => setDialog(null)}
           />
         )}
@@ -721,6 +775,5 @@ export function App() {
           ))}
         </div>
       </div>
-    </LanguageProvider>
   );
 }

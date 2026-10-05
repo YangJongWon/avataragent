@@ -1,0 +1,348 @@
+{
+  "id": "illust-office",
+  "themeVersion": "2.2.0",
+  "name": "일러스트 오피스",
+  "author": "AI 에이전트 오피스",
+  "license": "CC-BY-4.0",
+  "description": "로컬 Stable Diffusion(Animagine XL 4.0)으로 그린 SD 미소녀 직원과 모바일 미니게임 느낌의 사무실.",
+  "credits": "Generated locally with Animagine XL 4.0 Opt (Cagliostro Research Lab, CreativeML Open RAIL++-M) in ComfyUI.",
+  "checkpoint": "animagine-xl-4.0-opt.safetensors",
+  "quality": "masterpiece, high score, great score, absurdres",
+  "style": "anime style, cute, clean lineart, soft colors, mobile game asset",
+  "negative": "lowres, bad anatomy, bad hands, text, error, missing finger, extra digits, fewer digits, cropped, worst quality, low quality, low score, bad score, average score, signature, watermark, username, blurry, multiple views, reference sheet, 2girls, 3girls, multiple girls, clones, cropped legs, out of frame, border, frame, realistic, photorealistic, 3d, tall, long legs, realistic proportions, mature female, shadow, drop shadow, cast shadow, shadow on floor",
+  "tokens": {
+    "accent": "#e8925a",
+    "primary": "#5b8def",
+    "bg": "#f6ecdf",
+    "paper": "#fffaf3",
+    "line": "#5a3f33",
+    "topbar": "#5a3f33",
+    "topbarInk": "#fff8ee",
+    "topbarLine": "#3b2820",
+    "tabBar": "#efdcc4",
+    "tab": "#f7e9d6",
+    "note": "#ffe6b8",
+    "hover": "#fbe0cf"
+  },
+  "site": { "font": "rounded", "radius": 8 },
+  "layout": {
+    "seats": {
+      "researcher": { "x": 110, "y": 300 },
+      "manager": { "x": 290, "y": 300 },
+      "reviewer": { "x": 470, "y": 300 },
+      "writer": { "x": 290, "y": 435 }
+    },
+    "extraSeats": [
+      { "x": 650, "y": 300 },
+      { "x": 110, "y": 435 },
+      { "x": 470, "y": 435 },
+      { "x": 650, "y": 435 }
+    ],
+    "lounge": {
+      "manager": { "x": 830, "y": 372 },
+      "researcher": { "x": 940, "y": 372 },
+      "writer": { "x": 830, "y": 462 },
+      "reviewer": { "x": 940, "y": 462 }
+    },
+    "extraLounge": [
+      { "x": 885, "y": 400 },
+      { "x": 775, "y": 420 },
+      { "x": 970, "y": 420 },
+      { "x": 885, "y": 476 }
+    ],
+    "door": { "x": 956, "y": 234 },
+    "spots": {
+      "board": { "x": 196, "y": 18, "w": 330, "h": 140 },
+      "shelf": { "x": 534, "y": 64, "w": 104, "h": 152 },
+      "safe": { "x": 680, "y": 150, "w": 70, "h": 70 },
+      "archive": { "x": 18, "y": 118, "w": 76, "h": 100 }
+    }
+  },
+  "room": {
+    "stage": {
+      "floorY": 214,
+      "colors": {
+        "wall": "#fdf0dc",
+        "wallStripe": "#f9e7cc",
+        "trim": "#c98f5c",
+        "panel": "#e7b886",
+        "panelLine": "#c48a57",
+        "baseboard": "#9a663d",
+        "floor": "#eec28d",
+        "floorAlt": "#e8b97f",
+        "floorLine": "#c9925d"
+      },
+      "areas": {
+        "work": { "x": 0, "w": 760 },
+        "lounge": {
+          "x": 760,
+          "w": 240,
+          "colors": {
+            "wall": "#e6f5ec",
+            "wallStripe": "#d6eedf",
+            "trim": "#6fae8c",
+            "panel": "#a9d8bd",
+            "panelLine": "#82b99a",
+            "baseboard": "#4f8a6a",
+            "floor": "#cfe3f1",
+            "floorAlt": "#c2d9ec",
+            "floorLine": "#9cbcd3"
+          }
+        }
+      }
+    }
+  },
+  "props": {
+    "window": {
+      "prompt": "no humans, window, wooden window frame, blue sky, white clouds, curtains, front view, straight-on, simple background, white background, game asset, item",
+      "seed": 1801,
+      "width": 1024,
+      "height": 1024,
+      "fit": "width",
+      "size": 112,
+      "at": [{ "x": 120, "y": 150 }, { "x": 840, "y": 150 }],
+      "below": 0
+    },
+    "door": {
+      "prompt": "no humans, cute wooden door, closed door, single door, round brass doorknob, small window on door, door frame, front view, straight-on, full shot, whole door visible, simple background, white background, game asset, item",
+      "seed": 1701,
+      "width": 832,
+      "height": 1216,
+      "size": 150,
+      "at": [{ "x": 956, "y": 216 }],
+      "below": 0,
+      "door": true,
+      "states": {
+        "open": { "swing": true, "frame": 0.14, "top": 0.13, "leaf": 0.28 }
+      }
+    },
+    "plant": {
+      "prompt": "no humans, potted plant, green leaves, small pot, front view, simple background, white background, game asset, item",
+      "seed": 1901,
+      "width": 832,
+      "height": 1216,
+      "size": 64,
+      "at": [{ "x": 36, "y": 472 }],
+      "below": 0
+    },
+    "desk": {
+      "prompt": "no humans, cute small wooden office desk, computer monitor and keyboard on desk, front view, straight-on, full shot, whole desk visible, short legs, simple background, white background, game asset, item",
+      "seed": 2112,
+      "width": 1216,
+      "height": 832,
+      "fit": "width",
+      "size": 96,
+      "at": ["seats"],
+      "dx": 46,
+      "below": -8
+    },
+    "board": {
+      "prompt": "no humans, blank green chalkboard, empty chalkboard, nothing written, plain dark green surface, wooden frame, chalk tray, front view, straight-on, simple background, white background, game asset, item",
+      "seed": 2212,
+      "width": 1536,
+      "height": 640,
+      "spot": "board",
+      "surface": true
+    },
+    "shelf": {
+      "prompt": "no humans, cute wooden bookshelf, colorful books, front view, straight-on, simple background, white background, game asset, item",
+      "seed": 2311,
+      "width": 832,
+      "height": 1216,
+      "spot": "shelf"
+    },
+    "safe": {
+      "prompt": "no humans, safe (container), money safe, cube-shaped steel box, door with dial and lever handle, hinges on the side, gray, cute, full shot, whole object visible, centered, front view, straight-on, simple background, white background, game asset, item",
+      "seed": 2441,
+      "width": 1024,
+      "height": 1024,
+      "spot": "safe"
+    },
+    "archive": {
+      "prompt": "no humans, cute wooden filing cabinet, drawers, folders, front view, straight-on, simple background, white background, game asset, item",
+      "seed": 2511,
+      "width": 832,
+      "height": 1216,
+      "spot": "archive"
+    },
+    "sofa": {
+      "prompt": "no humans, couch, blue two-seater sofa, armrests, backrest, wooden legs, two cushions, empty sofa, front view, straight-on, simple background, white background, game asset, item",
+      "seed": 2612,
+      "width": 1216,
+      "height": 832,
+      "fit": "width",
+      "size": 170,
+      "at": [{ "x": 885, "y": 330 }],
+      "below": 0
+    }
+  },
+  "character": {
+    "base": "1girl, solo, chibi, super deformed, 2-head proportions, big head, small body, short legs, full body, standing, shoes, single character, centered, looking at viewer, simple background, white background, flat color, thick outlines, cute, mobile game sprite",
+    "portrait": "1girl, solo, chibi, big head, portrait, upper body, looking at viewer, simple background, white background, flat color, thick outlines, cute",
+    "height": 300,
+    "sceneHeight": 92,
+    "maxAspect": 2.1,
+    "handX": 0.3,
+    "handFromBottom": 0.33,
+    "poses": {
+      "idle": "arms at sides, gentle smile",
+      "celebrate": "one arm raised, fist pump, happy, open mouth, closed eyes",
+      "troubled": "hands clasped in front of chest, worried, sweatdrop, frown",
+      "back": {
+        "prompt": "(from behind:1.4), (back view:1.3), (chibi:1.3), (big head:1.2), facing away from viewer, back of head, hair seen from behind, arms at sides, standing straight",
+        "drop": ["looking at viewer", "eyes", "glasses", "lanyard", "necktie", "smile", "pantyhose"],
+        "negative": "face, eyes, looking at viewer, looking back, looking to the side, from side, profile, glasses, front view, floor, ground, censored, mosaic censoring, ass focus, blurry"
+      }
+    },
+    "portraits": {
+      "normal": "light smile",
+      "smile": "smile, happy, open mouth",
+      "troubled": "worried, sweatdrop, frown",
+      "panic": "surprised, wide-eyed, open mouth, sweat"
+    }
+  },
+  "characters": [
+    {
+      "id": "yuna",
+      "name": "유나",
+      "look": "long black hair, high ponytail, purple eyes, black-framed glasses, white blouse, navy pencil skirt, black pantyhose, id card lanyard",
+      "seed": 5101,
+      "poseSeeds": { "idle": 5202, "back": 5101 }
+    },
+    {
+      "id": "sora",
+      "name": "소라",
+      "look": "short silver hair, bob cut, blue eyes, oversized white lab coat, light blue shirt, black skirt",
+      "seed": 5201,
+      "poseSeeds": { "idle": 5302, "troubled": 5403, "back": 5504 }
+    },
+    {
+      "id": "mina",
+      "name": "미나",
+      "look": "long pink hair, twintails, green eyes, beige cardigan, white shirt, plaid pleated skirt",
+      "seed": 5301,
+      "poseSeeds": { "troubled": 5402, "back": 5402 }
+    },
+    {
+      "id": "hana",
+      "name": "하나",
+      "look": "brown hair, single side braid, amber eyes, red-framed glasses, black blazer, white shirt, red necktie, black skirt",
+      "seed": 5401,
+      "poseSeeds": { "idle": 5502, "back": 5603 }
+    }
+  ],
+  "paths": {
+    "waypoints": {
+      "aisle-left": { "x": 40, "y": 368 },
+      "aisle-mid": { "x": 380, "y": 368 },
+      "aisle-right": { "x": 720, "y": 368 },
+      "lounge": { "x": 880, "y": 420 },
+      "wall-right": { "x": 720, "y": 240 },
+      "door-step": { "x": 930, "y": 250 },
+      "shelf-front": { "x": 586, "y": 240 },
+      "board-front": { "x": 380, "y": 236 }
+    },
+    "links": [
+      ["aisle-left", "aisle-mid"],
+      ["aisle-mid", "aisle-right"],
+      ["aisle-right", "lounge"],
+      ["lounge", "door-step"],
+      ["aisle-right", "wall-right"],
+      ["wall-right", "door-step"],
+      ["wall-right", "shelf-front"],
+      ["shelf-front", "board-front"],
+      ["board-front", "aisle-mid"]
+    ]
+  },
+  "emotes": [
+    { "when": { "place": "lounge", "walking": false, "hours": [12, 13] }, "icon": "🍱", "say": [{ "ko": "점심 맛있어요~", "en": "Lunch is so good~", "ja": "お昼おいしい〜", "zh": "午饭真好吃~" }], "every": 45 },
+    { "when": { "status": "working", "hours": [22, 6] }, "icon": "🌙", "say": [{ "ko": "야근이에요…", "en": "Working late…", "ja": "残業です…", "zh": "在加班…" }], "every": 90 },
+    { "when": { "place": "lounge", "walking": false }, "say": [{ "ko": "잠깐 쉬어요~", "en": "Taking a break~", "ja": "ちょっと休憩〜", "zh": "休息一下~" }, { "ko": "커피 한 잔 어때요?", "en": "Coffee, anyone?", "ja": "コーヒーどう?", "zh": "来杯咖啡?" }], "every": 70 }
+  ],
+  "interactions": [
+    {
+      "id": "cheer",
+      "label": { "ko": "응원하기", "en": "Cheer on", "ja": "応援する", "zh": "加油" },
+      "when": { "status": ["working", "collaborating"] },
+      "reactions": [{ "state": "smile", "say": [{ "ko": "힘낼게요!", "en": "I'll do my best!", "ja": "がんばります!", "zh": "我会加油的!" }], "effect": "sparkle" }]
+    },
+    {
+      "id": "snack",
+      "label": { "ko": "간식 주기", "en": "Give a snack", "ja": "おやつをあげる", "zh": "给点心" },
+      "when": { "place": "lounge" },
+      "reactions": [{ "state": "celebrate", "say": [{ "ko": "와! 고마워요!", "en": "Yay, thank you!", "ja": "わあ、ありがとう!", "zh": "哇，谢谢!" }], "effect": "hearts" }]
+    }
+  ],
+  "events": [
+    { "on": "agent.arrived", "say": [{ "ko": "출근했습니다!", "en": "I'm in!", "ja": "出勤しました!", "zh": "我来上班了!" }] },
+    { "on": "agent.left", "say": [{ "ko": "내일 봐요~", "en": "See you tomorrow~", "ja": "また明日〜", "zh": "明天见~" }] },
+    { "on": "task.completed", "when": { "role": "manager" }, "say": [{ "ko": "다들 수고했어요!", "en": "Great work, everyone!", "ja": "みんなお疲れさま!", "zh": "大家辛苦了!" }], "effect": "confetti" }
+  ],
+  "variants": [
+    {
+      "id": "halloween",
+      "name": "할로윈",
+      "when": { "dates": ["10-24", "10-31"] },
+      "tokens": {
+        "accent": "#ff7a1a",
+        "yellow": "#ff9f43",
+        "bg": "#f2e2d6",
+        "line": "#3d2a55",
+        "topbar": "#2b1a3d",
+        "topbarInk": "#ffd9a8",
+        "topbarLine": "#160c22",
+        "tabBar": "#f3d2b0",
+        "tab": "#fbe3c8",
+        "note": "#ffd08a",
+        "hover": "#ffe0c2"
+      },
+      "props": {
+        "pumpkin": {
+          "prompt": "no humans, jack-o'-lantern, carved halloween pumpkin, smiling face, glowing candle inside, cute, front view, simple background, white background, game asset, item",
+          "seed": 3101,
+          "width": 1024,
+          "height": 1024,
+          "size": 46,
+          "at": [{ "x": 990, "y": 216 }, { "x": 60, "y": 214 }, { "x": 760, "y": 470 }],
+          "below": 0
+        },
+        "bats": {
+          "prompt": "no humans, halloween garland, string of paper bats and small orange pumpkins hanging on a rope, horizontal bunting, cute, front view, simple background, white background, game asset, item",
+          "seed": 3201,
+          "width": 1536,
+          "height": 640,
+          "fit": "width",
+          "size": 190,
+          "at": [{ "x": 100, "y": 74 }, { "x": 880, "y": 74 }],
+          "below": 0
+        }
+      },
+      "wear": {
+        "witch-hat": {
+          "prompt": "no humans, cute small witch hat, purple pointy hat with orange band and buckle, chibi item, whole hat visible, full shot, centered, front view, simple background, white background, game asset, icon",
+          "seed": 3301,
+          "size": 40,
+          "at": "head",
+          "x": 0,
+          "y": -6
+        }
+      },
+      "emotes": [{ "when": { "place": "lounge", "walking": false }, "icon": "🎃", "say": [{ "ko": "트릭 오어 트릿!", "en": "Trick or treat!", "ja": "トリック・オア・トリート!", "zh": "不给糖就捣蛋!" }], "every": 60 }],
+      "interactions": [
+        {
+          "id": "candy",
+          "label": { "ko": "사탕 주기", "en": "Give candy", "ja": "キャンディをあげる", "zh": "给糖果" },
+          "reactions": [{ "state": "celebrate", "say": [{ "ko": "해피 할로윈!", "en": "Happy Halloween!", "ja": "ハッピーハロウィン!", "zh": "万圣节快乐!" }], "effect": "confetti" }]
+        }
+      ]
+    }
+  ],
+  "accessories": {
+    "wand": {
+      "prompt": "no humans, toy magic wand, big chubby golden star on top, short thick pink handle, chibi item, cute, whole wand visible, full shot, centered, upright, simple background, white background, game asset, icon",
+      "seed": 4231,
+      "size": 34,
+      "layer": { "company": "*", "tier": "3", "at": "hand", "x": 3, "y": -12 }
+    }
+  }
+}

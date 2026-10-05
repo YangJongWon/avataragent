@@ -17,9 +17,15 @@
     "test:temporal": "set TEMPORAL_TEST_ADDRESS=localhost:7233&& node --experimental-strip-types --test tests/temporal-runtime.test.ts",
     "infra:up": "docker compose -f infra/compose.dev.yml up -d --wait",
     "infra:down": "docker compose -f infra/compose.dev.yml down",
-    "storage:migrate": "node --experimental-strip-types scripts/migrate-sqlite-to-postgres.ts"
+    "storage:migrate": "node --experimental-strip-types scripts/migrate-sqlite-to-postgres.ts",
+    "site:dev": "concurrently -n site,site-web -c green,yellow npm:site:server npm:site:web",
+    "site:server": "tsx watch site/server/index.ts",
+    "site:web": "vite -c site/vite.config.ts",
+    "site:build": "vite build -c site/vite.config.ts",
+    "site:start": "tsx site/server/index.ts"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@modelcontextprotocol/sdk": "^1.32.0",
     "@temporalio/activity": "^1.24.0",
     "@temporalio/client": "^1.24.0",

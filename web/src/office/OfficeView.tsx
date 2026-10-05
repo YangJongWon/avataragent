@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { TEAMS } from '../../../shared/teams.ts';
+import { officeTheme } from '../../../shared/theme-pack.ts';
 import type { Agent, Office, OfficeEvent, Snapshot } from '../../../shared/types.ts';
 import { OfficeScene, SCENE_H, SCENE_W } from './OfficeScene.ts';
 
@@ -24,6 +25,17 @@ const devTheme = () => (import.meta.env.DEV ? (new URLSearchParams(location.sear
 const pct = (x: number, y: number) => ({ left: `${(x / SCENE_W) * 100}%`, top: `${(y / SCENE_H) * 100}%` });
 const bubbleAt = (x: number, y: number) => pct(Math.min(Math.max(x, SCENE_W * 0.12), SCENE_W * 0.88), y);
 
+/** Beside the character, opening upward in the lower half; it never reaches past the office, scrolling itself if the office is small. */
+function menuAt(x: number, y: number) {
+  const left = pct(x > SCENE_W * 0.6 ? x - 40 : x + 40, 0).left;
+  if (y > SCENE_H / 2) {
+    const bottom = ((SCENE_H - y) / SCENE_H) * 100;
+    return { left, bottom: `${bottom}%`, maxHeight: `${100 - bottom}%` };
+  }
+  const top = ((y + 30) / SCENE_H) * 100;
+  return { left, top: `${top}%`, maxHeight: `${100 - top}%` };
+}
+
 export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<OfficeScene | null>(null);
@@ -34,9 +46,10 @@ export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
   const [, setTick] = useState(0);
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
-  const themeId = devTheme() ?? office.theme;
+  const themeId = devTheme() ?? officeTheme(office, snapshot.theme, snapshot.themeBookings);
+  const [themeLoads, setThemeLoads] = useState(0);
 
-  // Rebuilt when the office switches theme; the latest snapshot is applied once the new scene is ready.
+  // Rebuilt when the office switches theme or a dated variant comes due; the latest snapshot is applied once the new scene is ready.
   useEffect(() => {
     const scene = new OfficeScene({
       onAgentClick: (id) => {
@@ -48,6 +61,7 @@ export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
         setMenuAgent(id);
       },
       onBoardClick: () => actionsRef.current.onNewTask(),
+      onThemeStale: () => setThemeLoads((n) => n + 1),
     }, office.id, office.team, themeId);
     sceneRef.current = scene;
     scene.applySnapshot(snapshotRef.current);
@@ -56,7 +70,7 @@ export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
       scene.destroy();
       sceneRef.current = null;
     };
-  }, [themeId]);
+  }, [themeId, themeLoads]);
 
   useEffect(() => {
     sceneRef.current?.applySnapshot(snapshot);
@@ -87,6 +101,7 @@ export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
   const bubblePos = bubble ? anchor(bubble.id) : null;
   const menu = agentById(menuAgent);
   const menuPos = menu ? anchor(menu.id) : null;
+  const friendly = menu ? (sceneRef.current?.interactionsFor(menu.id) ?? []) : [];
 
   return (
     <div className="office-scroll">
@@ -122,7 +137,7 @@ export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
       {menu && menuPos && (
         <div
           className={`context-menu${menuPos.x > SCENE_W * 0.6 ? ' flip' : ''}`}
-          style={pct(menuPos.x > SCENE_W * 0.6 ? menuPos.x - 40 : menuPos.x + 40, Math.min(menuPos.y + 30, SCENE_H * 0.45))}
+          style={menuAt(menuPos.x, menuPos.y)}
           tabIndex={-1}
           onBlur={(e) => {
             // Don't close if focus moves to something inside the menu
@@ -155,6 +170,19 @@ export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
               {item.label}
             </button>
           ))}
+          {friendly.length > 0 && <div className="context-sep" />}
+          {friendly.map((item) => (
+            <button
+              key={item.id}
+              className="context-item friendly"
+              onClick={() => {
+                setMenuAgent(null);
+                sceneRef.current?.interact(menu.id, item.id);
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
       )}
 
@@ -163,7 +191,7 @@ export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
       </button>
       <div className="office-hint">
         <span className="hint-mouse">직원 클릭: 상태 · 우클릭: 메뉴 · 칠판 클릭: 업무 등록</span>
-        <span className="hint-touch">직원 탭: 상태 · 길게 누르기: 메뉴 · 칠판 탭: 업무 등록 · 좌우로 밀면 휴게실</span>
+        <span className="hint-touch">직원 탭: 상태 · 길게 누르기: 메뉴 · 칠판 탭: 업무 등록</span>
       </div>
     </div>
     </div>

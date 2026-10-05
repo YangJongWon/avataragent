@@ -64,6 +64,33 @@
   margin: 0;
 }
 
+.theme-own-note {
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 4px 0 8px;
+}
+
+.theme-bookings {
+  margin-top: 16px;
+  border-top: 2px dashed var(--line, #ccc);
+  padding-top: 10px;
+}
+.theme-booking,
+.theme-booking-actions {
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+.theme-booking input {
+  width: 64px;
+  text-align: center;
+}
+.theme-booking input.invalid {
+  border-color: #c0392b;
+}
+
 .theme-badge {
   align-self: flex-start;
   font-size: 11px;
@@ -82,6 +109,31 @@
 .theme-actions a.pixel-btn {
   color: inherit;
   text-decoration: none;
+}
+
+.agent-portrait {
+  display: block;
+  width: 128px;
+  height: 128px;
+  object-fit: contain;
+}
+
+.help-portrait {
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+
+.help-portrait .char-preview,
+.agent-card-portrait .char-preview {
+  max-height: 128px;
+  width: auto;
+}
+
+.agent-card-portrait {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
 }
 
 .pixel-btn.disabled {

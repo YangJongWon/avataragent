@@ -1,6 +1,17 @@
-import type { Container } from 'pixi.js';
+import type { Container, Texture } from 'pixi.js';
 import type { TeamMeta } from '../../../shared/teams.ts';
-import { DEFAULT_THEME, SPOT_NAMES, type Point, type Rect, type SceneLayout, type SpotName, type ThemeState } from '../../../shared/theme-pack.ts';
+import {
+  DEFAULT_THEME,
+  SPOT_NAMES,
+  type EmoteRule,
+  type EventRule,
+  type Interaction,
+  type Point,
+  type Rect,
+  type SceneLayout,
+  type SpotName,
+  type ThemeState,
+} from '../../../shared/theme-pack.ts';
 import type { Agent, Role } from '../../../shared/types.ts';
 
 /** A layout with every gap filled in. Seats are where a character's feet stand. */
@@ -11,6 +22,11 @@ export interface Layout {
   extraLounge: Point[];
   door: Point;
   spots: Record<SpotName, Rect>;
+  /** Passed on the way between desk and lounge; null when the two spaces are side by side and people walk straight. */
+  passage: Point | null;
+  waypoints: Record<string, Point>;
+  links: [string, string][];
+  walkSpeed: number;
 }
 
 export const DEFAULT_LAYOUT: Layout = {
@@ -45,6 +61,11 @@ export const DEFAULT_LAYOUT: Layout = {
     safe: { x: 700, y: 392, w: 70, h: 62 },
     archive: { x: 30, y: 404, w: 64, h: 44 },
   },
+  // The built-in office has a corridor between the spaces, with the door in it.
+  passage: { x: 805, y: 248 },
+  waypoints: {},
+  links: [],
+  walkSpeed: 170,
 };
 
 export function mergeLayout(from: Partial<SceneLayout>): Layout {
@@ -56,6 +77,11 @@ export function mergeLayout(from: Partial<SceneLayout>): Layout {
     // Pair every extra seat with a resting spot, reusing the defaults when a theme gives fewer.
     extraLounge: extraSeats.map((_, i) => from.extraLounge?.[i] ?? DEFAULT_LAYOUT.extraLounge[i % DEFAULT_LAYOUT.extraLounge.length]),
     door: from.door ?? DEFAULT_LAYOUT.door,
+    // Paths of their own replace the corridor; so does a lounge beside the work space.
+    passage: Object.keys(from.waypoints ?? {}).length || (from.areas?.work && from.areas.lounge) ? null : (from.door ?? DEFAULT_LAYOUT.door),
+    waypoints: from.waypoints ?? {},
+    links: from.links ?? [],
+    walkSpeed: from.walkSpeed ?? DEFAULT_LAYOUT.walkSpeed,
     spots: Object.fromEntries(SPOT_NAMES.map((name) => [name, from.spots?.[name] ?? DEFAULT_LAYOUT.spots[name]])) as Layout['spots'],
   };
 }
@@ -63,6 +89,8 @@ export function mergeLayout(from: Partial<SceneLayout>): Layout {
 /** What a character is doing right now; the theme decides how that looks. */
 export interface CharacterLook {
   walking: boolean;
+  /** Facing away from the viewer: walking up the room, or standing at something on the wall. */
+  back?: boolean;
   place: 'desk' | 'lounge';
   status: Agent['status'];
   expression: Agent['expression'];
@@ -72,6 +100,8 @@ export interface CharacterLook {
 
 export interface CharacterArt {
   view: Container;
+  /** The theme character shown, for rules about a character. */
+  characterId?: string;
   /** Height above the feet where the role tag sits (negative y); status icons float above it. */
   tagY: number;
   /** Clickable box around the feet: half width and height. */
@@ -88,6 +118,15 @@ export interface RoomArt {
   front: Container;
   /** One per extra seat, shown only while that seat is taken. */
   extraDesks: Container[];
+  /** Furniture drawn on its own, by prop id. */
+  props?: Map<string, PropArt>;
+}
+
+export interface PropArt {
+  spot?: string;
+  has(state: string): boolean;
+  /** Shows the picture for `state`, or the usual one with null. */
+  setState(state: string | null): void;
 }
 
 export interface OfficeTheme {
@@ -96,6 +135,15 @@ export interface OfficeTheme {
   background(team: TeamMeta): string;
   buildRoom(team: TeamMeta): RoomArt;
   createCharacter(): CharacterArt;
+  /** The theme's own rules, read before the app's. */
+  emotes?: EmoteRule[];
+  interactions?: Interaction[];
+  events?: EventRule[];
+  /** A loaded picture from the package, for icon images. */
+  texture?(path: string): Texture | undefined;
+  /** The dated variant showing; the office reloads once `variantAt` says another one is due. */
+  variant?: string | null;
+  variantAt?(now: Date): string | null;
 }
 
 /** Installed theme packages are served here as `<id>/theme.json` plus their files. */

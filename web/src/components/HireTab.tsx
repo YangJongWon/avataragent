@@ -2,12 +2,21 @@ import { useMemo, useState } from 'react';
 import { t, tpl } from '../../../shared/i18n.ts';
 import { allCompanies, allModels, companyOf, hatName, HATS, modelOf, tierHat, tierLabel, type Tier } from '../../../shared/models.ts';
 import { PERSONALITIES, personalityDescription, personalityLabel } from '../../../shared/personality.ts';
-import { SKINS, skinName, skinNote } from '../../../shared/skins.ts';
+import { builtinSkin, SKINS, skinName, skinNote } from '../../../shared/skins.ts';
 import { MAX_STAFF_PER_OFFICE, TEAMS } from '../../../shared/teams.ts';
-import type { Agent, Office, Role, Skin } from '../../../shared/types.ts';
+import { packSkin, splitPackSkin, type ThemeManifest } from '../../../shared/theme-pack.ts';
+import type { Agent, AgentSkin, Office, Role, Skin } from '../../../shared/types.ts';
 import { api } from '../api.ts';
+import { useThemeManifest } from '../useThemePack.ts';
 import { CharacterPreview } from './CharacterPreview.tsx';
 import { HatPreview } from './HatPreview.tsx';
+import { PackCharacterPreview } from './PackCharacterPreview.tsx';
+
+/** The theme character a skin points at, when it belongs to the office's theme. */
+const packCharacterOf = (skin: AgentSkin, theme: ThemeManifest | null) => {
+  const pack = splitPackSkin(skin);
+  return pack && theme?.id === pack.themeId ? (theme.characters.find((c) => c.id === pack.characterId) ?? null) : null;
+};
 
 const TIERS: Tier[] = [1, 2, 3];
 const ROLE_ORDER: Role[] = ['manager', 'researcher', 'writer', 'reviewer'];
@@ -41,9 +50,11 @@ function buildCandidates(seed: string, salt: number) {
 function AgentEditor({
   agent,
   roleTitle,
+  themeId,
   onError,
   onSaved,
-}: { agent: Agent; roleTitle: string; onError: (m: string) => void; onSaved: (m: string) => void }) {
+}: { agent: Agent; roleTitle: string; themeId?: string; onError: (m: string) => void; onSaved: (m: string) => void }) {
+  const theme = useThemeManifest(themeId);
   const [name, setName] = useState(agent.name);
   const [model, setModel] = useState(agent.model);
   const [rules, setRules] = useState(agent.rules);
@@ -53,6 +64,7 @@ function AgentEditor({
   const dirty = name !== agent.name || model !== agent.model || rules !== agent.rules || skin !== agent.skin || personality !== agent.personality;
 
   const candidates = useMemo(() => buildCandidates(agent.id, roll), [agent.id, roll]);
+  const ownCharacter = packCharacterOf(skin, theme);
 
   const save = async () => {
     try {
@@ -71,13 +83,17 @@ function AgentEditor({
       </div>
 
       <div className="hire-stage">
-        <CharacterPreview role={agent.role} skin={skin} modelId={model} expression="smile" />
+        {theme && ownCharacter ? (
+          <PackCharacterPreview themeId={theme.id} character={ownCharacter} />
+        ) : (
+          <CharacterPreview role={agent.role} skin={builtinSkin(skin)} modelId={model} expression="smile" />
+        )}
         <div className="hire-stage-info">
           <div className="hire-stage-name">{name || t('이름 없음')}</div>
           <div className="muted small">
             {modelOf(model).label} · {tierLabel(modelOf(model).tier)} · {companyOf(modelOf(model).vendor).name}
           </div>
-          <div className="muted small">{skinName(skin)}</div>
+          <div className="muted small">{ownCharacter ? `${ownCharacter.name} · ${theme?.name}` : skinName(skin)}</div>
           <div className="muted small">
             {PERSONALITIES.find((p) => p.id === personality)?.emoji} {personalityLabel(personality)}
           </div>
@@ -99,7 +115,23 @@ function AgentEditor({
               {skinName(s.id)}
             </button>
           ))}
+          {theme?.characters.map((c) => {
+            const id = packSkin(theme.id, c.id);
+            return (
+              <button
+                key={id}
+                className={`skin-option skin-option-art ${skin === id ? 'selected' : ''}`}
+                type="button"
+                title={`${theme.name} · ${theme.author} · ${theme.license}`}
+                onClick={() => setSkin(id)}
+              >
+                <PackCharacterPreview themeId={theme.id} character={c} />
+                {c.name}
+              </button>
+            );
+          })}
         </div>
+        {theme && <div className="muted small">{tpl('{theme} 테마의 캐릭터는 이 테마를 쓰는 사무실에서 보여요. 다른 사무실에서는 기본 픽셀로 보여요.', { theme: theme.name })}</div>}
       </div>
 
       <div className="field">
@@ -195,11 +227,12 @@ function AgentEditor({
 
 export function HireTab({
   office,
+  themeId,
   agents,
   onError,
   onNotice,
   onManageModels,
-}: { office: Office; agents: Agent[]; onError: (m: string) => void; onNotice: (m: string) => void; onManageModels: () => void }) {
+}: { office: Office; themeId: string; agents: Agent[]; onError: (m: string) => void; onNotice: (m: string) => void; onManageModels: () => void }) {
   const team = TEAMS[office.team];
   const [selectedId, setSelectedId] = useState<string | null>(agents[0]?.id ?? null);
   const [hireRole, setHireRole] = useState<Role>('researcher');
@@ -302,6 +335,7 @@ export function HireTab({
           key={selected.id}
           agent={selected}
           roleTitle={t(team.roleTitles[selected.role])}
+          themeId={themeId}
           onError={onError}
           onSaved={onNotice}
         />

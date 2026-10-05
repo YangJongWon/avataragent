@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
 import test from 'node:test';
 import { strToU8, unzipSync, zipSync } from 'fflate';
 
-process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'avataragent-themes-'));
+// Relative on purpose: the default DATA_DIR is './data'.
+process.env.DATA_DIR = relative(process.cwd(), mkdtempSync(join(tmpdir(), 'avataragent-themes-')));
 
-const { exportTheme, importTheme, imageSize, listThemes, removeTheme, themeFile, themeManifest } = await import('../server/themes.ts');
+const { exportTheme, importTheme, imageSize, isUsableSkin, isUsableTheme, listThemes, removeTheme, themeFile, themeManifest } = await import('../server/themes.ts');
+const { isAgentSkin, builtinSkin } = await import('../shared/skins.ts');
 
 /** Just enough of a PNG for the header checks. */
 function png(w: number, h: number) {
@@ -52,6 +54,7 @@ test('a package installs, lists, serves, exports and removes', () => {
 
   assert.equal(themeFile('cozy', 'assets/unused.png'), null, 'files the theme does not use are dropped');
   assert.ok(themeFile('cozy', 'LICENSE.txt'));
+  assert.ok(isAbsolute(themeFile('cozy', 'LICENSE.txt')!.file), 'res.sendFile needs an absolute path');
   assert.equal(themeFile('cozy', '../../office.db'), null);
   assert.equal(themeFile('pixel', 'theme.json'), null);
 
@@ -68,6 +71,38 @@ test('a package installs, lists, serves, exports and removes', () => {
   assert.equal(themeManifest('cozy')?.name, '아늑한 사무실', 'an exported theme imports again unchanged');
   assert.equal(readFileSync(themeFile('cozy', 'theme.css')!.file, 'utf8'), css);
   removeTheme('cozy');
+});
+
+test('offices and agents can only use what is installed', () => {
+  importTheme(pack(baseFiles()));
+  assert.ok(isUsableTheme('pixel'));
+  assert.ok(isUsableTheme('cozy'));
+  assert.ok(!isUsableTheme('missing'));
+  assert.ok(isUsableSkin('bishoujo'));
+  assert.ok(isUsableSkin('cozy:mina'));
+  assert.ok(!isUsableSkin('cozy:nobody'));
+  assert.ok(!isUsableSkin('missing:mina'));
+  removeTheme('cozy');
+  assert.ok(!isUsableSkin('cozy:mina'));
+
+  // Stored skins are checked by shape only, so a removed theme does not wipe choices on restart.
+  assert.ok(isAgentSkin('cozy:mina'));
+  assert.ok(!isAgentSkin('cozy:'));
+  assert.ok(!isAgentSkin('../x:y'));
+  assert.equal(builtinSkin('cozy:mina'), 'pixel');
+  assert.equal(builtinSkin('pinkgirl'), 'pinkgirl');
+});
+
+test('a site font installs as WOFF2 and anything else under that name is refused', () => {
+  const font = new Uint8Array(64);
+  font.set(strToU8('wOF2'));
+  const site = { site: { font: { file: 'fonts/hand.woff2' }, radius: 8 } };
+  importTheme(pack({ ...baseFiles(site), 'fonts/hand.woff2': font }));
+  assert.ok(themeFile('cozy', 'fonts/hand.woff2'));
+  assert.equal(themeFile('cozy', 'fonts/hand.woff2')!.contentType, 'font/woff2');
+  removeTheme('cozy');
+  assert.throws(() => importTheme(pack({ ...baseFiles(site), 'fonts/hand.woff2': strToU8('<html>not a font</html>'.padEnd(64)) })), /WOFF2/);
+  assert.deepEqual(listThemes(), []);
 });
 
 test('a zip of the theme folder works too', () => {

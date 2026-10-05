@@ -6,6 +6,7 @@ import { setCatalog, type ApiKind, type Company, type ModelEntry, type Tier } fr
 import type { Personality } from '../../shared/personality.ts';
 import type { Playbook, PlaybookChange } from '../../shared/playbook.ts';
 import type { Plan } from '../../shared/plans.ts';
+import type { ThemeBooking } from '../../shared/theme-pack.ts';
 import type {
   Agent,
   AiMode,
@@ -20,7 +21,7 @@ import type {
   ServerMessage,
   ShareLink,
   ShareRole,
-  Skin,
+  AgentSkin,
   Snapshot,
   TeamId,
   WorkflowStepInput,
@@ -56,13 +57,17 @@ export const api = {
   createShare: (input: { name: string; role: ShareRole; officeIds: string[] | 'all'; expiresInDays: number }) =>
     call<ShareLink>('POST', '/api/shares', input),
   deleteShare: (shareId: string) => call('DELETE', `/api/shares/${shareId}`),
-  updateOffice: (officeId: string, patch: { autoRun?: boolean; autoImprove?: boolean; budgetKrw?: number | null; theme?: string; themeCss?: boolean }) =>
+  updateOffice: (officeId: string, patch: { autoRun?: boolean; autoImprove?: boolean; budgetKrw?: number | null; theme?: string | null; themeCss?: boolean }) =>
     call('PUT', `/api/offices/${officeId}`, patch),
+  setCompanyTheme: (theme: string) => call<{ theme: string }>('PUT', '/api/theme', { theme }),
+  setThemeBookings: (bookings: ThemeBooking[]) => call<{ bookings: ThemeBooking[] }>('PUT', '/api/theme-bookings', { bookings }),
+  setSiteTheme: (theme: string | null) => call<{ theme: string | null }>('PUT', '/api/site-theme', { theme }),
   setPlan: (plan: Plan) => call('PUT', '/api/plan', { plan }),
   setLanguage: (language: Language) => call<{ language: Language }>('PUT', '/api/language', { language }),
   startCheckout: (plan: Plan) => call<{ url: string }>('POST', '/api/billing/checkout', { plan }),
   cancelSubscription: () => call('POST', '/api/billing/cancel'),
   resumeSubscription: () => call('POST', '/api/billing/resume'),
+  applyLicense: (token: string) => call('POST', '/api/billing/license', { token }),
   setAssignee: (taskId: string, assigneeId: string | null) => call('PUT', `/api/tasks/${taskId}/assignee`, { assigneeId }),
   createMember: (body: { loginId: string; name: string; password: string; role: ShareRole; officeIds: string[] | 'all' }) =>
     call<Member>('POST', '/api/members', body),
@@ -86,7 +91,7 @@ export const api = {
     call('POST', `/api/tasks/${taskId}/request-changes`, { comment }),
   setActionEnabled: (taskId: string, actionId: string, enabled: boolean) =>
     call<PlannedAction>('PUT', `/api/tasks/${taskId}/actions/${actionId}`, { enabled }),
-  updateAgent: (agentId: string, patch: { name?: string; rules?: string; model?: string; skin?: Skin; personality?: Personality; workPolicy?: Agent['workPolicy'] }) =>
+  updateAgent: (agentId: string, patch: { name?: string; rules?: string; model?: string; skin?: AgentSkin; personality?: Personality; workPolicy?: Agent['workPolicy'] }) =>
     call('PUT', `/api/agents/${agentId}`, patch),
   hireAgent: (officeId: string, body: { role: Role; name?: string; personality?: Personality }) =>
     call<Agent>('POST', `/api/offices/${officeId}/agents`, body),

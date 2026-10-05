@@ -3,6 +3,8 @@
  * Korean source string, and anything without a translation falls back to that source.
  * Adding a language therefore never blanks a screen or shows a raw key.
  */
+import { THEME_CATALOGUE, THEME_TEMPLATES } from './i18n-themes.ts';
+
 export type Language = 'ko' | 'zh' | 'ja' | 'en';
 
 export interface LanguageMeta {
@@ -45,7 +47,9 @@ const PLACEHOLDER = /\{(\w+)\}/g;
 
 type Catalogue = Record<string, Partial<Record<Language, string>>>;
 
-const CATALOGUE: Catalogue = {
+export const CATALOGUE: Catalogue = {
+  // Theme screens keep their text in i18n-themes.ts; entries below win on a clash.
+  ...THEME_CATALOGUE,
   // ── 환경 설정 ───────────────────────────────────────────────
   '환경 설정': { zh: '环境设置', ja: '環境設定', en: 'Settings' },
   '화면 언어': { zh: '界面语言', ja: '表示言語', en: 'Display language' },
@@ -167,7 +171,7 @@ const CATALOGUE: Catalogue = {
   },
   '자료를 모으거나 분석 메모를 남겨요. 여러 개 둘 수 있어요.': {
     zh: '收集资料或留下分析备忘。可以放多个。',
-    ja: '資料を集め거나分析メモを残します。複数設置できます。',
+    ja: '資料を集めて分析メモを残します。複数まとめられます。',
     en: 'Gathers sources or leaves analysis notes. Several allowed.',
   },
   '최종 결과물을 써요. 하나만 둘 수 있어요.': {
@@ -303,12 +307,12 @@ const CATALOGUE: Catalogue = {
   },
   '마음에 드는 캐릭터를 눌러 바로 적용하세요.': {
     zh: '点击喜欢的角色即可立即应用。',
-    ja: '気になるキャラクターを押すと 바로適用されます。',
+    ja: '気に入るキャラクターを選んですぐ適用してください。',
     en: 'Click a character you like to apply it.',
   },
   '지시를 어떤 방식으로 수행할지 정해요. 실제 AI에게는 매번 이 스타일이 함께 전달돼요.': {
     zh: '决定如何执行指示。每次调用真实 AI 时都会一并传达这个风格。',
-    ja: '指示をどう実行するかを決めます。実際のAIには毎回このスタイルが 함께渡されます。',
+    ja: '指示をどう実行するかを決めます。実際のAIでは毎回このスタイルが関数の一部になります。',
     en: 'Decides how instructions get carried out. Every real AI call passes this style along.',
   },
   '직원 고용': { zh: '雇用成员', ja: 'メンバーを雇用', en: 'Hire staff' },
@@ -323,7 +327,7 @@ const CATALOGUE: Catalogue = {
   },
   '같은 역할 직원이 여럿이면 업무 흐름을 짤 때 단계마다 담당자를 고를 수 있어요.': {
     zh: '同一职责有多名成员时，编排任务流程可以逐步选择负责人。',
-    ja: '同じ役割のメンバーが複数いる場合、タスクのフローを組む 단계ごとに担当者を選べます。',
+    ja: '同じ役割のメンバーが複数いる場合、タスクを段階に分けて担当者を選べます。',
     en: 'With several people in a role, you can pick an owner at each step when building a journey.',
   },
   '모자 모양 = AI 회사': { zh: '帽子款式 = AI 公司', ja: '帽子の形 = AI会社', en: 'Hat shape = AI vendor' },
@@ -464,7 +468,7 @@ const CATALOGUE: Catalogue = {
   '검수자가 매긴 점수': { zh: '审查者给的分数', ja: 'レビュー担当者の点数', en: 'Reviewer score' },
   '다시 쓰지 않고 바로 통과한 비율': {
     zh: '未经返工直接通过的比例',
-    ja: 'やり直しなしで 바로合格した割合',
+    ja: '再試行なしで直接合格した割合',
     en: 'Passed first time, no rework',
   },
   '통과시킨 결과를 사용자도 승인한 비율': {
@@ -560,7 +564,8 @@ const CATALOGUE: Catalogue = {
  * Sentences carrying `{placeholder}` holes. Translators may reorder or drop holes,
  * which a plain string lookup could not express.
  */
-const TEMPLATES: Record<string, Partial<Record<Language, string>>> = {
+export const TEMPLATES: Record<string, Partial<Record<Language, string>>> = {
+  ...THEME_TEMPLATES,
   // ── 업무 생성·진행 ──────────────────────────────────────────
   '대기열에 업무 추가': { zh: '已加入队列：{title}', ja: '待機列に追加：{title}', en: 'Queued: {title}' },
   '칠판에 업무 등록': { zh: '已登记任务：{title}', ja: 'ボードに登録：{title}', en: 'Task created: {title}' },
@@ -654,6 +659,48 @@ const TEMPLATES: Record<string, Partial<Record<Language, string>>> = {
   '모델 관리': { zh: '模型管理 · {summary}', ja: 'モデル管理 · {summary}', en: 'Models · {summary}' },
   '대화 전달': { zh: '💬 {by} 转发对话到 {label}：{author}：{text}', ja: '💬 {by}さんが {label} に会話を転送：{author}：{text}', en: '💬 {by} forwarded to {label}: {author}: {text}' },
   '{who}에게 반영했어요.': { zh: '已应用到 {who}。', ja: '{who} に反映しました。', en: 'Applied to {who}.' },
+  // ── 개선 제안理由 ───────────────────────────────────────────
+  // `shared/performance.ts`가 만드는改进 제안 문장. 어순이 언어마다 달라 통째로Catalog에 둔다.
+  '조사 정확도가 평균 {score}점으로 낮아요. {personality} 성향으로 바꿔 보세요.': {
+    zh: '平均准确率只有 {score} 分，太低了。试试改用{personality}。',
+    ja: '平均正確率が {score} 点と低いです。{personality} に変えてみてください。',
+    en: 'Average research accuracy is only {score}. Try switching to {personality}.',
+  },
+  '조사 정확도가 평균 {score}점으로 낮아요. 이미 {personality} 성향이라 한 단계 위 모델({model})을 써 보세요. 비용이 늘어요.': {
+    zh: '平均准确率只有 {score} 分，太低了。既然已经是{personality}，可以试试高一级的模型（{model}）。成本会上升。',
+    ja: '平均正確率が {score} 点と低いです。すでに {personality} なので、一段上のモデル（{model}）を試します。コストは上がります。',
+    en: 'Average research accuracy is only {score}. Since it is already {personality}, try the model one step up ({model}). It costs more.',
+  },
+  '조사는 정확한데({score}점) 평균 {slow}로 느려요. {personality} 성향으로 바꾸면 빨라지고 비용도 줄어요.': {
+    zh: '调研很准（{score} 分），但平均要 {slow}，太慢了。改用{personality}会更快，成本也更低。',
+    ja: '調査は正確（{score} 点）ですが、平均 {slow} と遅いです。{personality} に変えると速くなり、コストも下がります。',
+    en: 'Research is accurate ({score}) but averages {slow}, which is slow. Switching to {personality} is faster and cheaper.',
+  },
+  '작성물이 검수를 {count}번 중 {approved}번만 통과했어요. {personality} 성향으로 바꿔 보세요.': {
+    zh: '{count} 篇稿子里只有 {approved} 篇通过了评审。试试改用{personality}。',
+    ja: '成果物 {count} 件のうち、レビューを通ったのは {approved} 件だけでした。{personality} に変えてみてください。',
+    en: 'Only {approved} of {count} drafts passed review. Try switching to {personality}.',
+  },
+  '작성물이 검수를 {count}번 중 {approved}번만 통과했어요. 이미 {personality} 성향이라 한 단계 위 모델({model})을 써 보세요. 비용이 늘어요.': {
+    zh: '{count} 篇稿子里只有 {approved} 篇通过了评审。既然已经是{personality}，可以试试高一级的模型（{model}）。成本会上升。',
+    ja: '成果物 {count} 件のうち、レビューを通ったのは {approved} 件だけでした。すでに {personality} なので、一段上のモデル（{model}）を試します。コストは上がります。',
+    en: 'Only {approved} of {count} drafts passed review. Since it is already {personality}, try the model one step up ({model}). It costs more.',
+  },
+  '검수에서 통과시킨 결과를 사용자가 {checked}번 중 {falsePasses}번 다시 고치게 했어요. {personality} 성향으로 바꿔 보세요.': {
+    zh: '评审放行的结果里，{checked} 次中有 {falsePasses} 次被用户打回重做。试试改用{personality}。',
+    ja: 'レビューで通とした結果のうち、{checked} 回中 {falsePasses} 回、ユーザーの手直しに戻りました。{personality} に変えてみてください。',
+    en: 'Results the review passed needed rework by the user {falsePasses} times out of {checked}. Try switching to {personality}.',
+  },
+  '검수에서 통과시킨 결과를 사용자가 {checked}번 중 {falsePasses}번 다시 고치게 했어요. 이미 {personality} 성향이라 한 단계 위 모델({model})을 써 보세요. 비용이 늘어요.': {
+    zh: '评审放行的结果里，{checked} 次中有 {falsePasses} 次被用户打回重做。既然已经是{personality}，可以试试高一级的模型（{model}）。成本会上升。',
+    ja: 'レビューで通とした結果のうち、{checked} 回中 {falsePasses} 回、ユーザーの手直しに戻りました。すでに {personality} なので、一段上のモデル（{model}）を試します。コストは上がります。',
+    en: 'Results the review passed needed rework by the user {falsePasses} times out of {checked}. Since it is already {personality}, try the model one step up ({model}). It costs more.',
+  },
+  '검수가 {count}번 모두 통과했고 사용자와도 어긋나지 않았어요. 한 단계 아래 모델({model})로도 충분할 수 있어요. 비용이 줄어요.': {
+    zh: '{count} 次评审全部通过，也和用户判断一致。换成低一级的模型（{model}）可能也够用。成本会降低。',
+    ja: 'レビュー {count} 回すべて通り、ユーザーの判断とも一致しました。一段下のモデル（{model}）でも十分かもしれません。コストは下がります。',
+    en: 'All {count} reviews passed and matched the user. The model one step down ({model}) may be enough. It costs less.',
+  },
   '지금은 제안이 없어요. 같은 설정(모델·성격)으로 {n}번 이상 기록이 쌓이면 문제가 보일 때 제안해요.': {
     zh: '目前没有建议。同一设置（模型·性格）累积 {n} 次以上记录后，看出问题就会提出来。',
     ja: '今は提案がありません。同じ設定（モデル・性格）で {n}回以上記録がたまると、問題が見えたときに提案します。',
@@ -755,9 +802,13 @@ const TEMPLATES: Record<string, Partial<Record<Language, string>>> = {
 function lookup(source: string, language: Language) {
   const direct = CATALOGUE[source]?.[language];
   if (direct !== undefined) return direct;
+  if (source.includes('{')) return undefined;
   // 이 문장에 {placeholder} 가 없으면 템플릿으로 저장돼 있어도 문장처럼 쓸 수 있다.
   // 빈 칸이 있으면 값을 채워야 하므로 t()로는 해석하지 않는다.
-  return source.includes('{') ? undefined : TEMPLATES[source]?.[language];
+  const template = TEMPLATES[source]?.[language];
+  // 번역 쪽에만 구멍이 남은 템플릿은 t()로 열면 {title} 이 그대로 보인다.
+  // 그 문장은 tpl()로 불러야 한다.
+  return template !== undefined && !template.includes('{') ? template : undefined;
 }
 
 function lookupTemplate(source: string, language: Language) {

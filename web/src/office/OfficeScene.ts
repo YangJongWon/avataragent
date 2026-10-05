@@ -1,18 +1,35 @@
-import { Application, Container, Graphics, Text, type FederatedPointerEvent } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Text, type FederatedPointerEvent, type Texture } from 'pixi.js';
+import { currentLanguage } from '../../../shared/i18n.ts';
 import { TEAMS, type TeamMeta } from '../../../shared/teams.ts';
-import { DEFAULT_THEME, type Point, type ThemeState } from '../../../shared/theme-pack.ts';
+import { DEFAULT_EMOTES, DEFAULT_INTERACTIONS } from '../../../shared/theme-defaults.ts';
+import {
+  DEFAULT_THEME,
+  type EffectName,
+  type EmoteRule,
+  type EventRule,
+  type IconSpec,
+  type Interaction,
+  type Point,
+  type Reaction,
+  THEME_EVENTS,
+  type ThemeEvent,
+  type ThemeState,
+} from '../../../shared/theme-pack.ts';
+import { findRoute, firstMatch, localText, pickOne, type LocalText, type RuleContext } from '../../../shared/theme-rules.ts';
 import { currentStepLabel, planProgress } from '../../../shared/workflow.ts';
 import { type Agent, type OfficeEvent, type Role, type Snapshot, type StepKind, type TeamId } from '../../../shared/types.ts';
 import { krw } from '../format.ts';
-import { loadTheme, type CharacterArt, type Layout, type OfficeTheme } from './theme.ts';
+import { loadTheme, type CharacterArt, type Layout, type OfficeTheme, type PropArt } from './theme.ts';
 
 export const SCENE_W = 1000;
 export const SCENE_H = 480;
 
 const FONT = '"Malgun Gothic", "Apple SD Gothic Neo", sans-serif';
 
-const WORK_GLYPH: Record<Role, string> = { manager: '📋', researcher: '🔍', writer: '✏️', reviewer: '🧐' };
-const LOUNGE_GLYPH: Record<Role, string> = { manager: '☕', researcher: '📖', writer: '💧', reviewer: '☕' };
+/** How long a line stays in a speech bubble. */
+const SAY_MS = 3200;
+/** How long a door stays open for someone walking through. */
+const DOOR_MS = 1400;
 
 /** How long an event moment (a stamp, a thank-you) shows before the character goes back to its status. */
 const MOMENT_MS = 2400;
@@ -28,15 +45,48 @@ export interface SceneCallbacks {
   onAgentClick: (agentId: string) => void;
   onAgentContextMenu: (agentId: string) => void;
   onBoardClick: () => void;
+  /** The theme's dated variant changed (Halloween began): the office should load the theme again. */
+  onThemeStale?: () => void;
 }
 
+/** A leg of a walk; only the last leg of a trip resolves it. */
 interface Walk extends Point {
-  done: () => void;
+  done?: () => void;
 }
+
+/** What every character shares from the scene. */
+interface CharacterEnv {
+  door: Point;
+  passage: Point | null;
+  speed: number;
+  team: TeamId;
+  emotes: EmoteRule[];
+  route(from: Point, to: Point): Point[];
+  texture(path: string): Texture | undefined;
+  /** Someone sets off for home or walks in; theme rules may have them say something. */
+  onDoor(view: CharacterView, kind: 'agent.arrived' | 'agent.left'): void;
+  /** Shows the door prop open for a moment, if the theme drew one. */
+  openDoor(): void;
+}
+
+const say = (lines: LocalText[] | undefined) => {
+  const line = lines && pickOne(lines);
+  return line ? localText(line, currentLanguage()) : '';
+};
 
 const LONG_PRESS_MS = 500;
 
 type Place = 'desk' | 'lounge';
+
+/** A sheet of paper; staff carry these to each other instead of throwing them. */
+function paper(color: string) {
+  const g = new Graphics();
+  g.rect(-7, -9, 14, 18).fill(color).stroke({ width: 1.5, color: '#7f8c8d' });
+  g.rect(-4, -5, 8, 1.5).fill('#95a5a6');
+  g.rect(-4, -1, 8, 1.5).fill('#95a5a6');
+  g.rect(-4, 3, 6, 1.5).fill('#95a5a6');
+  return g;
+}
 
 class CharacterView {
   root = new Container();
@@ -44,6 +94,15 @@ class CharacterView {
   icon = new Container();
   iconBg = new Graphics();
   iconText: Text;
+  iconImage = new Sprite();
+  private iconKey = '';
+  private speech = new Container();
+  private speechBg = new Graphics();
+  private speechText: Text;
+  private speechUntil = 0;
+  private sayRule: EmoteRule | undefined;
+  private nextSay = 0;
+  private nextRules = 0;
   label: Text;
   labelBg = new Graphics();
   roleTag = new Container();
@@ -57,7 +116,10 @@ class CharacterView {
   status: Agent['status'] = 'idle';
   place: Place;
   private moment: { state: ThemeState; until: number } | null = null;
+  private held: Graphics | null = null;
   private offDuty = false;
+  /** Seen from behind: set by walking up the room, kept while standing where the walk ended, cleared back at the seat. */
+  private back = false;
 
   constructor(
     public agent: Agent,
@@ -65,7 +127,7 @@ class CharacterView {
     roleTitle: string,
     startInLounge: boolean,
     private art: CharacterArt,
-    private door: Point,
+    private env: CharacterEnv,
     public home: Point,
     public rest: Point,
     startOffDuty = false,
@@ -88,8 +150,18 @@ class CharacterView {
 
     this.iconText = new Text({ text: '', style: { fontFamily: FONT, fontSize: 16, fontWeight: 'bold', fill: '#ffffff' } });
     this.iconText.anchor.set(0.5);
-    this.icon.addChild(this.iconBg, this.iconText);
+    this.iconImage.anchor.set(0.5);
+    this.icon.addChild(this.iconBg, this.iconText, this.iconImage);
     this.root.addChild(this.icon);
+
+    this.speechText = new Text({
+      text: '',
+      style: { fontFamily: FONT, fontSize: 12, fontWeight: 'bold', fill: '#3d3449', wordWrap: true, wordWrapWidth: 170, breakWords: true },
+    });
+    this.speechText.anchor.set(0.5, 1);
+    this.speech.addChild(this.speechBg, this.speechText);
+    this.speech.visible = false;
+    this.root.addChild(this.speech);
 
     this.label = new Text({ text: '', style: { fontFamily: FONT, fontSize: 12, fontWeight: 'bold', fill: '#ffffff' } });
     this.label.anchor.set(0.5, 0);
@@ -133,7 +205,75 @@ class CharacterView {
       .roundRect(-this.label.width / 2 - 5, 6, this.label.width + 10, this.label.height + 4, 4)
       .fill({ color: '#2b2b3a', alpha: 0.75 });
     this.root.alpha = agent.paused ? 0.55 : 1;
-    this.updateIcon();
+    this.nextRules = 0;
+  }
+
+  /** What theme rules about this person are checked against. */
+  context(now = new Date()): RuleContext {
+    return {
+      status: this.agent.status,
+      place: this.place,
+      role: this.agent.role,
+      character: this.art.characterId,
+      expression: this.agent.expression,
+      team: this.env.team,
+      walking: this.walks.length > 0,
+      now,
+    };
+  }
+
+  /** Shows a line in a speech bubble over the head for a few seconds. */
+  say(text: string) {
+    if (!text) return;
+    this.speechText.text = text;
+    const w = this.speechText.width + 14;
+    const h = this.speechText.height + 8;
+    this.speechBg.clear();
+    this.speechBg
+      .roundRect(-w / 2, -h - 2, w, h, 8)
+      .fill({ color: '#ffffff', alpha: 0.95 })
+      .stroke({ width: 1.5, color: '#3d3449' })
+      .poly([-5, -3, 5, -3, 0, 5])
+      .fill('#ffffff');
+    this.speechText.y = -6;
+    this.speech.visible = true;
+    this.speechUntil = performance.now() + SAY_MS;
+  }
+
+  /** Re-reads the emote rules: the first rule with an icon draws it, the first with lines may speak. */
+  private updateRules() {
+    const ctx = this.context();
+    this.showIcon(firstMatch(this.env.emotes, ctx, (r) => r.icon !== undefined)?.icon ?? null);
+    const rule = firstMatch(this.env.emotes, ctx, (r) => Boolean(r.say));
+    const now = performance.now();
+    if (rule !== this.sayRule) {
+      this.sayRule = rule;
+      this.nextSay = rule ? now + 400 + Math.random() * 1600 : 0;
+    }
+    if (rule && this.nextSay && now >= this.nextSay && this.present) {
+      this.say(say(rule.say));
+      this.nextSay = rule.every ? now + rule.every * 1000 * (0.8 + Math.random() * 0.4) : 0;
+    }
+  }
+
+  private showIcon(icon: IconSpec | null) {
+    const key = icon ? `${icon.text ?? ''}|${icon.image ?? ''}|${icon.color ?? ''}` : '';
+    if (key === this.iconKey) return;
+    this.iconKey = key;
+    const texture = icon?.image ? this.env.texture(icon.image) : undefined;
+    this.iconImage.visible = Boolean(texture);
+    if (texture) {
+      this.iconImage.texture = texture;
+      this.iconImage.scale.set(Math.min(1, 28 / Math.max(texture.width, texture.height)));
+    }
+    this.iconText.text = texture ? '' : (icon?.text ?? '');
+    this.iconBg.clear();
+    if (icon?.color && !texture) {
+      this.iconBg.circle(0, 0, 12).fill(icon.color).stroke({ width: 2, color: '#ffffff' });
+      this.iconText.style.fontSize = 16;
+    } else {
+      this.iconText.style.fontSize = 18;
+    }
   }
 
   /** Plays a short event moment, such as being thanked or having work sent back. */
@@ -141,11 +281,34 @@ class CharacterView {
     this.moment = { state, until: performance.now() + MOMENT_MS };
   }
 
+  /** Holds a document in front of the body, or puts it away with null. */
+  carry(color: string | null) {
+    this.held?.destroy();
+    this.held = null;
+    if (!color) return;
+    this.held = paper(color);
+    this.held.position.set(12, -this.art.hit.h * 0.45);
+    this.sprite.addChild(this.held);
+  }
+
+  /** Where this person is heading, or where they stand. */
+  get destination(): Point {
+    return this.walks.at(-1) ?? this.pos;
+  }
+
+  get seat(): Point {
+    return this.place === 'lounge' ? this.rest : this.home;
+  }
+
+  get present() {
+    return this.root.visible && !this.offDuty;
+  }
+
   setPlace(place: Place) {
     if (this.offDuty) return;
     if (place === this.place) return;
     this.place = place;
-    void this.walkTo(this.door);
+    if (this.env.passage) void this.walkTo(this.env.passage);
     void this.walkTo(place === 'lounge' ? this.rest : this.home);
   }
 
@@ -153,10 +316,17 @@ class CharacterView {
     if (value === this.offDuty) return;
     this.offDuty = value;
     if (value) {
-      void this.walkTo(this.door).then(() => { if (this.offDuty) this.root.visible = false; });
+      this.env.onDoor(this, 'agent.left');
+      void this.walkTo(this.env.door).then(() => {
+        if (!this.offDuty) return;
+        this.env.openDoor();
+        this.root.visible = false;
+      });
     } else {
       this.root.visible = true;
-      this.pos = { ...this.door };
+      this.pos = { ...this.env.door };
+      this.env.openDoor();
+      this.env.onDoor(this, 'agent.arrived');
       void this.walkTo(this.place === 'lounge' ? this.rest : this.home);
     }
   }
@@ -168,37 +338,17 @@ class CharacterView {
     void this.walkTo(this.place === 'lounge' ? rest : home);
   }
 
-  private updateIcon() {
-    const { status, expression, role } = this.agent;
-    let text = '';
-    let bg: string | null = null;
-    if (status === 'help_requested') [text, bg] = ['?', '#f39c12'];
-    else if (status === 'awaiting_approval') [text, bg] = ['!', '#3498db'];
-    else if (status === 'error') [text, bg] = ['!', '#e74c3c'];
-    else if (status === 'paused') [text, bg] = ['II', '#7f8c8d'];
-    else if (expression === 'celebrate') text = '⭐';
-    else if (expression === 'thanks') text = '💗';
-    else if (status === 'working') text = WORK_GLYPH[role];
-    else if (this.place === 'lounge' && this.walks.length === 0) text = LOUNGE_GLYPH[role];
-
-    this.iconText.text = text;
-    this.iconBg.clear();
-    if (bg) {
-      this.iconBg.circle(0, 0, 12).fill(bg).stroke({ width: 2, color: '#ffffff' });
-      this.iconText.style.fontSize = 16;
-    } else {
-      this.iconText.style.fontSize = 18;
-    }
-  }
-
+  /** Walks to `target` along the theme's paths. Falling three trips behind, they skip ahead and stand there. */
   walkTo(target: Point) {
-    if (this.walks.length >= 3) {
-      for (const w of this.walks) w.done();
+    if (this.walks.filter((w) => w.done).length >= 3) {
+      for (const w of this.walks) w.done?.();
       this.walks = [];
       this.pos = { ...target };
+      this.back = false;
       return Promise.resolve();
     }
-    return new Promise<void>((resolve) => this.walks.push({ ...target, done: resolve }));
+    const legs = this.env.route(this.destination, target);
+    return new Promise<void>((resolve) => legs.forEach((p, i) => this.walks.push({ x: p.x, y: p.y, done: i === legs.length - 1 ? resolve : undefined })));
   }
 
   update(dt: number) {
@@ -211,16 +361,20 @@ class CharacterView {
       const dx = walk.x - this.pos.x;
       const dy = walk.y - this.pos.y;
       const dist = Math.hypot(dx, dy);
-      const step = (170 * dt) / 1000;
+      const step = (this.env.speed * dt) / 1000;
       if (dist <= step) {
         this.pos = { x: walk.x, y: walk.y };
         this.walks.shift();
-        walk.done();
-        if (this.walks.length === 0) this.updateIcon();
+        walk.done?.();
+        if (this.walks.length === 0) {
+          if (this.pos.x === this.seat.x && this.pos.y === this.seat.y) this.back = false;
+          this.nextRules = 0;
+        }
       } else {
         this.pos.x += (dx / dist) * step;
         this.pos.y += (dy / dist) * step;
         this.sprite.scale.x = dx < -1 ? -1 : dx > 1 ? 1 : this.sprite.scale.x;
+        this.back = dy < -Math.abs(dx) * 0.5;
       }
       offsetY = -Math.abs(Math.sin(this.phase * 12)) * 4;
     } else if (this.status === 'working') {
@@ -241,6 +395,7 @@ class CharacterView {
     if (this.moment && performance.now() > this.moment.until) this.moment = null;
     this.art.update(this.phase, {
       walking: Boolean(walk),
+      back: this.back,
       place: this.place,
       status: this.status,
       expression: this.expression,
@@ -252,6 +407,14 @@ class CharacterView {
     this.sprite.rotation = rotation;
     this.roleTag.y = this.iconY + 22;
     this.icon.y = this.iconY + Math.sin(this.phase * 4) * 2;
+    this.speech.y = this.iconY - 14;
+
+    const now = performance.now();
+    if (now >= this.nextRules) {
+      this.nextRules = now + 300;
+      this.updateRules();
+    }
+    if (this.speech.visible && now > this.speechUntil) this.speech.visible = false;
   }
 }
 
@@ -281,6 +444,12 @@ export class OfficeScene {
   private safeText!: Text;
   private pending: Snapshot | null = null;
   private tasks: Snapshot['tasks'] = [];
+  private env!: CharacterEnv;
+  private interactions: Interaction[] = [];
+  private events: EventRule[] = [];
+  private props = new Map<string, PropArt>();
+  private propTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private variantCheck = 0;
 
   private team: TeamMeta;
 
@@ -321,6 +490,25 @@ export class OfficeScene {
     host.appendChild(canvas);
 
     const room = this.theme.buildRoom(this.team);
+    this.props = room.props ?? new Map();
+    const own = this.theme.interactions ?? [];
+    this.interactions = [...DEFAULT_INTERACTIONS.filter((d) => !own.some((o) => o.id === d.id)), ...own].filter((i) => !i.hidden);
+    this.events = this.theme.events ?? [];
+    const { waypoints, links } = this.layout;
+    this.env = {
+      door: this.layout.door,
+      passage: this.layout.passage,
+      speed: this.layout.walkSpeed,
+      team: this.team.id,
+      emotes: [...(this.theme.emotes ?? []), ...DEFAULT_EMOTES],
+      route: (from, to) => findRoute({ waypoints, links }, from, to),
+      texture: (path) => this.theme.texture?.(path),
+      onDoor: (view, kind) => this.themeEvent(kind, [view]),
+      openDoor: () => {
+        const door = [...this.props.entries()].find(([, p]) => p.spot === 'door' && p.has('open'));
+        if (door) this.setProp(door[0], 'open', DOOR_MS);
+      },
+    };
     this.app.stage.addChild(room.back);
     this.buildOverlay();
     this.deskLayer.addChild(room.front, ...room.extraDesks);
@@ -333,7 +521,63 @@ export class OfficeScene {
 
   destroy() {
     this.destroyed = true;
+    for (const timer of this.propTimers.values()) clearTimeout(timer);
     if (this.ready) this.app.destroy(true, { children: true });
+  }
+
+  /** The friendly menu items (greet…) that fit this person right now. */
+  interactionsFor(agentId: string): { id: string; label: string }[] {
+    const c = this.chars.get(agentId);
+    if (!c || !c.present) return [];
+    const ctx = c.context();
+    return this.interactions
+      .filter((i) => firstMatch([i], ctx) && firstMatch(i.reactions, ctx))
+      .map((i) => ({ id: i.id, label: localText(i.label, currentLanguage()) }));
+  }
+
+  /** Plays how this person answers an interaction. Nothing leaves the screen: it is only a reaction. */
+  interact(agentId: string, interactionId: string) {
+    const c = this.chars.get(agentId);
+    const interaction = this.interactions.find((i) => i.id === interactionId);
+    if (!c || !interaction) return;
+    const reaction = firstMatch(interaction.reactions, c.context());
+    if (reaction) this.perform(c, reaction);
+  }
+
+  private perform(c: CharacterView, reaction: Reaction) {
+    if (reaction.state) c.play(reaction.state);
+    c.say(say(reaction.say));
+    if (reaction.effect) this.effect(reaction.effect, c.pos.x, c.pos.y + c.iconY);
+  }
+
+  /**
+   * Runs the theme's rules for an event on the people it is about (or once, for events about nobody).
+   * The app's own effect plays first unless a rule replaces it, so a rule's motion wins.
+   */
+  private themeEvent(type: ThemeEvent, people: (CharacterView | undefined)[], appEffect?: () => void) {
+    const rules = this.events.filter((r) => r.on === type);
+    const now = new Date();
+    const targets = people.filter((c): c is CharacterView => Boolean(c));
+    const hits = rules.length
+      ? (targets.length ? targets : [null]).flatMap((target) => {
+          const rule = firstMatch(rules, target ? target.context(now) : { now });
+          return rule ? [{ target, rule }] : [];
+        })
+      : [];
+    if (!hits.some((h) => h.rule.replace)) appEffect?.();
+    for (const { target, rule } of hits) {
+      if (target) this.perform(target, rule);
+      else if (rule.effect) this.effect(rule.effect, SCENE_W / 2, SCENE_H / 3);
+      if (rule.prop) this.setProp(rule.prop.id, rule.prop.state, rule.prop.ms);
+    }
+  }
+
+  private setProp(id: string, state: string, ms: number) {
+    const prop = this.props.get(id);
+    if (!prop || !prop.has(state)) return;
+    prop.setState(state);
+    clearTimeout(this.propTimers.get(id));
+    this.propTimers.set(id, setTimeout(() => prop.setState(null), ms));
   }
 
   anchorOf(agentId: string): Point | null {
@@ -382,7 +626,7 @@ export class OfficeScene {
         existing.setPlace(resting ? 'lounge' : 'desk');
       } else {
         const art = this.theme.createCharacter();
-        const view = new CharacterView(agent, this.callbacks, this.team.roleTitles[agent.role], resting, art, this.layout.door, home, rest, offDuty);
+        const view = new CharacterView(agent, this.callbacks, this.team.roleTitles[agent.role], resting, art, this.env, home, rest, offDuty);
         this.chars.set(agent.id, view);
         this.charLayer.addChild(view.root);
       }
@@ -397,13 +641,29 @@ export class OfficeScene {
   handleEvent(event: OfficeEvent) {
     if (!this.ready) return;
     const p = event.payload as Record<string, unknown>;
+    const agentChar = event.agentId ? this.chars.get(event.agentId) : undefined;
+    if (!(THEME_EVENTS as readonly string[]).includes(event.type) || event.type === 'agent.arrived' || event.type === 'agent.left') {
+      this.appEffect(event, agentChar);
+      return;
+    }
+    const people =
+      event.type === 'task.completed'
+        ? [...this.chars.values()].filter((c) => c.present)
+        : event.type === 'review.rejected'
+          ? [this.chars.get(String(p.returnTo))]
+          : [agentChar];
+    this.themeEvent(event.type as ThemeEvent, people, () => this.appEffect(event, agentChar));
+  }
+
+  /** The app's own animation for an event: stamps, coins, papers carried around. */
+  private appEffect(event: OfficeEvent, agentChar: CharacterView | undefined) {
+    const p = event.payload as Record<string, unknown>;
     const deskOf = (id: unknown) => {
       const c = this.chars.get(String(id));
       if (c) return { x: c.pos.x, y: c.pos.y - 24 };
       const role = this.roleOf.get(String(id));
       return role ? { x: this.layout.seats[role].x, y: this.layout.seats[role].y - 24 } : null;
     };
-    const agentChar = event.agentId ? this.chars.get(event.agentId) : undefined;
     const { board: BOARD, shelf: SHELF, safe: SAFE, archive: ARCHIVE } = this.layout.spots;
     const boardSpot = { x: BOARD.x + BOARD.w / 2, y: BOARD.y + BOARD.h + 30 };
 
@@ -425,16 +685,14 @@ export class OfficeScene {
         if (manager) {
           manager.setPlace('desk');
           void manager.walkTo(boardSpot).then(() => {
-            this.paperFly({ x: boardSpot.x, y: BOARD.y + 40 }, { x: manager.pos.x, y: manager.pos.y - 40 }, '#ffe066');
-            return manager.walkTo(manager.home);
+            manager.carry('#ffe066');
+            return manager.walkTo(manager.home).then(() => manager.carry(null));
           });
         }
         break;
       }
       case 'task.handed_off': {
-        const from = deskOf(p.from);
-        const to = deskOf(p.to);
-        if (from && to) this.paperFly(from, to, '#ffffff');
+        void this.handOver(p.from, p.to, '#ffffff');
         break;
       }
       case 'tool.started':
@@ -451,10 +709,9 @@ export class OfficeScene {
         break;
       case 'review.rejected': {
         const at = deskOf(event.agentId);
-        const to = deskOf(p.returnTo);
         if (at) this.stamp('반려', at, '#c0392b');
         if (p.returnTo) this.chars.get(String(p.returnTo))?.play('review.rejected');
-        if (at && to) setTimeout(() => this.paperFly(at, to, '#ffd6d6'), 700);
+        if (p.returnTo) setTimeout(() => void this.handOver(event.agentId, p.returnTo, '#ffd6d6'), 700);
         break;
       }
       case 'review.approved': {
@@ -464,9 +721,7 @@ export class OfficeScene {
       }
       case 'approval.requested': {
         const reviewer = [...this.roleOf.entries()].find(([, r]) => r === 'reviewer')?.[0];
-        const from = deskOf(reviewer);
-        const to = deskOf(event.agentId);
-        if (from && to) this.paperFly(from, to, '#d6eaff');
+        void this.handOver(reviewer, event.agentId, '#d6eaff');
         break;
       }
       case 'approval.denied': {
@@ -491,8 +746,7 @@ export class OfficeScene {
       }
       case 'mail.received':
       case 'inquiry.received': {
-        const to = deskOf(event.agentId);
-        if (to) this.paperFly({ x: 48, y: 90 }, to, event.type === 'mail.received' ? '#fff3c4' : '#d5f5e3');
+        if (agentChar?.present) void this.fetch(agentChar, this.layout.door, event.type === 'mail.received' ? '#fff3c4' : '#d5f5e3');
         if (agentChar) this.floatText(event.type === 'mail.received' ? '새 메일!' : '새 문의!', agentChar.pos.x, agentChar.pos.y - 120, '#2471a3', 13);
         break;
       }
@@ -500,9 +754,8 @@ export class OfficeScene {
         this.floatText(String(p.summary ?? ''), 400, ARCHIVE.y - 20, '#6c3483', 13);
         break;
       case 'task.completed': {
-        const manager = [...this.roleOf.entries()].find(([, r]) => r === 'manager')?.[0];
-        const from = deskOf(manager);
-        if (from) this.paperFly(from, { x: ARCHIVE.x + ARCHIVE.w / 2, y: ARCHIVE.y + 10 }, '#b9f6ca');
+        const manager = [...this.chars.values()].find((c) => c.agent.role === 'manager' && c.present);
+        if (manager) void this.file(manager, { x: ARCHIVE.x + ARCHIVE.w / 2 + 34, y: ARCHIVE.y + ARCHIVE.h }, '#b9f6ca');
         for (const c of this.chars.values()) {
           this.sparkle(c.pos.x, c.pos.y - 70);
           c.play('task.approved');
@@ -565,6 +818,11 @@ export class OfficeScene {
   }
 
   private update(dt: number) {
+    this.variantCheck -= dt;
+    if (this.variantCheck <= 0) {
+      this.variantCheck = 60_000;
+      if (this.theme.variantAt && this.theme.variantAt(new Date()) !== (this.theme.variant ?? null)) this.callbacks.onThemeStale?.();
+    }
     for (const c of this.chars.values()) c.update(dt);
     this.charLayer.children.sort((a, b) => a.y - b.y);
     this.fxs = this.fxs.filter((fx) => {
@@ -583,22 +841,35 @@ export class OfficeScene {
     this.fxs.push({ elapsed: 0, duration, step, done });
   }
 
-  private paperFly(from: Point, to: Point, color: string) {
-    const g = new Graphics();
-    g.rect(-7, -9, 14, 18).fill(color).stroke({ width: 1.5, color: '#7f8c8d' });
-    g.rect(-4, -5, 8, 1.5).fill('#95a5a6');
-    g.rect(-4, -1, 8, 1.5).fill('#95a5a6');
-    g.rect(-4, 3, 6, 1.5).fill('#95a5a6');
-    this.fxLayer.addChild(g);
-    this.addFx(
-      1000,
-      (t) => {
-        const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-        g.position.set(from.x + (to.x - from.x) * e, from.y + (to.y - from.y) * e - Math.sin(Math.PI * t) * 70);
-        g.rotation = Math.sin(t * Math.PI * 2) * 0.3;
-      },
-      () => g.destroy(),
-    );
+  /** The giver walks the document over to the receiver, hands it across and goes back to their seat. */
+  private async handOver(giverId: unknown, receiverId: unknown, color: string) {
+    const giver = this.chars.get(String(giverId));
+    const receiver = this.chars.get(String(receiverId));
+    if (!giver || !receiver || giver === receiver || !giver.present || !receiver.present) return;
+    const at = receiver.destination;
+    const side = at.x >= giver.pos.x ? -1 : 1;
+    giver.carry(color);
+    await giver.walkTo({ x: at.x + side * 46, y: at.y + 2 });
+    giver.carry(null);
+    receiver.carry(color);
+    setTimeout(() => receiver.carry(null), 1400);
+    await giver.walkTo(giver.seat);
+  }
+
+  /** Walks to `spot`, picks up a document and brings it back (mail at the door). */
+  private async fetch(person: CharacterView, spot: Point, color: string) {
+    await person.walkTo(spot);
+    person.carry(color);
+    await person.walkTo(person.seat);
+    setTimeout(() => person.carry(null), 1200);
+  }
+
+  /** Carries a document to `spot` and leaves it there (finished work into the archive). */
+  private async file(person: CharacterView, spot: Point, color: string) {
+    person.carry(color);
+    await person.walkTo(spot);
+    person.carry(null);
+    await person.walkTo(person.seat);
   }
 
   private coinFly(from: Point, to: Point) {
@@ -652,6 +923,51 @@ export class OfficeScene {
       },
       () => c.destroy({ children: true }),
     );
+  }
+
+  /** A named effect a theme can ask for, around a point over someone's head. */
+  private effect(name: EffectName, x: number, y: number) {
+    const glyphs: Partial<Record<EffectName, string[]>> = { hearts: ['💗', '💕'], sweat: ['💦'], notes: ['♪', '♫'], zzz: ['z', 'Z'] };
+    if (name === 'sparkle') return this.sparkle(x, y);
+    if (name === 'confetti') return this.confetti(x, y);
+    const list = glyphs[name] ?? [];
+    for (let i = 0; i < 3; i++) {
+      const t = new Text({ text: list[i % list.length], style: { fontFamily: FONT, fontSize: 16, fontWeight: 'bold', fill: '#5b4a8a' } });
+      t.anchor.set(0.5);
+      t.alpha = 0;
+      this.fxLayer.addChild(t);
+      const dx = (i - 1) * 16;
+      setTimeout(() => {
+        this.addFx(
+          1300,
+          (p) => {
+            t.position.set(x + dx + Math.sin(p * 6 + i) * 5, y - p * 40);
+            t.alpha = p < 0.7 ? 1 : 1 - (p - 0.7) / 0.3;
+          },
+          () => t.destroy(),
+        );
+      }, i * 180);
+    }
+  }
+
+  private confetti(x: number, y: number) {
+    const colors = ['#ff6b6b', '#f4d03f', '#5dade2', '#58d68d', '#ff9ff3'];
+    for (let i = 0; i < 14; i++) {
+      const g = new Graphics();
+      g.rect(-3, -2, 6, 4).fill(colors[i % colors.length]);
+      this.fxLayer.addChild(g);
+      const vx = (Math.random() - 0.5) * 120;
+      const vy = -60 - Math.random() * 60;
+      this.addFx(
+        1400,
+        (t) => {
+          g.position.set(x + vx * t, y + vy * t + 160 * t * t);
+          g.rotation = t * 10 + i;
+          g.alpha = 1 - t * t;
+        },
+        () => g.destroy(),
+      );
+    }
   }
 
   private sparkle(x: number, y: number) {

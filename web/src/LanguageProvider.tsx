@@ -45,16 +45,16 @@ function seedLanguage(): Language {
 
 /**
  * Holds the display language and keeps <html lang> in step so screen readers and
- * CSS `:lang()` selectors follow the choice. The persisted server value wins once a
- * snapshot arrives; localStorage only covers the first paint before that.
+ * CSS `:lang()` selectors follow the choice. Mount this above every component that
+ * calls `useLanguage()` -- including the app shell itself. The persisted server value
+ * is pushed in through `setLanguage` once a snapshot arrives; localStorage only covers
+ * the first paint before that.
  */
 export function LanguageProvider({ language, children }: { language?: Language; children: ReactNode }) {
   const [current, setCurrent] = useState<Language>(language ?? seedLanguage);
 
   useEffect(() => {
-    if (!language) return;
-    setCurrent(language);
-    localStorage.setItem(STORAGE_KEY, language);
+    if (language) setCurrent(language);
   }, [language]);
 
   // Plain helpers such as `eventLabel()` read this module-level value because they sit
@@ -63,6 +63,17 @@ export function LanguageProvider({ language, children }: { language?: Language; 
 
   useEffect(() => {
     document.documentElement.lang = languageOf(current).locale.split('-')[0];
+  }, [current]);
+
+  // Persist whichever way the language arrived: the server snapshot pushed in by the
+  // shell, or a direct choice on the settings page. Seeded by localStorage on first
+  // paint, so it only has to keep the next reload's first paint in step.
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, current);
+    } catch {
+      // 개인 모드처럼 저장을 막으면 첫 화면 시드만 포기한다.
+    }
   }, [current]);
 
   const value = useMemo<LanguageContextValue>(

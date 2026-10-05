@@ -15,7 +15,8 @@ import { freeSubscription, type Checkout, type Invoice, type Subscription } from
 import type { StoredMember } from './members.ts';
 import { DEFAULT_PERSONALITY_BY_ROLE, isPersonality } from '../shared/personality.ts';
 import { defaultMilestones } from '../shared/project.ts';
-import { isSkin } from '../shared/skins.ts';
+import { isAgentSkin } from '../shared/skins.ts';
+import { adoptCompanyTheme, DEFAULT_THEME, type ThemeBooking } from '../shared/theme-pack.ts';
 import { MAX_STAFF_PER_OFFICE, TEAM_ORDER, TEAMS } from '../shared/teams.ts';
 import { DEFAULT_WORK_POLICY, freshDailyUsage, normalizeWorkPolicy } from '../shared/work-policy.ts';
 import type {
@@ -76,6 +77,12 @@ export interface PersistedState {
   chat: ChatMessage[];
   billing: { subscription: Subscription; invoices: Invoice[]; checkouts: Checkout[]; processedEvents: string[] };
   language: Language;
+  /** The theme every office shows unless it picked its own. */
+  theme: string;
+  /** Company themes booked for seasons (Halloween…), shown instead of `theme` on those dates. */
+  themeBookings: ThemeBooking[];
+  /** The theme for the page around the offices (top bar, tabs, panels); null follows the office being viewed. */
+  siteTheme: string | null;
 }
 
 const freshBilling = (): PersistedState['billing'] => ({ subscription: freeSubscription(config.billingProvider), invoices: [], checkouts: [], processedEvents: [] });
@@ -158,6 +165,9 @@ function fresh(): PersistedState {
     chat: [],
     billing: freshBilling(),
     language: DEFAULT_LANGUAGE,
+    theme: DEFAULT_THEME,
+    themeBookings: [],
+    siteTheme: null,
   };
 }
 
@@ -222,6 +232,9 @@ function load(): PersistedState {
 
 function normalize(saved: PersistedState) {
   fillCatalog(saved);
+  if (typeof saved.theme !== 'string') saved.theme = adoptCompanyTheme(saved.offices);
+  saved.themeBookings ??= [];
+  saved.siteTheme ??= null;
   saved.performance ??= [];
   saved.improvements ??= [];
   if (!isPlan(saved.plan)) saved.plan = 'personal';
@@ -258,7 +271,8 @@ class Store {
     setCatalog(this.state.companies, this.state.models);
     for (const agent of this.state.agents) {
       if (!isModelId(agent.model)) agent.model = DEFAULT_MODEL_BY_ROLE[agent.role];
-      if (!isSkin(agent.skin)) agent.skin = 'pixel';
+      // Theme characters (`<theme>:<character>`) survive restarts; a removed theme just draws the default look.
+      if (!isAgentSkin(agent.skin)) agent.skin = 'pixel';
       agent.status = agent.paused ? 'paused' : 'idle';
       agent.expression = 'normal';
       agent.activity = agent.paused ? '일시정지 중이에요.' : '휴게실에서 쉬고 있어요. ☕';
@@ -285,6 +299,9 @@ class Store {
       shares: s.shares,
       publicUrl: config.publicUrl || undefined,
       companyName: '알파 AI 컴퍼니',
+      theme: s.theme,
+      themeBookings: s.themeBookings,
+      siteTheme: s.siteTheme,
       provider,
       model: provider === 'mock' || provider === 'agents' ? '직원별 모델' : config.model,
       aiMode: s.aiMode,

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { t, tpl } from '../../../shared/i18n.ts';
 import { modelOf } from '../../../shared/models.ts';
-import { MIN_SAMPLES, officePerf, secondsLabel, suggestImprovements, type Improvement } from '../../../shared/performance.ts';
+import { MIN_SAMPLES, improvementReasonVars, officePerf, secondsLabel, suggestImprovements, type Improvement } from '../../../shared/performance.ts';
 import { personalityLabel, personalityOf, type Personality } from '../../../shared/personality.ts';
 import { taskTypeOf, TEAMS } from '../../../shared/teams.ts';
 import type { Snapshot } from '../../../shared/types.ts';
@@ -130,7 +130,7 @@ export function PerformanceTab(props: {
                   ) : (
                     <span className="perf-tag">{t('직접 결정')}</span>
                   )}
-                  <div className="muted small">{s.reason}</div>
+                  <div className="muted small">{tpl(s.reasonKey, improvementReasonVars(s.reasonVars))}</div>
                 </div>
                 <button
                   className="pixel-btn small primary"

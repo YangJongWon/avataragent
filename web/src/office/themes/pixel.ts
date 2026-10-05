@@ -1,6 +1,7 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import type { TeamMeta } from '../../../../shared/teams.ts';
-import type { Agent, Skin } from '../../../../shared/types.ts';
+import { builtinSkin } from '../../../../shared/skins.ts';
+import type { Agent, AgentSkin, Skin } from '../../../../shared/types.ts';
 import { companyOf, modelOf, type HatShape, type Tier } from '../../../../shared/models.ts';
 import { drawBody, drawFace, drawHat, drawHatGlow, HAT_TOP, S } from '../pixelArt.ts';
 import { loadPinkGirl, type SpriteSkin } from '../skinSprites.ts';
@@ -201,7 +202,7 @@ class PixelCharacter implements CharacterArt {
   private glow = new Graphics();
   private sparkles = new Graphics();
   private girl: Sprite | null = null;
-  private skin: Skin | null = null;
+  private skin: AgentSkin | null = null;
   private expression: Agent['expression'] | null = null;
   private hatKey: string | null = null;
   private hatShape: HatShape = 'beanie';
@@ -222,8 +223,8 @@ class PixelCharacter implements CharacterArt {
 
   apply(agent: Agent) {
     const skinChanged = agent.skin !== this.skin;
-    // Skins from theme packages have no pixel drawing; they show as the default look here.
-    const drawn: Skin = agent.skin === 'pinkgirl' && !this.girl ? 'bishoujo' : agent.skin.includes(':') ? 'pixel' : agent.skin;
+    // Theme characters have no pixel drawing; they show as the default look here.
+    const drawn: Skin = agent.skin === 'pinkgirl' && !this.girl ? 'bishoujo' : builtinSkin(agent.skin);
     if (skinChanged) {
       this.skin = agent.skin;
       const useSprite = agent.skin === 'pinkgirl' && this.girl !== null;

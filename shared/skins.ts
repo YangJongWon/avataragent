@@ -1,4 +1,5 @@
 import { t } from './i18n.ts';
+import { splitPackSkin } from './theme-pack.ts';
 
 export type Skin = 'pixel' | 'bishoujo' | 'pinkgirl';
 
@@ -24,6 +25,12 @@ export const SKINS: SkinMeta[] = [
 
 export const isSkin = (id: unknown): id is Skin => SKINS.some((s) => s.id === id);
 
+/** What an agent wears: a built-in skin, or a character of an installed theme as `<themeId>:<characterId>`. */
+export type AgentSkin = Skin | `${string}:${string}`;
+export const isAgentSkin = (id: unknown): id is AgentSkin => isSkin(id) || (typeof id === 'string' && splitPackSkin(id) !== null);
+/** The built-in skin to draw where theme characters cannot be shown (pixel offices, previews). */
+export const builtinSkin = (skin: AgentSkin): Skin => (isSkin(skin) ? skin : 'pixel');
+
 /** Korean in `SKINS` is the catalogue key, so display goes through `t()`. */
-export const skinName = (id: Skin | undefined) => t(SKINS.find((s) => s.id === id)?.name ?? '');
-export const skinNote = (id: Skin | undefined) => t(SKINS.find((s) => s.id === id)?.note ?? '');
+export const skinName = (id: AgentSkin | undefined) => t(SKINS.find((s) => s.id === id)?.name ?? '');
+export const skinNote = (id: AgentSkin | undefined) => t(SKINS.find((s) => s.id === id)?.note ?? '');
