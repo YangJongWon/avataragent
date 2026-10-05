@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
+import { paddleConfigFromEnv, type PaddleConfig } from './payments-paddle.ts';
 
 /**
  * Settings for the project site (community + plan sales). Read from the environment; a `site/.env` file is
@@ -24,6 +25,8 @@ export interface SiteConfig {
   mail: { provider: 'console' } | { provider: 'resend'; apiKey: string; from: string };
   /** Signs plan licenses (scripts/license-keygen.ts). Empty in development: a key is made and kept in dataDir. */
   license: { kid: string; privateKey: string } | null;
+  /** Which payment company: the mock (test page, no money) until a real one is set up. */
+  payments: { provider: 'mock' } | { provider: 'paddle'; paddle: PaddleConfig };
 }
 
 export function loadSiteConfig(): SiteConfig {
@@ -42,5 +45,13 @@ export function loadSiteConfig(): SiteConfig {
     github: pair('GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET'),
     mail: env('SITE_MAIL') === 'resend' ? { provider: 'resend', apiKey: env('RESEND_API_KEY'), from: env('SITE_MAIL_FROM') } : { provider: 'console' },
     license: env('SITE_LICENSE_PRIVATE_KEY') ? { kid: env('SITE_LICENSE_KID', 'site'), privateKey: env('SITE_LICENSE_PRIVATE_KEY').replace(/\\n/g, '\n') } : null,
+    payments: paymentsFrom(env),
   };
+}
+
+function paymentsFrom(env: (name: string, fallback?: string) => string): SiteConfig['payments'] {
+  if (env('SITE_PAYMENTS', 'mock') !== 'paddle') return { provider: 'mock' };
+  const paddle = paddleConfigFromEnv(env);
+  if (!paddle || !paddle.webhookSecret || !paddle.clientToken) throw new Error('SITE_PAYMENTS=paddle 이면 PADDLE_API_KEY, PADDLE_CLIENT_TOKEN, PADDLE_WEBHOOK_SECRET이 필요해요.');
+  return { provider: 'paddle', paddle };
 }

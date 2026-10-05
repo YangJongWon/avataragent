@@ -102,7 +102,7 @@ export function MockPaymentPage({ id }: { id: string }) {
     try {
       const { redirect } = await siteApi.mockPay(id, paid);
       if (paid && redirect) return window.location.assign(redirect);
-      setDone(paid ? '결제됐어요. 내 계정에서 라이선스 키를 복사해 앱에 붙여 넣으세요.' : '결제가 실패한 것으로 처리했어요.');
+      setDone(paid ? (checkout?.kind === 'item' ? '결제됐어요. 내 계정의 "구매한 테마"에서 내려받으세요.' : '결제됐어요. 내 계정에서 라이선스 키를 복사해 앱에 붙여 넣으세요.') : '결제가 실패한 것으로 처리했어요.');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -116,7 +116,7 @@ export function MockPaymentPage({ id }: { id: string }) {
       {checkout && (
         <div className="card">
           <p>
-            {planOf(checkout.plan as never).label} 플랜 · <b>{won(checkout.amountKrw)}</b>
+            {checkout.kind === 'item' ? `테마 "${checkout.itemTitle ?? ''}"` : `${planOf(checkout.plan as never).label} 플랜`} · <b>{won(checkout.amountKrw)}</b>
           </p>
           {checkout.status !== 'open' || done ? (
             <>

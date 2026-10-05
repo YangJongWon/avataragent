@@ -1,11 +1,59 @@
 import { useEffect, useState } from 'react';
 import { planOf } from '../../../shared/plans.ts';
-import { siteApi, type ItemCard, type LicenseView, type Me } from '../api.ts';
+import { siteApi, type Earnings, type ItemCard, type LicenseView, type Me, type Purchase } from '../api.ts';
 import { Link, navigate } from '../router.tsx';
 import { ItemCardView } from './CommunityPage.tsx';
 
 const STATUS: Record<LicenseView['status'], string> = { active: '이용 중', past_due: '결제 실패 (유예 중)', canceled: '종료' };
 const day = (iso: string) => new Date(iso).toLocaleDateString('ko-KR');
+const won = (n: number) => `${n.toLocaleString('ko-KR')}원`;
+const ENTRY: Record<Earnings['entries'][number]['kind'], string> = { sale: '판매', fee: '수수료', refund: '환불', fee_refund: '수수료 돌려받음', payout: '지급' };
+
+function EarningsCard({ earnings }: { earnings: Earnings }) {
+  return (
+    <>
+      <h2>판매 수익</h2>
+      <div className="card">
+        <div className="stats">
+          <div>
+            <b>{won(earnings.balance)}</b>
+            <span>받을 금액</span>
+          </div>
+          <div>
+            <b>{earnings.sales}</b>
+            <span>판매 건수</span>
+          </div>
+          <div>
+            <b>{won(earnings.gross)}</b>
+            <span>총 판매액</span>
+          </div>
+          <div>
+            <b>{won(earnings.payouts)}</b>
+            <span>지급받은 금액</span>
+          </div>
+        </div>
+        <p className="muted small">
+          판매액의 {Math.round(earnings.share * 100)}%가 내 몫이에요. 받을 금액은 매달 정산해 운영자가 보내 드려요(정산 계좌는 메일로 안내).
+          {earnings.refunds > 0 && ` 환불 ${won(earnings.refunds)}은 빼고 계산했어요.`}
+        </p>
+        {earnings.entries.length > 0 && (
+          <table className="admin-table small">
+            <tbody>
+              {earnings.entries.map((e, i) => (
+                <tr key={i}>
+                  <td className="muted">{day(e.at)}</td>
+                  <td>{ENTRY[e.kind]}</td>
+                  <td>{e.title ?? e.note}</td>
+                  <td className={e.amountKrw >= 0 ? 'pos' : 'error'}>{(e.amountKrw >= 0 ? '+' : '') + won(e.amountKrw)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </>
+  );
+}
 
 function LicenseCard({ license, onChange }: { license: LicenseView; onChange: (list: LicenseView[]) => void }) {
   const [copied, setCopied] = useState(false);
@@ -95,12 +143,16 @@ function LicenseCard({ license, onChange }: { license: LicenseView; onChange: (l
 export function AccountPage({ me, onLogout }: { me: Me | null; onLogout: () => void }) {
   const [licenses, setLicenses] = useState<LicenseView[] | null>(null);
   const [items, setItems] = useState<ItemCard[] | null>(null);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [earnings, setEarnings] = useState<Earnings | null>(null);
   const signedIn = Boolean(me?.account);
 
   useEffect(() => {
     if (!signedIn) return;
     siteApi.licenses().then(setLicenses, () => setLicenses([]));
     siteApi.myItems().then(setItems, () => setItems([]));
+    siteApi.purchases().then(setPurchases, () => setPurchases([]));
+    siteApi.earnings().then(setEarnings, () => setEarnings(null));
   }, [signedIn]);
 
   if (!me) return <section className="page narrow">불러오는 중…</section>;
@@ -129,6 +181,11 @@ export function AccountPage({ me, onLogout }: { me: Me | null; onLogout: () => v
           <b>{account.name || account.email}</b>
           {account.role === 'admin' && <span className="badge">관리자</span>}
           <div className="muted">{account.email}</div>
+          {account.handle && (
+            <Link href={`/u/${account.handle}`} className="small">
+              내 프로필 (@{account.handle}) →
+            </Link>
+          )}
         </div>
       </div>
 
@@ -144,6 +201,30 @@ export function AccountPage({ me, onLogout }: { me: Me | null; onLogout: () => v
       ) : (
         licenses.map((l) => <LicenseCard key={l.id} license={l} onChange={setLicenses} />)
       )}
+
+      {purchases.length > 0 && (
+        <>
+          <h2>구매한 테마</h2>
+          <div className="card">
+            <table className="admin-table">
+              <tbody>
+                {purchases.map((p) => (
+                  <tr key={p.id}>
+                    <td>
+                      <Link href={`/community/items/${p.itemId}`}>{p.title}</Link>
+                    </td>
+                    <td className="muted small">{day(p.createdAt)}</td>
+                    <td>{won(p.amountKrw)}</td>
+                    <td>{p.available ? <a href={`/api/items/${p.itemId}/download`}>내려받기</a> : <span className="muted small">{p.status === 'refunded' ? '환불됨' : '내려간 항목'}</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {earnings && (earnings.sales > 0 || (items ?? []).some((i) => i.priceKrw > 0)) && <EarningsCard earnings={earnings} />}
 
       <div className="row between">
         <h2>내가 올린 항목</h2>

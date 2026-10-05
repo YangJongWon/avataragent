@@ -97,10 +97,36 @@ function PlaybookDetails({ details }: { details: Record<string, unknown> }) {
   );
 }
 
+const won = (n: number) => `${n.toLocaleString('ko-KR')}원`;
+
+function PriceEditor({ item, onSaved }: { item: ItemDetail; onSaved: (priceKrw: number) => void }) {
+  const [price, setPrice] = useState(String(item.priceKrw));
+  const [error, setError] = useState('');
+  const creator = Math.floor(Number(price) * 0.7);
+  return (
+    <form
+      className="row price-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setError('');
+        siteApi.setPrice(item.id, Number(price) || 0).then((r) => onSaved(r.priceKrw), (err) => setError(err instanceof Error ? err.message : String(err)));
+      }}
+    >
+      <label className="small">
+        가격(원, 0이면 무료)
+        <input type="number" min={0} max={100000} step={100} value={price} onChange={(e) => setPrice(e.target.value)} />
+      </label>
+      <button className="button small">가격 저장</button>
+      {Number(price) > 0 && <span className="muted small">한 번 팔릴 때 내 몫 {won(creator)} (70%)</span>}
+      {error && <span className="error small">{error}</span>}
+    </form>
+  );
+}
+
 export function ItemPage({ id, me }: { id: string; me: Me | null }) {
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState(() => (new URLSearchParams(location.search).get('bought') ? '구매했어요. 이제 내려받을 수 있어요. 내 계정의 "구매한 테마"에도 남아요.' : ''));
 
   useEffect(() => {
     setItem(null);
@@ -141,7 +167,7 @@ export function ItemPage({ id, me }: { id: string; me: Me | null }) {
           <h1>{item.title}</h1>
           {item.summary && <p className="lead">{item.summary}</p>}
           <p className="muted small">
-            {item.owner.handle ? `@${item.owner.handle}` : item.owner.name} · 버전 {item.version} · {day(item.updatedAt)} · 라이선스 <b>{item.license}</b>
+            {item.owner.handle ? <Link href={`/u/${item.owner.handle}`}>@{item.owner.handle}</Link> : item.owner.name} · 버전 {item.version} · {day(item.updatedAt)} · 라이선스 <b>{item.license}</b>
           </p>
           <div className="tags">
             {item.tags.map((t) => (
@@ -150,10 +176,29 @@ export function ItemPage({ id, me }: { id: string; me: Me | null }) {
               </Link>
             ))}
           </div>
+          {item.priceKrw > 0 && (
+            <p className="price">
+              <b>{won(item.priceKrw)}</b> {item.owned && !item.mine && <span className="badge ok">구매함</span>}
+            </p>
+          )}
           <div className="row">
-            <a className="button" href={`/api/items/${item.id}/download`}>
-              ⬇ 내려받기
-            </a>
+            {item.owned ? (
+              <a className="button" href={`/api/items/${item.id}/download`}>
+                ⬇ 내려받기
+              </a>
+            ) : (
+              <button
+                className="button"
+                onClick={() =>
+                  void run(async () => {
+                    if (needLogin()) return;
+                    window.location.assign((await siteApi.buyItem(item.id)).url);
+                  })
+                }
+              >
+                {won(item.priceKrw)} 구매하기
+              </button>
+            )}
             <button
               className={`button ghost${item.liked ? ' liked' : ''}`}
               onClick={() =>
@@ -169,7 +214,15 @@ export function ItemPage({ id, me }: { id: string; me: Me | null }) {
             <span className="muted small">⬇ {item.downloads}회</span>
           </div>
           <p className="muted small">
-            앱의 <b>커뮤니티</b> 탭에서 찾아 바로 설치할 수 있어요.
+            {item.priceKrw > 0 ? (
+              <>
+                유료 테마는 여기서 사고 내려받은 zip을 앱의 <b>테마</b> 탭 "테마 설치"로 넣어요.
+              </>
+            ) : (
+              <>
+                앱의 <b>커뮤니티</b> 탭에서 찾아 바로 설치할 수 있어요.
+              </>
+            )}
             {item.type === 'playbook' && ' 플레이북은 내려받아 앱의 성과 탭에서 가져오기로 적용해요.'}
           </p>
         </div>
@@ -203,9 +256,7 @@ export function ItemPage({ id, me }: { id: string; me: Me | null }) {
                 </td>
                 <td className="muted small">{day(v.createdAt)}</td>
                 <td className="muted small">{kb(v.size)}</td>
-                <td>
-                  <a href={`/api/items/${item.id}/download?v=${v.version}`}>내려받기</a>
-                </td>
+                <td>{item.owned && <a href={`/api/items/${item.id}/download?v=${v.version}`}>내려받기</a>}</td>
               </tr>
             ))}
           </tbody>
@@ -216,6 +267,7 @@ export function ItemPage({ id, me }: { id: string; me: Me | null }) {
         <div className="card">
           <h2>{item.mine ? '내 항목 관리' : '운영'}</h2>
           {item.hiddenReason === 'reports' && <p className="error small">신고가 쌓여 가려졌어요. 운영자가 확인하면 다시 공개돼요.</p>}
+          {item.mine && item.type === 'theme' && <PriceEditor item={item} onSaved={(priceKrw) => setItem({ ...item, priceKrw })} />}
           <div className="row">
             {item.mine && (
               <Link className="button small" href={`/community/upload?type=${item.type}&item=${item.id}`}>

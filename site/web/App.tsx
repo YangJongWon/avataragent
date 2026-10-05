@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { siteApi, type Me } from './api.ts';
 import { AccountPage } from './pages/AccountPage.tsx';
+import { AdminPage } from './pages/AdminPage.tsx';
+import { ProfilePage, RankingPage } from './pages/CreatorsPage.tsx';
+import { ForumPage, PostEditorPage, PostPage } from './pages/ForumPage.tsx';
 import { CheckoutPage, MockPaymentPage } from './pages/CheckoutPage.tsx';
 import { CommunityPage } from './pages/CommunityPage.tsx';
 import { DocsPage } from './pages/DocsPage.tsx';
@@ -8,6 +11,7 @@ import { HomePage } from './pages/HomePage.tsx';
 import { InstallPage } from './pages/InstallPage.tsx';
 import { ItemPage } from './pages/ItemPage.tsx';
 import { LoginPage } from './pages/LoginPage.tsx';
+import { PaddleCheckoutPage } from './pages/PaddleCheckoutPage.tsx';
 import { PricingPage } from './pages/PricingPage.tsx';
 import { UploadPage } from './pages/UploadPage.tsx';
 import { Link, useLocation } from './router.tsx';
@@ -16,6 +20,8 @@ const NAV: [string, string][] = [
   ['/pricing', '가격'],
   ['/install', '설치'],
   ['/community', '커뮤니티'],
+  ['/forum', '게시판'],
+  ['/ranking', '랭킹'],
   ['/docs', '문서'],
 ];
 
@@ -35,10 +41,18 @@ export function App() {
     if (path === '/community') return <CommunityPage search={search} />;
     if (path === '/community/upload') return <UploadPage me={me} search={search} />;
     if (path.startsWith('/community/items/')) return <ItemPage id={path.split('/')[3]} me={me} />;
+    if (path === '/forum') return <ForumPage search={search} />;
+    if (path === '/forum/new') return <PostEditorPage me={me} search={search} />;
+    if (/^\/forum\/[^/]+\/edit$/.test(path)) return <PostEditorPage me={me} search={search} editId={path.split('/')[2]} />;
+    if (path.startsWith('/forum/')) return <PostPage id={path.split('/')[2]} me={me} />;
+    if (path === '/ranking') return <RankingPage search={search} />;
+    if (path.startsWith('/u/')) return <ProfilePage handle={decodeURIComponent(path.split('/')[2])} me={me} />;
+    if (path === '/admin') return <AdminPage me={me} />;
     if (path === '/docs' || path.startsWith('/docs/')) return <DocsPage slug={path.split('/')[2]} />;
     if (path === '/login') return <LoginPage me={me} search={search} />;
     if (path === '/account') return <AccountPage me={me} onLogout={refresh} />;
     if (path === '/checkout') return <CheckoutPage me={me} search={search} />;
+    if (path === '/checkout/paddle') return <PaddleCheckoutPage me={me} search={search} />;
     if (path.startsWith('/checkout/mock/')) return <MockPaymentPage id={path.split('/')[3]} />;
     return (
       <section className="page narrow">
@@ -64,6 +78,11 @@ export function App() {
           ))}
         </nav>
         <div className="head-account">
+          {me?.account?.role === 'admin' && (
+            <Link href="/admin" className="admin-link">
+              운영
+            </Link>
+          )}
           {me?.account ? (
             <Link href="/account" className="button ghost">
               {me.account.name || me.account.email}

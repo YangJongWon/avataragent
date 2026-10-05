@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { Plan } from '../../shared/plans.ts';
 
 /**
  * The payment company behind the site, for plans (subscriptions) and later paid themes (one-off). Same shape as
@@ -14,16 +15,31 @@ export type PaymentEvent = { id: string } & (
   | { kind: 'subscription.canceled'; providerRef: string }
 );
 
+/** A provider refused a request or a notification (bad signature, missing setting). Answered as 400. */
+export class PaymentError extends Error {}
+
+export interface CheckoutRequest {
+  id: string;
+  kind: 'plan' | 'item';
+  plan?: Plan;
+  amountKrw: number;
+  title: string;
+}
+
 export interface PaymentProvider {
   id: string;
   label: string;
   /** Renewals are charged by the site's own clock (the mock) rather than reported by the provider. */
   selfRenewing: boolean;
-  createCheckout(checkout: { id: string; amountKrw: number; title: string }, publicUrl: string): Promise<{ url: string }>;
+  createCheckout(checkout: CheckoutRequest, publicUrl: string): Promise<{ url: string }>;
   /** Verifies and maps a provider notification; throws on a bad signature, null for events the site ignores. */
   parseWebhook(rawBody: string, headers: Record<string, string | string[] | undefined>): PaymentEvent | null;
   cancel(providerRef: string): Promise<void>;
   resume(providerRef: string): Promise<void>;
+  /** Gives a one-off payment back (paid themes). */
+  refund?(providerRef: string, amountKrw: number): Promise<void>;
+  /** What the checkout page in the browser needs (Paddle.js token); nothing secret. */
+  browser?: { provider: string; env: string; token: string };
 }
 
 export const mockPayments: PaymentProvider = {
@@ -38,6 +54,7 @@ export const mockPayments: PaymentProvider = {
   },
   async cancel() {},
   async resume() {},
+  async refund() {},
 };
 
 /** The test page's buttons, as the events a real provider would send. */

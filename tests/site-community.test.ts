@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
-import test from 'node:test';
+import test, { afterEach } from 'node:test';
 import { strToU8, unzipSync, zipSync } from 'fflate';
 
 const { migrate, openDb } = await import('../site/server/db.ts');
@@ -10,6 +10,13 @@ const { createSiteApp } = await import('../site/server/app.ts');
 const { flowFromPlan } = await import('../shared/flow-pack.ts');
 import type { Account } from '../site/server/auth.ts';
 import type { Agent } from '../shared/types.ts';
+
+/** Each test's in-memory database is closed when it ends; PGlite instances are large. */
+const openDbs: { close(): Promise<void> }[] = [];
+afterEach(async () => {
+  while (openDbs.length) await openDbs.pop()!.close().catch(() => {});
+});
+
 
 function png(w: number, h: number) {
   const bytes = new Uint8Array(33);
@@ -70,6 +77,7 @@ const person = (id: string, role: Account['role'] = 'user'): Account => ({ id, e
 
 async function setup() {
   const db = await openDb();
+  openDbs.push(db);
   await migrate(db);
   for (const id of ['mina', 'jun', 'ari', 'bo', 'cy', 'admin']) {
     await db.query('INSERT INTO accounts (id, email, name) VALUES ($1, $2, $1)', [id, `${id}@example.com`]);

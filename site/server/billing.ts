@@ -7,6 +7,7 @@ import { isPlan, planOf, type Plan } from '../../shared/plans.ts';
 import { newLicenseKeys, signLicense, verifyLicense } from '../../server/license-crypto.ts';
 import type { Db } from './db.ts';
 import type { PaymentEvent, PaymentProvider } from './payments.ts';
+import { recordSale } from './sales.ts';
 
 /**
  * Plan sales on the site: checkout → subscription → one license bound to one install. Installs fetch fresh
@@ -93,16 +94,42 @@ export class SiteBilling {
       'INSERT INTO checkouts (id, account_id, kind, plan, install_id, app_ref, return_url, amount_krw, provider) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
       [checkoutId, accountId, 'plan', meta.id, input.install, ref, returnUrl || null, meta.priceKrw, this.provider.id],
     );
-    return this.provider.createCheckout({ id: checkoutId, amountKrw: meta.priceKrw, title: `${meta.label} 플랜 (월)` }, this.publicUrl);
+    return this.provider.createCheckout({ id: checkoutId, kind: 'plan', plan: meta.id, amountKrw: meta.priceKrw, title: `${meta.label} 플랜 (월)` }, this.publicUrl);
   }
 
   async checkout(accountId: string, checkoutId: string) {
-    const [row] = await this.db.query<{ id: string; plan: Plan; amount_krw: number; status: string; return_url: string | null; install_id: string }>(
-      'SELECT id, plan, amount_krw, status, return_url, install_id FROM checkouts WHERE id = $1 AND account_id = $2',
+    const [row] = await this.db.query<{ id: string; kind: 'plan' | 'item'; plan: Plan; item_id: string | null; title: string | null; amount_krw: number; status: string; return_url: string | null; install_id: string }>(
+      'SELECT c.id, c.kind, c.plan, c.item_id, i.title, c.amount_krw, c.status, c.return_url, c.install_id FROM checkouts c LEFT JOIN items i ON i.id = c.item_id WHERE c.id = $1 AND c.account_id = $2',
       [checkoutId, accountId],
     );
     if (!row) throw new BillingError('없는 결제예요.', 404);
-    return { id: row.id, plan: row.plan, amountKrw: row.amount_krw, status: row.status, installId: row.install_id, returnHost: row.return_url ? new URL(row.return_url).host : null };
+    return {
+      // Where to go once it is paid: providers with their own payment window send the browser back here to wait for it.
+      redirect: row.status === 'paid' ? await this.afterPayment(row.id, row.kind, row.return_url) : null,
+      id: row.id,
+      kind: row.kind,
+      plan: row.plan,
+      itemId: row.item_id,
+      itemTitle: row.title,
+      amountKrw: row.amount_krw,
+      status: row.status,
+      installId: row.install_id,
+      returnHost: row.return_url ? new URL(row.return_url).host : null,
+    };
+  }
+
+  private async afterPayment(checkoutId: string, kind: 'plan' | 'item', returnUrl: string | null) {
+    if (!returnUrl) return kind === 'item' ? null : `${this.publicUrl}/account`;
+    if (kind === 'item') return returnUrl;
+    const [row] = await this.db.query<{ license_id: string; app_ref: string | null }>(
+      'SELECT l.id AS license_id, c.app_ref FROM payments p JOIN licenses l ON l.subscription_id = p.subscription_id JOIN checkouts c ON c.id = p.checkout_id WHERE p.checkout_id = $1 LIMIT 1',
+      [checkoutId],
+    );
+    if (!row) return `${this.publicUrl}/account`;
+    const back = new URL(returnUrl);
+    back.searchParams.set('license', await this.tokenWith(this.db, row.license_id));
+    if (row.app_ref) back.searchParams.set('ref', row.app_ref);
+    return back.toString();
   }
 
   // ── events ─────────────────────────────────────────────────
@@ -128,8 +155,8 @@ export class SiteBilling {
       const now = this.now();
 
       if (event.kind === 'checkout.paid' || event.kind === 'checkout.failed') {
-        const [checkout] = await tx.query<{ id: string; account_id: string; plan: Plan; install_id: string; app_ref: string | null; return_url: string | null; amount_krw: number; status: string }>(
-          "SELECT * FROM checkouts WHERE id = $1 AND kind = 'plan'",
+        const [checkout] = await tx.query<{ id: string; account_id: string; kind: 'plan' | 'item'; plan: Plan; item_id: string; install_id: string; app_ref: string | null; return_url: string | null; amount_krw: number; status: string }>(
+          'SELECT * FROM checkouts WHERE id = $1',
           [event.checkoutId],
         );
         if (!checkout || checkout.status !== 'open') throw new BillingError('끝났거나 없는 결제예요.', 409);
@@ -137,6 +164,12 @@ export class SiteBilling {
           await tx.query("UPDATE checkouts SET status = 'failed' WHERE id = $1", [checkout.id]);
           await record(event.kind, { account: checkout.account_id, checkout: checkout.id });
           return { redirect: null };
+        }
+        if (checkout.kind === 'item') {
+          await tx.query("UPDATE checkouts SET status = 'paid' WHERE id = $1", [checkout.id]);
+          await recordSale(tx, checkout, this.provider.id, event.providerRef, now);
+          await record(event.kind, { account: checkout.account_id, checkout: checkout.id, amount: checkout.amount_krw });
+          return { redirect: checkout.return_url };
         }
         const subscriptionId = id('sub');
         const licenseId = id('lic');

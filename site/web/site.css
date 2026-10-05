@@ -622,6 +622,251 @@ main {
   margin-bottom: 12px;
 }
 
+/* ── forum ─────────────────────────────────────────────── */
+.posts,
+.ranking,
+.queue {
+  list-style: none;
+  padding: 0;
+}
+
+.post-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin: 10px 0;
+  padding: 12px 16px;
+}
+
+.post-row.pinned {
+  border-color: var(--accent);
+}
+
+.post-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.post-title {
+  display: block;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+  text-decoration: none;
+  margin: 2px 0;
+}
+
+.post-title:hover {
+  text-decoration: underline;
+}
+
+.post-count {
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.badge.ok {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.post-page h1 {
+  margin-bottom: 6px;
+}
+
+.comment {
+  margin: 10px 0;
+  padding: 10px 14px;
+}
+
+.comment.accepted {
+  border-color: var(--green);
+  box-shadow: 4px 4px 0 rgba(30, 132, 73, 0.35);
+}
+
+.comment .markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.comment-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 12px 0;
+}
+
+.comment-box textarea,
+.upload textarea,
+.link-input {
+  width: 100%;
+  font: inherit;
+  padding: 8px 10px;
+  border: 3px solid var(--line);
+  background: #fff;
+}
+
+.link-input {
+  margin-bottom: 6px;
+}
+
+.preview-box {
+  min-height: 200px;
+  padding: 8px 12px;
+  border: 3px dashed rgba(61, 52, 73, 0.4);
+  background: #fff;
+  margin-bottom: 12px;
+}
+
+.markdown img {
+  max-width: 100%;
+}
+
+.markdown blockquote {
+  margin: 8px 0;
+  padding-left: 12px;
+  border-left: 4px solid rgba(61, 52, 73, 0.25);
+  color: var(--muted);
+}
+
+.avatar-s {
+  display: inline-block;
+  border: 2px solid var(--line);
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+}
+
+.avatar-s.letter {
+  text-align: center;
+  font-weight: 800;
+  font-size: 12px;
+  background: #efe2c9;
+}
+
+/* ── creators ──────────────────────────────────────────── */
+.rank-row {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin: 8px 0;
+  padding: 10px 16px;
+}
+
+.rank-row.top-1 {
+  border-color: var(--accent);
+  box-shadow: 4px 4px 0 var(--accent);
+}
+
+.rank-no {
+  width: 32px;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.rank-who,
+.rank-score {
+  display: flex;
+  flex-direction: column;
+}
+
+.rank-who {
+  flex: 1;
+  min-width: 0;
+}
+
+.rank-score {
+  text-align: right;
+}
+
+.rank-score b {
+  font-size: 20px;
+}
+
+.profile-head {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.profile-head h1 {
+  margin: 0;
+}
+
+.profile-head .avatar-s.letter {
+  font-size: 34px;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+
+.badge-pill {
+  padding: 2px 10px;
+  font-size: 13px;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+}
+
+.profile-stats {
+  margin: 20px 0;
+}
+
+/* ── admin ─────────────────────────────────────────────── */
+.admin-link {
+  margin-right: 12px;
+  font-weight: 700;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+}
+
+.admin-table th,
+.admin-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(61, 52, 73, 0.15);
+}
+
+.admin-table tr.suspended {
+  opacity: 0.6;
+}
+
+/* ── paid themes ───────────────────────────────────────── */
+.price-tag {
+  float: right;
+  font-weight: 700;
+  color: var(--green);
+}
+
+.price-tag.paid {
+  color: var(--accent);
+}
+
+.price-form {
+  margin: 8px 0 12px;
+}
+
+.price-form label {
+  display: flex;
+  flex-direction: column;
+}
+
+.price-form input {
+  width: 140px;
+  font: inherit;
+  padding: 4px 8px;
+  border: 3px solid var(--line);
+}
+
 /* ── small screens ─────────────────────────────────────── */
 @media (max-width: 760px) {
   .site-head {

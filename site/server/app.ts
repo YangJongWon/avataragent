@@ -5,10 +5,14 @@ import { PLANS } from '../../shared/plans.ts';
 import { Auth, AuthError, type Account, type OAuthProvider } from './auth.ts';
 import { BillingError, licenseKey, SiteBilling } from './billing.ts';
 import { Community, CommunityError } from './community.ts';
+import { Creators } from './creators.ts';
+import { CATEGORIES, Forum } from './forum.ts';
+import { audit, Moderation } from './moderation.ts';
 import type { SiteConfig } from './config.ts';
 import type { Db } from './db.ts';
 import type { Mailer } from './mail.ts';
-import { mockOutcome, mockPayments, type PaymentProvider } from './payments.ts';
+import { mockOutcome, mockPayments, PaymentError, type PaymentProvider } from './payments.ts';
+import { Sales } from './sales.ts';
 import { diskStorage, filesDir, type FileStorage } from './storage.ts';
 
 const ROOT = resolve(import.meta.dirname, '..', '..');
@@ -39,15 +43,28 @@ function signedIn(res: Response): Account {
   return account;
 }
 
-const publicAccount = (a: Account | null) => a && { id: a.id, email: a.email, name: a.name, avatarUrl: a.avatar_url, role: a.role };
+const publicAccount = (a: Account | null, handle: string | null) => a && { id: a.id, email: a.email, name: a.name, avatarUrl: a.avatar_url, role: a.role, handle };
 
 export function createSiteApp(deps: SiteDeps) {
   const auth = new Auth(deps.db, deps.config, deps.mailer, deps.fetch, deps.now);
   const payments = deps.payments ?? mockPayments;
   const billing = new SiteBilling(deps.db, payments, licenseKey(deps.config.license, deps.config.dataDir), deps.config.publicUrl, deps.now);
   const community = new Community(deps.db, deps.storage ?? diskStorage(filesDir(deps.config.dataDir)), deps.now);
+  const sales = new Sales(deps.db, payments, deps.config.publicUrl, deps.now);
+  const creators = new Creators(deps.db, community, deps.now);
+  const forum = new Forum(deps.db, deps.now);
+  const moderation = new Moderation(deps.db, forum, deps.now);
   const app = express();
   app.set('trust proxy', true);
+
+  // Before the JSON parser: signatures are checked against the body exactly as the payment company sent it.
+  app.post('/api/payments/webhook/:provider', express.text({ type: '*/*', limit: '256kb' }), async (req, res) => {
+    if (req.params.provider !== payments.id) throw new BillingError('연결되지 않은 결제사예요.', 404);
+    const event = payments.parseWebhook(typeof req.body === 'string' ? req.body : '', req.headers);
+    if (event) await billing.handle(event);
+    res.json({ ok: true });
+  });
+
   app.use(express.json({ limit: '256kb' }));
   app.use(auth.sameOrigin());
   app.use(auth.attach());
@@ -83,8 +100,9 @@ export function createSiteApp(deps: SiteDeps) {
     res.status(204).end();
   });
 
-  app.get('/api/me', (_req, res) => {
-    res.json({ account: publicAccount(res.locals.account), providers: auth.providers() });
+  app.get('/api/me', async (_req, res) => {
+    const account = res.locals.account as Account | null;
+    res.json({ account: publicAccount(account, account ? await creators.handleOf(account.id) : null), providers: auth.providers() });
   });
 
   // ── public content ─────────────────────────────────────────
@@ -121,11 +139,8 @@ export function createSiteApp(deps: SiteDeps) {
     res.json(result);
   });
 
-  app.post('/api/payments/webhook/:provider', express.text({ type: '*/*', limit: '256kb' }), async (req, res) => {
-    if (req.params.provider !== payments.id) throw new BillingError('연결되지 않은 결제사예요.', 404);
-    const event = payments.parseWebhook(typeof req.body === 'string' ? req.body : '', req.headers);
-    if (event) await billing.handle(event);
-    res.json({ ok: true });
+  app.get('/api/payments/config', (_req, res) => {
+    res.json(payments.browser ?? { provider: payments.id });
   });
 
   app.get('/api/licenses', async (_req, res) => {
@@ -199,11 +214,136 @@ export function createSiteApp(deps: SiteDeps) {
   });
 
   app.post('/api/items/:id/status', async (req, res) => {
-    res.json(await community.setStatus(req.params.id, signedIn(res), req.body?.status));
+    const account = signedIn(res);
+    const result = await community.setStatus(req.params.id, account, req.body?.status);
+    if (account.role === 'admin') await audit(deps.db, account, `item.${String(req.body?.status)}`, req.params.id);
+    res.json(result);
   });
 
   app.post('/api/items/:id/verified', async (req, res) => {
-    res.json(await community.setVerified(req.params.id, signedIn(res), req.body?.verified === true));
+    const account = signedIn(res);
+    const result = await community.setVerified(req.params.id, account, req.body?.verified === true);
+    await audit(deps.db, account, req.body?.verified === true ? 'item.verify' : 'item.unverify', req.params.id);
+    res.json(result);
+  });
+
+  // ── paid themes ────────────────────────────────────────────
+  app.post('/api/items/:id/price', async (req, res) => {
+    res.json(await sales.setPrice(signedIn(res), req.params.id, req.body?.priceKrw));
+  });
+
+  app.post('/api/items/:id/checkout', async (req, res) => {
+    res.json(await sales.startCheckout(signedIn(res), req.params.id));
+  });
+
+  app.get('/api/me/purchases', async (_req, res) => {
+    res.json(await sales.purchases(signedIn(res)));
+  });
+
+  app.get('/api/me/earnings', async (_req, res) => {
+    res.json(await sales.earnings(signedIn(res)));
+  });
+
+  app.get('/api/admin/balances', async (_req, res) => {
+    res.json(await sales.balances(signedIn(res)));
+  });
+
+  app.get('/api/admin/sales', async (_req, res) => {
+    res.json(await sales.sales(signedIn(res)));
+  });
+
+  app.post('/api/admin/purchases/:id/refund', async (req, res) => {
+    res.json(await sales.refund(signedIn(res), req.params.id, req.body?.reason));
+  });
+
+  app.post('/api/admin/payouts', async (req, res) => {
+    res.json(await sales.payout(signedIn(res), String(req.body?.creatorId ?? ''), req.body?.amountKrw, req.body?.note));
+  });
+
+  // ── creators ───────────────────────────────────────────────
+  app.get('/api/ranking', async (req, res) => {
+    res.json(await creators.ranking(req.query.period));
+  });
+
+  app.get('/api/users/:handle', async (req, res) => {
+    res.json(await creators.profile(req.params.handle, res.locals.account));
+  });
+
+  app.put('/api/me/profile', async (req, res) => {
+    res.json(await creators.update(signedIn(res), req.body ?? {}));
+  });
+
+  // ── forum ──────────────────────────────────────────────────
+  app.get('/api/forum/categories', (_req, res) => {
+    res.json(CATEGORIES);
+  });
+
+  app.get('/api/posts', async (req, res) => {
+    res.json(await forum.list(req.query));
+  });
+
+  app.post('/api/posts', async (req, res) => {
+    res.json(await forum.create(signedIn(res), req.body ?? {}));
+  });
+
+  app.get('/api/posts/:id', async (req, res) => {
+    res.json(await forum.get(req.params.id, res.locals.account));
+  });
+
+  app.put('/api/posts/:id', async (req, res) => {
+    res.json(await forum.edit(signedIn(res), req.params.id, req.body ?? {}));
+  });
+
+  app.delete('/api/posts/:id', async (req, res) => {
+    res.json(await forum.remove(signedIn(res), req.params.id));
+  });
+
+  app.post('/api/posts/:id/comments', async (req, res) => {
+    res.json(await forum.comment(signedIn(res), req.params.id, req.body?.body));
+  });
+
+  app.post('/api/posts/:id/accept', async (req, res) => {
+    res.json(await forum.accept(signedIn(res), req.params.id, req.body?.commentId ?? null));
+  });
+
+  app.post('/api/posts/:id/pin', async (req, res) => {
+    const account = signedIn(res);
+    const result = await forum.pin(account, req.params.id, req.body?.pinned === true);
+    await audit(deps.db, account, req.body?.pinned === true ? 'post.pin' : 'post.unpin', req.params.id);
+    res.json(result);
+  });
+
+  app.put('/api/comments/:id', async (req, res) => {
+    res.json(await forum.editComment(signedIn(res), req.params.id, req.body?.body));
+  });
+
+  app.delete('/api/comments/:id', async (req, res) => {
+    res.json(await forum.removeComment(signedIn(res), req.params.id));
+  });
+
+  app.post('/api/reports', async (req, res) => {
+    res.json(await forum.report(signedIn(res), req.body?.type, String(req.body?.id ?? ''), req.body?.reason));
+  });
+
+  // ── admin ──────────────────────────────────────────────────
+  app.get('/api/admin/queue', async (_req, res) => {
+    res.json(await moderation.queue(signedIn(res)));
+  });
+
+  app.post('/api/admin/resolve', async (req, res) => {
+    res.json(await moderation.resolve(signedIn(res), req.body?.type, String(req.body?.id ?? ''), req.body?.action));
+  });
+
+  app.get('/api/admin/users', async (req, res) => {
+    res.json(await moderation.users(signedIn(res), req.query.q));
+  });
+
+  app.post('/api/admin/users/:id/suspend', async (req, res) => {
+    res.json(await moderation.suspend(signedIn(res), req.params.id, req.body?.on !== false, req.body?.reason));
+  });
+
+  app.get('/api/admin/log', async (_req, res) => {
+    res.json(await moderation.log(signedIn(res)));
   });
 
   app.use('/api', (_req, res) => {
@@ -221,6 +361,7 @@ export function createSiteApp(deps: SiteDeps) {
     const message = error instanceof Error ? error.message : String(error);
     if (error instanceof SignInRequired) return void res.status(401).json({ error: message });
     if (error instanceof BillingError || error instanceof CommunityError) return void res.status(error.status).json({ error: message });
+    if (error instanceof PaymentError) return void res.status(400).json({ error: message });
     if ((error as { type?: string }).type === 'entity.too.large') return void res.status(413).json({ error: '파일이 너무 커요.' });
     const known = error instanceof AuthError;
     if (!known) console.error(error);
@@ -231,5 +372,5 @@ export function createSiteApp(deps: SiteDeps) {
     res.status(known ? 400 : 500).json({ error: known ? message : '서버에서 문제가 생겼어요.' });
   });
 
-  return Object.assign(app, { billing, community });
+  return Object.assign(app, { billing, community, creators, forum, moderation, sales });
 }

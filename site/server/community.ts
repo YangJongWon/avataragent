@@ -132,6 +132,7 @@ interface ItemRow {
   hidden_reason: string | null;
   verified: boolean;
   latest_version: number;
+  price_krw: number;
   downloads: number;
   likes: number;
   created_at: Date;
@@ -151,6 +152,8 @@ export interface ItemCard {
   license: string;
   verified: boolean;
   version: string;
+  /** 0 for free. */
+  priceKrw: number;
   downloads: number;
   likes: number;
   owner: { handle: string | null; name: string };
@@ -175,6 +178,7 @@ const card = (r: ItemRow, withStatus = false): ItemCard => ({
   license: r.license,
   verified: r.verified,
   version: r.version_label,
+  priceKrw: r.price_krw,
   downloads: r.downloads,
   likes: r.likes,
   owner: { handle: r.owner_handle, name: r.owner_name },
@@ -198,6 +202,10 @@ export class Community {
 
   private async row(id: string): Promise<ItemRow | null> {
     return (await this.db.query<ItemRow>(`${SELECT_ITEM} WHERE i.id = $1`, [id]))[0] ?? null;
+  }
+
+  private async bought(accountId: string, itemId: string) {
+    return (await this.db.query("SELECT 1 FROM purchases WHERE account_id = $1 AND item_id = $2 AND status = 'paid'", [accountId, itemId])).length > 0;
   }
 
   /** Who may see an item that is not published: its owner and admins. */
@@ -277,15 +285,12 @@ export class Community {
     const [tag] = parseTags(typeof query.tag === 'string' ? query.tag : '');
     if (tag) add('i.tags @> ?::jsonb', JSON.stringify([tag]));
     if (typeof query.owner === 'string' && query.owner) add('p.handle = ?', query.owner);
-    params.push(new Date(this.now().getTime() - 30 * DAY_MS).toISOString().slice(0, 10));
-    const since = `$${params.length}`;
-    const order =
-      query.sort === 'new'
-        ? 'i.created_at DESC'
-        : query.sort === 'downloads'
-          ? 'i.downloads DESC, i.updated_at DESC'
-          : // Popular lately: downloads in the last 30 days plus likes, weighted.
-            `(COALESCE((SELECT sum(d.count) FROM item_downloads d WHERE d.item_id = i.id AND d.day >= ${since}::date), 0) + 3 * i.likes) DESC, i.updated_at DESC`;
+    const popular = () => {
+      // Popular lately: downloads in the last 30 days plus likes, weighted.
+      params.push(new Date(this.now().getTime() - 30 * DAY_MS).toISOString().slice(0, 10));
+      return `(COALESCE((SELECT sum(d.count) FROM item_downloads d WHERE d.item_id = i.id AND d.day >= $${params.length}::date), 0) + 3 * i.likes) DESC, i.updated_at DESC`;
+    };
+    const order = query.sort === 'new' ? 'i.created_at DESC' : query.sort === 'downloads' ? 'i.downloads DESC, i.updated_at DESC' : popular();
     const limit = Math.min(48, Math.max(1, Number(query.limit) || 24));
     const offset = Math.max(0, Number(query.offset) || 0);
     const rows = await this.db.query<ItemRow & { total: number }>(
@@ -309,10 +314,12 @@ export class Community {
     );
     const liked = account ? (await this.db.query('SELECT 1 FROM item_likes WHERE item_id = $1 AND account_id = $2', [id, account.id])).length > 0 : false;
     const mine = !!account && account.id === row.owner_id;
+    const owned = row.price_krw === 0 || mine || (!!account && (await this.bought(account.id, id)));
     return {
       ...card(row, mine || account?.role === 'admin'),
       liked,
       mine,
+      owned,
       hiddenReason: mine || account?.role === 'admin' ? row.hidden_reason : undefined,
       details: versions[0]?.details ?? {},
       warnings: versions[0]?.warnings ?? [],
@@ -331,6 +338,9 @@ export class Community {
   async download(id: string, account: Account | null, version?: unknown) {
     const row = await this.row(id);
     if (!row || !this.canSee(row, account)) throw new CommunityError('없는 항목이에요.', 404);
+    if (row.price_krw > 0 && !(account && (account.id === row.owner_id || account.role === 'admin' || (await this.bought(account.id, id))))) {
+      throw new CommunityError('유료 테마예요. 사이트에서 산 뒤 내려받을 수 있어요.', 402);
+    }
     const n = version === undefined || version === '' ? row.latest_version : Number(version);
     const [v] = await this.db.query<{ file_key: string; label: string }>('SELECT file_key, label FROM item_versions WHERE item_id = $1 AND version = $2', [id, n]);
     if (!v) throw new CommunityError('없는 버전이에요.', 404);

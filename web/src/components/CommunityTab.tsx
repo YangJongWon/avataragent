@@ -140,6 +140,11 @@ export function CommunityTab({ flows, onError, onNotice }: Props) {
                 </div>
               </div>
               <div className="row theme-actions">
+                {item.priceKrw > 0 ? (
+                  <a className="pixel-btn small primary" href={`${result.site}/community/items/${item.id}`} target="_blank" rel="noreferrer">
+                    {tpl('{price}원 · 사이트에서 사기', { price: item.priceKrw.toLocaleString('ko-KR') })}
+                  </a>
+                ) : (
                 <button className="pixel-btn small primary" disabled={busy !== null} onClick={() => void install(item)}>
                   {busy === item.id
                     ? t('설치 중…')
@@ -149,6 +154,7 @@ export function CommunityTab({ flows, onError, onNotice }: Props) {
                         ? t('다시 받기')
                         : t('설치')}
                 </button>
+                )}
                 <a className="pixel-btn small" href={`${result.site}/community/items/${item.id}`} target="_blank" rel="noreferrer">
                   {t('자세히')}
                 </a>

@@ -153,6 +153,8 @@ export interface CommunityItem {
   license: string;
   verified: boolean;
   version: string;
+  /** 0 for free; paid themes are bought on the site. */
+  priceKrw: number;
   downloads: number;
   likes: number;
   owner: { handle: string | null; name: string };
