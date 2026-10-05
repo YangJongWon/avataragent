@@ -6,5 +6,6 @@ data/
 logs/
 art/build/
 .venv-art/
+__pycache__/
 site-data/
 site/.env
