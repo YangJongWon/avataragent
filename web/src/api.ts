@@ -6,6 +6,7 @@ import { setCatalog, type ApiKind, type Company, type ModelEntry, type Tier } fr
 import type { Personality } from '../../shared/personality.ts';
 import type { Playbook, PlaybookChange } from '../../shared/playbook.ts';
 import type { Plan } from '../../shared/plans.ts';
+import type { FlowPack } from '../../shared/flow-pack.ts';
 import type { ThemeBooking } from '../../shared/theme-pack.ts';
 import type {
   Agent,
@@ -18,6 +19,7 @@ import type {
   OfficeEvent,
   PlanMode,
   Role,
+  SavedFlow,
   ServerMessage,
   ShareLink,
   ShareRole,
@@ -133,7 +135,30 @@ export const api = {
     const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/)?.[1];
     return { blob: await res.blob(), filename: encoded ? decodeURIComponent(encoded) : `export.${format}` };
   },
+  saveFlow: (flow: FlowPack, source: 'mine' | 'file') => call<SavedFlow>('POST', '/api/flows', { flow, source }),
+  removeFlow: (id: string) => call('DELETE', `/api/flows/${encodeURIComponent(id)}`),
+  communityItems: (query: Record<string, string>) =>
+    call<{ site: string; items: CommunityItem[]; total: number }>('GET', `/api/community/items?${new URLSearchParams(query)}`),
+  communityInstall: (id: string) =>
+    call<{ type: 'theme'; theme: { id: string; name: string } } | { type: 'flow'; flow: SavedFlow } | { type: 'playbook'; playbook: Playbook }>('POST', '/api/community/install', { id }),
 };
+
+/** A gallery card from the project site (see site/server/community.ts). */
+export interface CommunityItem {
+  id: string;
+  type: 'theme' | 'flow' | 'playbook';
+  title: string;
+  summary: string;
+  tags: string[];
+  license: string;
+  verified: boolean;
+  version: string;
+  downloads: number;
+  likes: number;
+  owner: { handle: string | null; name: string };
+  preview: string | null;
+  updatedAt: string;
+}
 
 export type McpServerInput = Pick<McpServer, 'name' | 'icon' | 'transport' | 'url' | 'command' | 'args' | 'enabled' | 'officeIds' | 'oauth'>;
 

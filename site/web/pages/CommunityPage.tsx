@@ -1,30 +1,153 @@
-import { Link } from '../router.tsx';
+import { useEffect, useState } from 'react';
+import { siteApi, type ItemCard, type ItemType } from '../api.ts';
+import { Link, navigate } from '../router.tsx';
 
-const COMING: [string, string, string][] = [
-  ['🎨', '테마', '사무실 배경과 직원 캐릭터. 앱의 테마 스튜디오나 로컬 AI로 만들어 올릴 수 있어요.'],
-  ['🧭', '업무 흐름', '단계와 반려 조건까지 담은 업무 여정 템플릿.'],
-  ['📘', '플레이북', '역할별 성격·규칙·모델 등급과 실제 성과표. 이름·업무 내용·키는 담기지 않아요.'],
-  ['🏆', '크리에이터와 랭킹', '만든 사람 페이지, 인기 순위, 배지.'],
-  ['💬', '게시판과 Q&A', '질문, 팁, 기능 제안, 내 사무실 자랑.'],
+export const TYPE_LABEL: Record<ItemType, { icon: string; label: string }> = {
+  theme: { icon: '🎨', label: '테마' },
+  flow: { icon: '🧭', label: '업무 흐름' },
+  playbook: { icon: '📘', label: '플레이북' },
+};
+
+const SORTS: [string, string][] = [
+  ['popular', '요즘 인기'],
+  ['new', '새로 올라온'],
+  ['downloads', '다운로드 많은'],
 ];
+const PAGE = 24;
 
-export function CommunityPage() {
+export function ItemCardView({ item }: { item: ItemCard }) {
+  const type = TYPE_LABEL[item.type];
+  return (
+    <Link href={`/community/items/${item.id}`} className="card item-card">
+      <div className="item-thumb">{item.preview ? <img src={item.preview} alt="" loading="lazy" /> : <span>{type.icon}</span>}</div>
+      <div className="item-body">
+        <div className="item-type">
+          {type.icon} {type.label}
+          {item.verified && <span className="badge">검수 통과</span>}
+          {item.status && item.status !== 'published' && <span className="badge warn">{item.status === 'hidden' ? '숨김' : item.status}</span>}
+        </div>
+        <h3>{item.title}</h3>
+        {item.summary && <p className="muted small clamp">{item.summary}</p>}
+        <div className="item-meta small muted">
+          <span>{item.owner.handle ? `@${item.owner.handle}` : item.owner.name}</span>
+          <span>♥ {item.likes}</span>
+          <span>⬇ {item.downloads}</span>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+export function CommunityPage({ search }: { search: string }) {
+  const params = new URLSearchParams(search);
+  const type = (params.get('type') ?? '') as ItemType | '';
+  const sort = params.get('sort') ?? 'popular';
+  const tag = params.get('tag') ?? '';
+  const [q, setQ] = useState(params.get('q') ?? '');
+  const [items, setItems] = useState<ItemCard[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [error, setError] = useState('');
+
+  const go = (patch: Record<string, string>) => {
+    const next = new URLSearchParams(search);
+    for (const [k, v] of Object.entries(patch)) {
+      if (v) next.set(k, v);
+      else next.delete(k);
+    }
+    navigate(`/community${next.size ? `?${next}` : ''}`);
+  };
+
+  useEffect(() => {
+    setItems(null);
+    setError('');
+    const query: Record<string, string> = { sort, limit: String(PAGE) };
+    if (type) query.type = type;
+    if (tag) query.tag = tag;
+    if (params.get('q')) query.q = params.get('q')!;
+    siteApi.items(query).then(
+      (r) => {
+        setItems(r.items);
+        setTotal(r.total);
+      },
+      (e) => setError(e instanceof Error ? e.message : String(e)),
+    );
+  }, [search]);
+
+  const more = async () => {
+    const query: Record<string, string> = { sort, limit: String(PAGE), offset: String(items?.length ?? 0) };
+    if (type) query.type = type;
+    if (tag) query.tag = tag;
+    if (params.get('q')) query.q = params.get('q')!;
+    const r = await siteApi.items(query);
+    setItems((list) => [...(list ?? []), ...r.items]);
+  };
+
   return (
     <section className="page">
-      <h1>커뮤니티</h1>
-      <p className="lead">곧 열려요. 여기서 테마·업무 흐름·플레이북을 나누고, 앱의 커뮤니티 탭에서 바로 설치할 수 있게 돼요.</p>
-      <div className="features">
-        {COMING.map(([icon, title, text]) => (
-          <article key={title} className="card">
-            <div className="feature-icon">{icon}</div>
-            <h3>{title}</h3>
-            <p>{text}</p>
-          </article>
-        ))}
+      <div className="row between">
+        <h1>커뮤니티</h1>
+        <Link href={`/community/upload${type ? `?type=${type}` : ''}`} className="button">
+          올리기
+        </Link>
       </div>
-      <p>
-        지금은 <Link href="/docs/theme-guide">테마 만들기 가이드</Link>를 보고 첫 테마를 준비해 두세요.
-      </p>
+      <p className="lead">사무실 테마, 업무 흐름, 플레이북을 나눠요. 앱의 커뮤니티 탭에서 바로 설치할 수도 있어요.</p>
+
+      <div className="gallery-bar">
+        <div className="tabs">
+          <button className={!type ? 'active' : ''} onClick={() => go({ type: '' })}>
+            전체
+          </button>
+          {(Object.keys(TYPE_LABEL) as ItemType[]).map((t) => (
+            <button key={t} className={type === t ? 'active' : ''} onClick={() => go({ type: t })}>
+              {TYPE_LABEL[t].icon} {TYPE_LABEL[t].label}
+            </button>
+          ))}
+        </div>
+        <form
+          className="row search"
+          onSubmit={(e) => {
+            e.preventDefault();
+            go({ q: q.trim() });
+          }}
+        >
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름이나 설명으로 찾기" aria-label="찾기" />
+          <select value={sort} onChange={(e) => go({ sort: e.target.value })} aria-label="정렬">
+            {SORTS.map(([v, label]) => (
+              <option key={v} value={v}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </form>
+      </div>
+      {tag && (
+        <p>
+          태그 <b>#{tag}</b>{' '}
+          <button className="button small ghost" onClick={() => go({ tag: '' })}>
+            태그 지우기
+          </button>
+        </p>
+      )}
+
+      {error && <p className="error">{error}</p>}
+      {items === null && !error ? (
+        <p className="muted">불러오는 중…</p>
+      ) : items?.length === 0 ? (
+        <div className="card">
+          <p className="muted">
+            {params.get('q') || tag ? '찾는 항목이 없어요.' : '아직 올라온 항목이 없어요. 첫 번째로 올려 보세요!'} <Link href="/docs/theme-guide">테마 만들기 가이드</Link>
+          </p>
+        </div>
+      ) : (
+        <div className="gallery">{items?.map((item) => <ItemCardView key={item.id} item={item} />)}</div>
+      )}
+      {items && items.length < total && (
+        <p className="cta">
+          <button className="button ghost" onClick={() => void more()}>
+            더 보기 ({items.length}/{total})
+          </button>
+        </p>
+      )}
     </section>
   );
 }

@@ -7,6 +7,7 @@ import { api, useOffice } from './api.ts';
 import { DemoTour } from './components/DemoTour.tsx';
 import { Drawer } from './components/Drawer.tsx';
 import { HelpPanel } from './components/HelpPanel.tsx';
+import { CommunityTab } from './components/CommunityTab.tsx';
 import { HireTab } from './components/HireTab.tsx';
 import { AgentCardModal, HelpDialog, NewOfficeModal, NewTaskModal, PlanEditModal, RulesModal } from './components/Modals.tsx';
 import { McpTab } from './components/McpTab.tsx';
@@ -37,7 +38,7 @@ import { ThemeStudio } from './studio/ThemeStudio.tsx';
 import { themeApi } from './themeApi.ts';
 import { useThemePack } from './useThemePack.ts';
 
-type Tab = 'office' | 'lounge' | 'hire' | 'models' | 'mcp' | 'profit' | 'perf' | 'work' | 'members' | 'settings' | 'themes' | 'studio';
+type Tab = 'office' | 'lounge' | 'hire' | 'models' | 'mcp' | 'profit' | 'perf' | 'work' | 'members' | 'settings' | 'themes' | 'studio' | 'community';
 type Dialog =
   | { kind: 'newTask' }
   | { kind: 'newOffice' }
@@ -421,6 +422,7 @@ export function App() {
                 ['lounge', '프로젝트 라운지'],
                 ['hire', '직원 관리'],
                 ['themes', '테마'],
+                ['community', '커뮤니티'],
                 ['models', '모델 관리'],
                 ['mcp', 'MCP 관리'],
                 ['profit', '손익·결산'],
@@ -622,6 +624,11 @@ export function App() {
         {tab === 'work' && <WorkTab snapshot={snapshot} onError={showError} onNotice={toast} />}
         {tab === 'members' && <MembersTab snapshot={snapshot} onError={showError} onNotice={toast} />}
         {tab === 'settings' && <SettingsTab snapshot={snapshot} onError={showError} onNotice={toast} />}
+        {tab === 'community' && (
+          <main className="page">
+            <CommunityTab flows={snapshot.flows ?? []} onError={showError} onNotice={toast} />
+          </main>
+        )}
         {tab === 'themes' && (
           <main className="page">
           <ThemesTab
@@ -687,6 +694,11 @@ export function App() {
               <button className="pixel-btn small" onClick={() => setTab('themes')}>
                 {t('← 테마 목록')}
               </button>
+              {snapshot.siteUrl && (
+                <a className="pixel-btn small" href={`${snapshot.siteUrl}/community/upload?type=theme`} target="_blank" rel="noreferrer" title={t('스튜디오에서 내보낸 zip을 사이트에 올려요.')}>
+                  {t('커뮤니티에 올리기')}
+                </a>
+              )}
             </div>
             <ThemeStudio
               onInstall={isOwner ? async (zip) => void (await themeApi.importZip(zip)) : undefined}
@@ -724,6 +736,8 @@ export function App() {
             queuedCount={queuedCount}
             pendingCount={pendingCount}
             hourlyRateKrw={snapshot.budget.hourlyRateKrw}
+            flows={snapshot.flows ?? []}
+            canSaveFlows={isOwner}
             onClose={() => setDialog(null)}
             onError={showError}
           />

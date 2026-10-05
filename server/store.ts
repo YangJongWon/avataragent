@@ -33,6 +33,7 @@ import type {
   OutboxReply,
   Recommendation,
   Role,
+  SavedFlow,
   ShareLink,
   Snapshot,
   StepKind,
@@ -83,6 +84,7 @@ export interface PersistedState {
   themeBookings: ThemeBooking[];
   /** The theme for the page around the offices (top bar, tabs, panels); null follows the office being viewed. */
   siteTheme: string | null;
+  flows: SavedFlow[];
 }
 
 const freshBilling = (): PersistedState['billing'] => ({ subscription: freeSubscription(config.billingProvider), invoices: [], checkouts: [], processedEvents: [] });
@@ -168,6 +170,7 @@ function fresh(): PersistedState {
     theme: DEFAULT_THEME,
     themeBookings: [],
     siteTheme: null,
+    flows: [],
   };
 }
 
@@ -235,6 +238,7 @@ function normalize(saved: PersistedState) {
   if (typeof saved.theme !== 'string') saved.theme = adoptCompanyTheme(saved.offices);
   saved.themeBookings ??= [];
   saved.siteTheme ??= null;
+  saved.flows ??= [];
   saved.performance ??= [];
   saved.improvements ??= [];
   if (!isPlan(saved.plan)) saved.plan = 'personal';
@@ -298,10 +302,12 @@ class Store {
       viewer: { kind: 'owner' },
       shares: s.shares,
       publicUrl: config.publicUrl || undefined,
+      siteUrl: config.siteUrl || undefined,
       companyName: '알파 AI 컴퍼니',
       theme: s.theme,
       themeBookings: s.themeBookings,
       siteTheme: s.siteTheme,
+      flows: s.flows,
       provider,
       model: provider === 'mock' || provider === 'agents' ? '직원별 모델' : config.model,
       aiMode: s.aiMode,

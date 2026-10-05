@@ -1,12 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { TEAM_ORDER, TEAMS } from '../../../shared/teams.ts';
-import type { Agent, Office, PlanMode, Task, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
+import type { Agent, Office, PlanMode, SavedFlow, Task, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
 import { loopTargetLabel, STEP_KIND, templatePlan, validatePlan } from '../../../shared/workflow.ts';
 import { api } from '../api.ts';
 import { krw, modelLabel, roi } from '../format.ts';
 import { themeApi } from '../themeApi.ts';
 import { DEFAULT_THEME, type ThemeSummary } from '../../../shared/theme-pack.ts';
 import { t } from '../../../shared/i18n.ts';
+import { FlowTools } from './FlowTools.tsx';
 import { PlanEditor } from './PlanEditor.tsx';
 import { AgentPortrait } from './AgentPortrait.tsx';
 
@@ -158,6 +159,8 @@ export function NewTaskModal({
   queuedCount,
   pendingCount,
   hourlyRateKrw,
+  flows = [],
+  canSaveFlows = false,
   onClose,
   onError,
 }: {
@@ -167,6 +170,8 @@ export function NewTaskModal({
   queuedCount: number;
   pendingCount: number;
   hourlyRateKrw: number;
+  flows?: SavedFlow[];
+  canSaveFlows?: boolean;
   onClose: () => void;
 } & ErrorProp) {
   const willQueue = officeBusy || queuedCount > 0;
@@ -306,6 +311,7 @@ export function NewTaskModal({
       {planMode === 'custom' && (
         <>
           {planNote && <p className="plan-note small">🧭 팀장 의견: {planNote}</p>}
+          <FlowTools team={office.team} agents={agents} steps={steps} flows={flows} canSave={canSaveFlows} onLoad={setSteps} onError={onError} />
           <PlanEditor team={office.team} agents={agents} steps={steps} onChange={setSteps} />
           <button type="button" className="pixel-btn small" disabled={designing} onClick={preview}>
             {designing ? '설계 중…' : '🧭 AI 추천으로 다시 채우기'}

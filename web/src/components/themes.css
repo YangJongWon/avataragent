@@ -140,3 +140,38 @@
   opacity: 0.6;
   pointer-events: none;
 }
+
+/* ── community tab & saved flows ───────────────────────── */
+.community-bar {
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+
+.community-bar input,
+.community-bar select,
+.flow-tools select {
+  font: inherit;
+  padding: 4px 6px;
+}
+
+.saved-flows {
+  list-style: none;
+  padding: 0;
+}
+
+.saved-flows li {
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(0, 0, 0, 0.15);
+}
+
+.flow-tools {
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.community-tab > h3 {
+  margin-top: 20px;
+}

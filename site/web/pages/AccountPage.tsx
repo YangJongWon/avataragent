@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { planOf } from '../../../shared/plans.ts';
-import { siteApi, type LicenseView, type Me } from '../api.ts';
+import { siteApi, type ItemCard, type LicenseView, type Me } from '../api.ts';
 import { Link, navigate } from '../router.tsx';
+import { ItemCardView } from './CommunityPage.tsx';
 
 const STATUS: Record<LicenseView['status'], string> = { active: '이용 중', past_due: '결제 실패 (유예 중)', canceled: '종료' };
 const day = (iso: string) => new Date(iso).toLocaleDateString('ko-KR');
@@ -93,10 +94,13 @@ function LicenseCard({ license, onChange }: { license: LicenseView; onChange: (l
 
 export function AccountPage({ me, onLogout }: { me: Me | null; onLogout: () => void }) {
   const [licenses, setLicenses] = useState<LicenseView[] | null>(null);
+  const [items, setItems] = useState<ItemCard[] | null>(null);
   const signedIn = Boolean(me?.account);
 
   useEffect(() => {
-    if (signedIn) siteApi.licenses().then(setLicenses, () => setLicenses([]));
+    if (!signedIn) return;
+    siteApi.licenses().then(setLicenses, () => setLicenses([]));
+    siteApi.myItems().then(setItems, () => setItems([]));
   }, [signedIn]);
 
   if (!me) return <section className="page narrow">불러오는 중…</section>;
@@ -141,10 +145,21 @@ export function AccountPage({ me, onLogout }: { me: Me | null; onLogout: () => v
         licenses.map((l) => <LicenseCard key={l.id} license={l} onChange={setLicenses} />)
       )}
 
-      <div className="card">
-        <h3>내 테마와 활동</h3>
-        <p className="muted">커뮤니티가 열리면 올린 항목, 좋아요, 구매한 테마가 여기 모여요. (준비 중)</p>
+      <div className="row between">
+        <h2>내가 올린 항목</h2>
+        <Link href="/community/upload" className="button small">
+          올리기
+        </Link>
       </div>
+      {items === null ? (
+        <p className="muted">불러오는 중…</p>
+      ) : items.length === 0 ? (
+        <div className="card">
+          <p className="muted">아직 올린 항목이 없어요. 테마·업무 흐름·플레이북을 커뮤니티에 나눠 보세요.</p>
+        </div>
+      ) : (
+        <div className="gallery compact">{items.map((item) => <ItemCardView key={item.id} item={item} />)}</div>
+      )}
       <button className="button ghost" onClick={() => void logout()}>
         로그아웃
       </button>

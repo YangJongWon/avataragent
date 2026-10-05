@@ -4,10 +4,12 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { PLANS } from '../../shared/plans.ts';
 import { Auth, AuthError, type Account, type OAuthProvider } from './auth.ts';
 import { BillingError, licenseKey, SiteBilling } from './billing.ts';
+import { Community, CommunityError } from './community.ts';
 import type { SiteConfig } from './config.ts';
 import type { Db } from './db.ts';
 import type { Mailer } from './mail.ts';
 import { mockOutcome, mockPayments, type PaymentProvider } from './payments.ts';
+import { diskStorage, filesDir, type FileStorage } from './storage.ts';
 
 const ROOT = resolve(import.meta.dirname, '..', '..');
 
@@ -26,6 +28,7 @@ export interface SiteDeps {
   fetch?: typeof fetch;
   now?: () => Date;
   payments?: PaymentProvider;
+  storage?: FileStorage;
 }
 
 class SignInRequired extends Error {}
@@ -42,6 +45,7 @@ export function createSiteApp(deps: SiteDeps) {
   const auth = new Auth(deps.db, deps.config, deps.mailer, deps.fetch, deps.now);
   const payments = deps.payments ?? mockPayments;
   const billing = new SiteBilling(deps.db, payments, licenseKey(deps.config.license, deps.config.dataDir), deps.config.publicUrl, deps.now);
+  const community = new Community(deps.db, deps.storage ?? diskStorage(filesDir(deps.config.dataDir)), deps.now);
   const app = express();
   app.set('trust proxy', true);
   app.use(express.json({ limit: '256kb' }));
@@ -149,6 +153,59 @@ export function createSiteApp(deps: SiteDeps) {
     res.json(billing.publicKey);
   });
 
+  // ── community ──────────────────────────────────────────────
+  app.get('/api/items', async (req, res) => {
+    res.json(await community.list(req.query));
+  });
+
+  app.get('/api/me/items', async (_req, res) => {
+    res.json(await community.mine(signedIn(res)));
+  });
+
+  // The file goes as the raw body; what it is and its tags go in the query.
+  app.post('/api/items', express.raw({ type: () => true, limit: '21mb' }), async (req, res) => {
+    const body = req.body as unknown;
+    const bytes = Buffer.isBuffer(body) ? new Uint8Array(body) : new TextEncoder().encode(JSON.stringify(body ?? null));
+    res.json(await community.upload(signedIn(res), { type: req.query.type, bytes, item: req.query.item, tags: req.query.tags, license: req.query.license }));
+  });
+
+  app.get('/api/items/:id', async (req, res) => {
+    res.json(await community.detail(req.params.id, res.locals.account));
+  });
+
+  app.get('/api/items/:id/preview', async (req, res) => {
+    const file = await community.preview(req.params.id);
+    if (!file) return void res.status(404).end();
+    res.setHeader('content-type', file.contentType);
+    res.setHeader('cache-control', 'public, max-age=300');
+    res.end(Buffer.from(file.bytes));
+  });
+
+  // Public: installs fetch free items here through their own server.
+  app.get('/api/items/:id/download', async (req, res) => {
+    const file = await community.download(req.params.id, res.locals.account, req.query.v);
+    res.setHeader('content-type', file.contentType);
+    res.setHeader('content-disposition', `attachment; filename="${file.name}"`);
+    res.setHeader('x-item-type', file.type);
+    res.end(Buffer.from(file.bytes));
+  });
+
+  app.post('/api/items/:id/like', async (req, res) => {
+    res.json(await community.like(req.params.id, signedIn(res), req.body?.on !== false));
+  });
+
+  app.post('/api/items/:id/report', async (req, res) => {
+    res.json(await community.report(req.params.id, signedIn(res), req.body?.reason));
+  });
+
+  app.post('/api/items/:id/status', async (req, res) => {
+    res.json(await community.setStatus(req.params.id, signedIn(res), req.body?.status));
+  });
+
+  app.post('/api/items/:id/verified', async (req, res) => {
+    res.json(await community.setVerified(req.params.id, signedIn(res), req.body?.verified === true));
+  });
+
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: '없는 주소예요.' });
   });
@@ -163,7 +220,8 @@ export function createSiteApp(deps: SiteDeps) {
   app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {
     const message = error instanceof Error ? error.message : String(error);
     if (error instanceof SignInRequired) return void res.status(401).json({ error: message });
-    if (error instanceof BillingError) return void res.status(error.status).json({ error: message });
+    if (error instanceof BillingError || error instanceof CommunityError) return void res.status(error.status).json({ error: message });
+    if ((error as { type?: string }).type === 'entity.too.large') return void res.status(413).json({ error: '파일이 너무 커요.' });
     const known = error instanceof AuthError;
     if (!known) console.error(error);
     // Sign-in links and OAuth callbacks are opened in the browser: send people back to the login page with the reason.
@@ -173,5 +231,5 @@ export function createSiteApp(deps: SiteDeps) {
     res.status(known ? 400 : 500).json({ error: known ? message : '서버에서 문제가 생겼어요.' });
   });
 
-  return Object.assign(app, { billing });
+  return Object.assign(app, { billing, community });
 }

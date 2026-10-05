@@ -8,6 +8,7 @@ import type { Company, ModelEntry } from './models.ts';
 import type { AgentSkin, Skin } from './skins.ts';
 import type { Language } from './i18n.ts';
 import type { ThemeBooking } from './theme-pack.ts';
+import type { FlowPack } from './flow-pack.ts';
 
 /** 'env' follows AI_PROVIDER in .env; the others override it from the model settings page. */
 export type AiMode = 'env' | 'mock' | 'agents';
@@ -139,6 +140,16 @@ export interface FlowTemplateStep {
   role: Role | null;
   /** Reviews get a loop back to the draft by default; `null` turns that off. */
   loop?: StepLoop | null;
+}
+
+/** A work journey kept for reuse: one of mine, from a file, or installed from the community. */
+export interface SavedFlow {
+  id: string;
+  source: 'mine' | 'file' | 'community';
+  /** The community item it came from, so installing again replaces it. */
+  itemId?: string;
+  flow: FlowPack;
+  savedAt: string;
 }
 
 export interface TaskTypeEntry {
@@ -384,6 +395,8 @@ export interface Snapshot {
   chat: ChatMessage[];
   /** Owner only: base address to put in share links. */
   publicUrl?: string;
+  /** The project site (SITE_URL): community and plan sales. */
+  siteUrl?: string;
   companyName: string;
   /** The theme every office shows unless it picked its own. */
   theme: string;
@@ -391,6 +404,8 @@ export interface Snapshot {
   themeBookings: ThemeBooking[];
   /** The theme for the page around the offices; null follows the office being viewed. */
   siteTheme: string | null;
+  /** Work journeys saved for reuse when making a task. */
+  flows: SavedFlow[];
   provider: string;
   model: string;
   /** Owner only. */

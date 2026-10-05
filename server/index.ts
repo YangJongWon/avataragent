@@ -19,6 +19,7 @@ import { allowedModes, isToolMode, type McpServer } from '../shared/mcp.ts';
 import { isExportFormat } from '../shared/design.ts';
 import { isPersonality } from '../shared/personality.ts';
 import { parsePlaybook, playbookChanges } from '../shared/playbook.ts';
+import { parseFlowPack } from '../shared/flow-pack.ts';
 import { isPlan, planOf } from '../shared/plans.ts';
 import { isLanguage, type Language } from '../shared/i18n.ts';
 import { exportActivity } from './activity.ts';
@@ -30,6 +31,7 @@ import { canSeeEvent, ForbiddenError, snapshotFor } from './access.ts';
 import { listModels } from './ai.ts';
 import { authEnabled, authRouter, stillValid, viewerOf } from './auth.ts';
 import { chatNews, forwardChat, postChat, setAssignee } from './chat.ts';
+import { communityInstall, communityItem, communityList, communityPreview, removeFlow, saveFlow } from './community.ts';
 import { config } from './config.ts';
 import { closeStorage, storageInfo } from './db.ts';
 import { createMember, deleteMember, updateMember } from './members.ts';
@@ -270,6 +272,43 @@ app.get('/api/themes/:id/export', (req, res) => {
   res.setHeader('content-type', 'application/zip');
   res.setHeader('content-disposition', `attachment; filename="${req.params.id}.zip"`);
   res.send(Buffer.from(zip));
+});
+
+// Saved work journeys: anyone making a task can use them; the owner keeps the list.
+app.post('/api/flows', (req, res) => {
+  guard(res, 'owner');
+  const source = req.body?.source === 'file' ? 'file' : 'mine';
+  res.json(saveFlow(parseFlowPack(req.body?.flow), source));
+});
+
+app.delete('/api/flows/:id', (req, res) => {
+  guard(res, 'owner');
+  removeFlow(req.params.id);
+  res.json({ ok: true });
+});
+
+// The community on the project site, fetched by this server from SITE_URL only.
+app.get('/api/community/items', async (req, res) => {
+  guard(res, 'owner');
+  res.json(await communityList(req.query as Record<string, unknown>));
+});
+
+app.get('/api/community/items/:id', async (req, res) => {
+  guard(res, 'owner');
+  res.json(await communityItem(req.params.id));
+});
+
+app.get('/api/community/items/:id/preview', async (req, res) => {
+  guard(res, 'owner');
+  const file = await communityPreview(req.params.id);
+  res.setHeader('content-type', file.contentType);
+  res.setHeader('cache-control', 'private, max-age=300');
+  res.send(Buffer.from(file.bytes));
+});
+
+app.post('/api/community/install', async (req, res) => {
+  guard(res, 'owner');
+  res.json(await communityInstall(req.body?.id));
 });
 
 app.get('/themes/:id/*path', (req, res) => {

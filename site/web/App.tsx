@@ -6,8 +6,10 @@ import { CommunityPage } from './pages/CommunityPage.tsx';
 import { DocsPage } from './pages/DocsPage.tsx';
 import { HomePage } from './pages/HomePage.tsx';
 import { InstallPage } from './pages/InstallPage.tsx';
+import { ItemPage } from './pages/ItemPage.tsx';
 import { LoginPage } from './pages/LoginPage.tsx';
 import { PricingPage } from './pages/PricingPage.tsx';
+import { UploadPage } from './pages/UploadPage.tsx';
 import { Link, useLocation } from './router.tsx';
 
 const NAV: [string, string][] = [
@@ -30,7 +32,9 @@ export function App() {
     if (path === '/') return <HomePage />;
     if (path === '/pricing') return <PricingPage />;
     if (path === '/install') return <InstallPage />;
-    if (path === '/community') return <CommunityPage />;
+    if (path === '/community') return <CommunityPage search={search} />;
+    if (path === '/community/upload') return <UploadPage me={me} search={search} />;
+    if (path.startsWith('/community/items/')) return <ItemPage id={path.split('/')[3]} me={me} />;
     if (path === '/docs' || path.startsWith('/docs/')) return <DocsPage slug={path.split('/')[2]} />;
     if (path === '/login') return <LoginPage me={me} search={search} />;
     if (path === '/account') return <AccountPage me={me} onLogout={refresh} />;
