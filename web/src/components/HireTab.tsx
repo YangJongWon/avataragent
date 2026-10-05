@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { t, tpl } from '../../../shared/i18n.ts';
+import { currentLanguage, t, tpl } from '../../../shared/i18n.ts';
+import { localText } from '../../../shared/theme-rules.ts';
 import { allCompanies, allModels, companyOf, hatName, HATS, modelOf, tierHat, tierLabel, type Tier } from '../../../shared/models.ts';
 import { PERSONALITIES, personalityDescription, personalityLabel } from '../../../shared/personality.ts';
 import { builtinSkin, SKINS, skinName, skinNote } from '../../../shared/skins.ts';
@@ -59,16 +60,19 @@ function AgentEditor({
   const [model, setModel] = useState(agent.model);
   const [rules, setRules] = useState(agent.rules);
   const [skin, setSkin] = useState(agent.skin);
+  const [outfit, setOutfit] = useState<string | null>(agent.outfit ?? null);
   const [personality, setPersonality] = useState(agent.personality);
   const [roll, setRoll] = useState(0);
-  const dirty = name !== agent.name || model !== agent.model || rules !== agent.rules || skin !== agent.skin || personality !== agent.personality;
-
   const candidates = useMemo(() => buildCandidates(agent.id, roll), [agent.id, roll]);
   const ownCharacter = packCharacterOf(skin, theme);
+  // An outfit the newly picked character does not have is dropped, as the server does.
+  const wearing = ownCharacter?.outfits.some((o) => o.id === outfit) ? outfit : null;
+  const dirty =
+    name !== agent.name || model !== agent.model || rules !== agent.rules || skin !== agent.skin || personality !== agent.personality || wearing !== (agent.outfit ?? null);
 
   const save = async () => {
     try {
-      await api.updateAgent(agent.id, { name, model, rules, skin, personality });
+      await api.updateAgent(agent.id, { name, model, rules, skin, personality, ...(ownCharacter && { outfit: wearing }) });
       onSaved(tpl('{name} 정보를 저장했어요.', { name }));
     } catch (e) {
       onError(e instanceof Error ? e.message : String(e));
@@ -84,7 +88,7 @@ function AgentEditor({
 
       <div className="hire-stage">
         {theme && ownCharacter ? (
-          <PackCharacterPreview themeId={theme.id} character={ownCharacter} />
+          <PackCharacterPreview themeId={theme.id} character={ownCharacter} outfit={wearing} />
         ) : (
           <CharacterPreview role={agent.role} skin={builtinSkin(skin)} modelId={model} expression="smile" />
         )}
@@ -132,6 +136,25 @@ function AgentEditor({
           })}
         </div>
         {theme && <div className="muted small">{tpl('{theme} 테마의 캐릭터는 이 테마를 쓰는 사무실에서 보여요. 다른 사무실에서는 기본 픽셀로 보여요.', { theme: theme.name })}</div>}
+        {theme && ownCharacter && ownCharacter.outfits.length > 0 && (
+          <>
+            <b>{t('의상')}</b>
+            <div className="skin-row">
+              {[null, ...ownCharacter.outfits].map((o) => (
+                <button
+                  key={o?.id ?? ''}
+                  className={`skin-option skin-option-art ${wearing === (o?.id ?? null) ? 'selected' : ''}`}
+                  type="button"
+                  onClick={() => setOutfit(o?.id ?? null)}
+                >
+                  <PackCharacterPreview themeId={theme.id} character={ownCharacter} outfit={o?.id ?? null} />
+                  {o ? localText(o.name, currentLanguage()) : t('기본 옷')}
+                </button>
+              ))}
+            </div>
+            {theme.dress.length > 0 && <div className="muted small">{t('테마의 옷 규칙(예: 휴게실에서는 편한 옷)이 맞을 때는 그 옷이 먼저 보여요.')}</div>}
+          </>
+        )}
       </div>
 
       <div className="field">

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const { activeVariant, applyVariant, companyThemeOn, manifestFiles, officeTheme, parseBookings, parseThemeManifest } = await import('../shared/theme-pack.ts');
+const { activeVariant, applyVariant, characterLayers, companyThemeOn, manifestFiles, officeTheme, outfitFor, parseBookings, parseThemeManifest } = await import('../shared/theme-pack.ts');
 const { findRoute, firstMatch, inDates, inHours, localText, matches } = await import('../shared/theme-rules.ts');
 const { DEFAULT_EMOTES, DEFAULT_INTERACTIONS } = await import('../shared/theme-defaults.ts');
 const { mergeLayout } = await import('../web/src/office/theme.ts');
@@ -170,6 +170,53 @@ test('a dated variant overrides parts of the theme while its dates hold', () => 
   assert.equal(spooky.wear?.[0].image, 'assets/pumpkin.png');
   assert.equal(applyVariant(theme, undefined), theme);
   assert.ok(manifestFiles(theme).includes('assets/bat.png'));
+});
+
+test('characters stack part sheets and change outfits by pick or by dress rule', () => {
+  const dollFiles = new Set([...files, 'assets/legs.png', 'assets/body.png', 'assets/head.png', 'assets/cardigan.png', 'assets/shorts.png', 'assets/costume.png']);
+  const doll = {
+    id: 'mina',
+    sheet: 'assets/mina.png',
+    frames: { a: { x: 0, y: 0, w: 64, h: 96 } },
+    states: { idle: { frames: ['a'] } },
+    parts: { legs: 'assets/legs.png', body: 'assets/body.png', head: 'assets/head.png' },
+    outfits: [
+      { id: 'casual', name: { ko: '캐주얼', en: 'Casual' }, parts: { body: 'assets/cardigan.png', legs: 'assets/shorts.png' } },
+      { id: 'pumpkin', sheet: 'assets/costume.png' },
+    ],
+  };
+  const theme = parseThemeManifest(
+    minimal({
+      characters: [doll],
+      dress: [{ when: { place: 'lounge' }, outfit: 'casual' }],
+      variants: [{ id: 'halloween', when: { dates: ['10-24', '10-31'] }, dress: [{ outfit: 'pumpkin' }] }],
+    }),
+    dollFiles,
+  );
+  const mina = theme.characters[0];
+  assert.deepEqual(characterLayers(mina), ['assets/mina.png', 'assets/legs.png', 'assets/body.png', 'assets/head.png']);
+  assert.deepEqual(characterLayers(mina, 'casual'), ['assets/mina.png', 'assets/shorts.png', 'assets/cardigan.png', 'assets/head.png']);
+  assert.deepEqual(characterLayers(mina, 'pumpkin'), ['assets/costume.png']);
+  assert.deepEqual(characterLayers(mina, 'unknown'), characterLayers(mina));
+  for (const file of ['assets/legs.png', 'assets/cardigan.png', 'assets/costume.png']) assert.ok(manifestFiles(theme).includes(file));
+
+  // A matching rule wins over the staff's pick; a rule for an outfit the character lacks is skipped.
+  assert.equal(outfitFor(mina, [], 'casual'), 'casual');
+  assert.equal(outfitFor(mina, ['suit', 'pumpkin'], 'casual'), 'pumpkin');
+  assert.equal(outfitFor(mina, ['suit'], 'nope'), null);
+  assert.deepEqual(theme.dress, [{ when: { place: ['lounge'] }, outfit: 'casual' }]);
+  assert.equal(applyVariant(theme, activeVariant(theme, at('2026-10-30T12:00:00'))).dress[0].outfit, 'pumpkin');
+
+  // Sheets without parts or outfits still parse as before.
+  const plain = parseThemeManifest(minimal(), files).characters[0];
+  assert.deepEqual([plain.parts, plain.outfits], [{}, []]);
+
+  const bad = (character: Record<string, unknown>, message: RegExp) => assert.throws(() => parseThemeManifest(minimal({ characters: [{ ...doll, ...character }] }), dollFiles), message);
+  bad({ parts: { tail: 'assets/legs.png' } }, /legs, body, head/);
+  bad({ parts: { legs: 'assets/missing.png' } }, /패키지에 없어요/);
+  bad({ outfits: [{ id: 'casual' }] }, /sheet나 parts/);
+  bad({ outfits: [{ id: 'casual', sheet: 'assets/costume.png' }, { id: 'casual', sheet: 'assets/costume.png' }] }, /겹쳐요/);
+  assert.throws(() => parseThemeManifest(minimal({ dress: [{ outfit: 'Not An Id' }] }), files), /의상 id/);
 });
 
 test('the site look parses, lists its files and changes with the season', () => {

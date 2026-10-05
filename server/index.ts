@@ -44,7 +44,7 @@ import { adviseModel } from './model-advice.ts';
 import { finishLogin, logout, OAUTH_CALLBACK_PATH, startLogin } from './mcp-oauth.ts';
 import { apiKeyFor, dropMcpSecrets, setApiKey, setMcpSecrets } from './secrets.ts';
 import { store } from './store.ts';
-import { exportTheme, importTheme, isUsableSkin, isUsableTheme, listThemes, removeTheme, themeFile } from './themes.ts';
+import { exportTheme, importTheme, isUsableOutfit, isUsableSkin, isUsableTheme, listThemes, removeTheme, themeFile } from './themes.ts';
 import { DEFAULT_THEME, parseBookings, THEME_LIMITS } from '../shared/theme-pack.ts';
 import { toStepInputs, workflowRuntime } from './workflow-runtime.ts';
 
@@ -426,7 +426,7 @@ app.post('/api/tasks/:id/request-changes', async (req, res) => {
 
 app.put('/api/agents/:id', (req, res) => {
   guard(res, 'manage', officeOfAgent(req.params.id));
-  const { name, rules, model, skin, personality, workPolicy } = req.body ?? {};
+  const { name, rules, model, skin, outfit, personality, workPolicy } = req.body ?? {};
   const before = store.agent(req.params.id);
   const patch: Record<string, unknown> = {};
   if (typeof name === 'string' && name.trim()) patch.name = name.trim().slice(0, 20);
@@ -441,6 +441,13 @@ app.put('/api/agents/:id', (req, res) => {
   if (skin !== undefined) {
     if (!isUsableSkin(skin)) throw new Error('알 수 없는 스킨입니다.');
     patch.skin = skin;
+  }
+  if (outfit !== undefined) {
+    if (outfit === null) patch.outfit = undefined;
+    else if (!isUsableOutfit(String(patch.skin ?? before.skin), outfit)) throw new Error('이 캐릭터에 없는 의상이에요.');
+    else patch.outfit = outfit;
+  } else if (patch.skin !== undefined && before.outfit && !isUsableOutfit(String(patch.skin), before.outfit)) {
+    patch.outfit = undefined;
   }
   if (typeof rules === 'string' && rules !== before.rules) {
     store.emit('rule.changed', {

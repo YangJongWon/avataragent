@@ -5,7 +5,9 @@ import {
   activeVariant,
   applyVariant,
   characterFor,
+  characterLayers,
   isThemeState,
+  outfitFor,
   parseThemeManifest,
   resolveState,
   manifestFiles,
@@ -44,11 +46,15 @@ class PackCharacter implements CharacterArt {
   characterId?: string;
   tagY = 0;
   hit = { halfW: 30, h: 100 };
-  private sprite = new Sprite();
+  /** One sprite per stacked sheet: the body (or an outfit's whole sprite), then legs, body and head parts. */
+  private body = new Container();
+  private layers: { sprite: Sprite; frames: Frames }[] = [];
   private hat = new Graphics();
   private glow = new Graphics();
   private character: ThemeCharacter | null = null;
-  private frames: Frames | null = null;
+  /** The outfit the staff picked, and the one shown (undefined until the first frame dresses them). */
+  private picked: string | undefined;
+  private outfit: string | null | undefined;
   private state: ThemeState | null = null;
   private stateStart = 0;
   private headY = 0;
@@ -60,20 +66,19 @@ class PackCharacter implements CharacterArt {
 
   constructor(
     private theme: ThemeManifest,
-    private sheets: Map<string, Frames>,
+    private framesOf: (character: ThemeCharacter, sheet: string) => Frames,
     private textures: Map<string, Texture>,
   ) {
-    this.view.addChild(this.glow, this.sprite, this.worn, this.hat);
+    this.view.addChild(this.glow, this.body, this.worn, this.hat);
   }
 
   apply(agent: Agent) {
     const character = characterFor(this.theme, agent.skin, agent.role);
+    this.picked = agent.outfit;
     if (character !== this.character) {
       this.character = character;
       this.characterId = character.id;
-      this.frames = this.sheets.get(character.id)!;
-      this.sprite.anchor.set(character.anchor.x, character.anchor.y);
-      this.sprite.scale.set(character.scale);
+      this.outfit = undefined;
       this.state = null;
       const idle = character.frames[character.states.idle.frames[0]];
       const { scale, anchor, head, hand } = character;
@@ -103,18 +108,33 @@ class PackCharacter implements CharacterArt {
   }
 
   update(phase: number, look: CharacterLook) {
-    if (!this.character || !this.frames) return;
-    const states = this.character.states;
+    const character = this.character;
+    if (!character) return;
+    const outfit = outfitFor(character, look.dress ?? [], this.picked);
+    if (outfit !== this.outfit) this.dress(character, outfit);
+    const states = character.states;
     const state = resolveState(states, wantedState(look, (s) => Boolean(states[s])));
     if (state !== this.state) {
       this.state = state;
       this.stateStart = phase;
     }
-    const clip = this.character.states[state]!;
+    const clip = states[state]!;
     const step = Math.floor((phase - this.stateStart) * clip.fps);
     const index = clip.loop ? step % clip.frames.length : Math.min(step, clip.frames.length - 1);
-    this.sprite.texture = this.frames.get(clip.frames[index])!;
+    for (const layer of this.layers) layer.sprite.texture = layer.frames.get(clip.frames[index])!;
     if (this.glow.visible) this.glow.alpha = 0.55 + Math.sin(phase * 3) * 0.35;
+  }
+
+  private dress(character: ThemeCharacter, outfit: string | null) {
+    this.outfit = outfit;
+    this.body.removeChildren().forEach((child) => child.destroy());
+    this.layers = characterLayers(character, outfit).map((sheet) => {
+      const sprite = new Sprite();
+      sprite.anchor.set(character.anchor.x, character.anchor.y);
+      sprite.scale.set(character.scale);
+      this.body.addChild(sprite);
+      return { sprite, frames: this.framesOf(character, sheet) };
+    });
   }
 
   private wear(layers: AccessoryLayer[], key: string) {
@@ -167,13 +187,18 @@ export async function createPackTheme(base: ThemeManifest, loadTexture: TextureL
     }),
   );
 
-  const sheets = new Map<string, Frames>();
-  for (const character of theme.characters) {
-    const source = loaded.get(character.sheet)!.source;
-    const frames: Frames = new Map();
-    for (const [name, f] of Object.entries(character.frames)) frames.set(name, new Texture({ source, frame: new Rectangle(f.x, f.y, f.w, f.h) }));
-    sheets.set(character.id, frames);
-  }
+  // Every sheet of a character (parts, outfits) is cut with that character's frame rectangles.
+  const cut = new Map<string, Frames>();
+  const framesOf = (character: ThemeCharacter, sheet: string) => {
+    const key = `${character.id}\n${sheet}`;
+    let frames = cut.get(key);
+    if (!frames) {
+      const source = loaded.get(sheet)!.source;
+      frames = new Map(Object.entries(character.frames).map(([name, f]) => [name, new Texture({ source, frame: new Rectangle(f.x, f.y, f.w, f.h) })]));
+      cut.set(key, frames);
+    }
+    return frames;
+  };
 
   return {
     id: theme.id,
@@ -206,10 +231,11 @@ export async function createPackTheme(base: ThemeManifest, loadTexture: TextureL
       }
       return { back, front, extraDesks: [], props };
     },
-    createCharacter: () => new PackCharacter(theme, sheets, loaded),
+    createCharacter: () => new PackCharacter(theme, framesOf, loaded),
     emotes: theme.emotes,
     interactions: theme.interactions,
     events: theme.events,
+    dress: theme.dress,
     texture: (path) => loaded.get(path),
     variant: variant?.id ?? null,
     variantAt: (at) => activeVariant(base, at)?.id ?? null,

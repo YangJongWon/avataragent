@@ -132,6 +132,37 @@ LICENSE.txt       라이선스 전문 (선택)
 - **`portraits`** (선택): 표정별 초상화(`normal`, `smile`, `focus`, `sweat`, `troubled`, `panic`, `thanks`, `celebrate`). 도움 요청 창과 직원 카드에 보입니다. 없는 표정은 동작과 같은 순서로 대신 찾고(예: `thanks` → `smile`), 그래도 없으면 `normal`, 그마저 없으면 서 있기 프레임을 보여 줍니다. 128×128 정도를 권장합니다.
 - **캐릭터 배정**: 직원 관리에서 직원마다 테마 캐릭터를 고를 수 있습니다. 고르지 않은 직원은 역할 순서대로 배정됩니다(매니저 → 첫 번째 캐릭터, …).
 
+### 부위와 의상 (`parts`, `outfits`, `dress`, 선택)
+
+캐릭터를 머리·몸통·다리 레이어로 나누고, 갈아입을 옷을 정할 수 있습니다.
+
+```json
+{
+  "id": "mina",
+  "sheet": "assets/mina-legs.png",
+  "parts": { "body": "assets/mina-body.png", "head": "assets/mina-head.png" },
+  "outfits": [
+    { "id": "casual", "name": { "ko": "캐주얼", "en": "Casual" }, "parts": { "body": "assets/mina-cardigan.png" } },
+    { "id": "pumpkin", "name": "호박 옷", "sheet": "assets/mina-pumpkin.png" }
+  ],
+  "frames": { "...": "..." }
+}
+```
+
+- **`parts`**: `legs`, `body`, `head` 부위 시트. `sheet` 위에 다리 → 몸통 → 머리 순서로 겹칩니다. 모든 부위 시트는 `sheet`와 **크기와 프레임 배치가 똑같고**, 자기 부위 밖은 투명해야 합니다(LPC 같은 종이 인형 방식). 부위를 쓰면 `sheet`는 맨 아래 레이어(다리나 맨몸)가 됩니다.
+- **`outfits`**: 캐릭터마다 16벌까지. `parts`는 그 부위만 바꾸고, `sheet`는 그림 전체를 바꿉니다(이때는 캐릭터의 부위를 겹치지 않고 의상의 `parts`만 겹칩니다). 의상 그림도 캐릭터의 프레임 배치를 그대로 씁니다.
+- 의상 id는 캐릭터끼리 같은 말을 씁니다(`casual`, `suit`…). 직원 관리의 **의상**에서 직원마다 고르면, 그 id의 의상이 있는 캐릭터만 갈아입습니다.
+- **`dress`** (테마 최상위, 32개까지): 조건에 따라 자동으로 갈아입습니다. 위에서부터 읽어 **그 캐릭터에 있는 의상**을 가리키는 첫 규칙이 직원이 고른 옷보다 먼저입니다. 맞는 규칙이 없으면 직원이 고른 옷, 그것도 없으면 기본 옷입니다.
+
+```json
+"dress": [
+  { "when": { "place": "lounge" }, "outfit": "casual" },
+  { "when": { "weekdays": [5] }, "outfit": "casual" }
+]
+```
+
+시즌 변형에 `dress`를 넣으면(예: 할로윈에 `pumpkin`) 그 기간에는 그 규칙을 먼저 읽습니다. 초상화는 의상과 상관없이 같은 그림을 씁니다.
+
 ### 모델사 소품 (`accessories`, 선택)
 
 직원의 AI 모델사와 등급은 기본적으로 픽셀 모자로 보입니다. 테마가 소품을 정하면 모자 대신 소품을 겹칩니다.
@@ -343,7 +374,7 @@ LICENSE.txt       라이선스 전문 (선택)
 | `props`, `characters`, `interactions` | 같은 id는 바꾸고, 새 id는 더함 |
 | `accessories` | 모델사별로 바꿈 |
 | `wear` | 모든 직원이 모델사 소품 위에 겹쳐 씀(픽셀 모자 대신) |
-| `emotes`, `events` | 테마 규칙보다 먼저 읽음 |
+| `emotes`, `events`, `dress` | 테마 규칙보다 먼저 읽음 |
 | `tokens`, `site` | 적은 값만 바꿈(사이트 화면도 그 기간에 바뀜) |
 
 ### 기간별 테마 (회사 설정)
@@ -368,6 +399,7 @@ LICENSE.txt       라이선스 전문 (선택)
 | 머리 위 표시 / 이벤트 반응 | 각 64개 |
 | 교감 메뉴 | 16개, 항목마다 반응 16개 |
 | 이동 경로 | 지점 48개, 연결 128개 |
+| 의상 / 옷 규칙 | 캐릭터마다 16벌 / 32개 |
 | 시즌 변형 | 12개 |
 | 기간별 테마 | 12개 |
 
@@ -408,7 +440,15 @@ CSS는 설치할 때 서버가 다시 씁니다.
 
 레시피(`art/themes/<id>/art.json`)에는 캐릭터마다 외형(`look`)과 시드를 적고, 포즈와 표정은 모든 캐릭터가 함께 씁니다. 같은 시드와 외형 설명을 써서 포즈가 달라도 같은 사람으로 보이게 합니다. 생성 결과는 `art/build/<id>/raw`에 저장돼 다시 돌리면 바뀐 것만 그립니다. 마음에 들지 않는 그림은 레시피에서 시드를 바꾸거나 `--redo <키>`(예: `--redo mina-idle`)로 다시 그립니다.
 
-레시피의 가구(`props`)는 각각 소품으로 내보내고, 배경 레이어에는 벽과 바닥만 남습니다. 문에 `"door": true`와 `"states": { "open": { "swing": true } }`를 쓰면 닫힌 문 그림에서 열린 문 그림을 만듭니다(그림 모델은 서로 맞는 열린 문을 잘 못 그려요). `emotes`, `interactions`, `events`, `paths`(`waypoints`, `links`, `walkSpeed`)는 그대로 패키지에 들어가고, `variants`의 `props`와 `wear`는 그림을 그려서 넣습니다.
+레시피의 가구(`props`)는 각각 소품으로 내보내고, 배경 레이어에는 벽과 바닥만 남습니다. 문에 `"door": true`와 `"states": { "open": { "swing": true } }`를 쓰면 닫힌 문 그림에서 열린 문 그림을 만듭니다(그림 모델은 서로 맞는 열린 문을 잘 못 그려요). `emotes`, `interactions`, `events`, `dress`, `paths`(`waypoints`, `links`, `walkSpeed`)는 그대로 패키지에 들어가고, `variants`의 `props`와 `wear`는 그림을 그려서 넣습니다.
+
+- **무대 모양**: `room.stage`의 `wallStyle`은 `stripes`(나무 패널 벽지), `glass`(유리 칸막이), `panels`(금속 패널과 빛 줄), `floorStyle`은 `boards`(마루), `carpet`(카펫 타일), `grid`(빛나는 격자)입니다. 공간(`areas`)마다 따로 정할 수 있고, `panels`·`grid`는 `colors.glow`를 빛 색으로 씁니다.
+- **의상**: 캐릭터에 `"outfits": [{ "id", "name", "look" }]`을 쓰면 같은 시드로 옷만 바꿔 다시 그려, 같은 프레임 배치의 의상 시트를 만듭니다.
+- **부위 나누기**: 캐릭터에 `"split": { "head": 0.46, "legs": 0.76 }`(머리 꼭대기부터 그림 높이의 비율)을 쓰면 시트를 다리(`sheet`)·몸통·머리 레이어로 잘라 냅니다.
+- **포즈별 시드**: 한 포즈만 이상하면 `"poseSeeds": { "back": 8121 }`로 그 포즈의 시드만 바꿉니다(의상에도 쓸 수 있어요). 뒷모습이 자주 깨지니 빌드 뒤 `back` 프레임을 꼭 확인하세요.
+- **배경색**: 은발처럼 옅은 머리는 흰 배경에서 뒷모습이 흐려져 사라지기 쉽습니다. 캐릭터에 `"background": "dark gray background"`를 쓰면 그 캐릭터의 포즈를 단색 회색 배경에 그립니다(배경은 잘라 내요).
+
+같은 저장소의 "회사 오피스"(`corp-office`)와 "SF 오피스"(`sf-office`) 레시피가 이 기능들의 예시입니다.
 
 ## 라이선스
 

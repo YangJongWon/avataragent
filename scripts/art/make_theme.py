@@ -27,10 +27,21 @@ import uuid
 import zipfile
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
 
 SCENE_W, SCENE_H = 1000, 480
 ROLES = ['manager', 'researcher', 'writer', 'reviewer']
+
+
+def vivid(figure: Image.Image) -> Image.Image:
+    """Back views sometimes come out washed out, without the dark outlines the other poses have; stretch those."""
+    alpha = figure.getchannel('A')
+    shades = sorted(l for l, a in zip(figure.convert('L').get_flattened_data(), alpha.get_flattened_data()) if a > 200)
+    if not shades or shades[len(shades) // 50] < 70:
+        return figure
+    rgb = ImageOps.autocontrast(figure.convert('RGB'), cutoff=(2, 0), preserve_tone=True)
+    rgb.putalpha(alpha)
+    return rgb
 
 
 def stocky_enough(cutout: Image.Image, max_aspect: float) -> bool:
@@ -128,18 +139,19 @@ class Comfy:
             pass  # Not running, so nothing is loaded; everything came from the cache.
 
     def draw(self, positive: str, negative: str, seed: int, width: int, height: int, key: str) -> Image.Image:
-        for attempt in range(3):
+        for attempt in range(5):
             try:
                 return self._draw(positive, negative, seed, width, height, key)
             except RuntimeError as error:
-                if 'not enough memory' not in str(error) or attempt == 2:
+                # Short on RAM: sampling runs out, or reloading the checkpoint after a free cannot read it in.
+                if not any(m in str(error) for m in ('not enough memory', 'hostbuf_file_reader_read')) or attempt == 4:
                     raise
                 print(f'  {key}: out of memory, retrying', flush=True)
                 self.free()
-                time.sleep(10)
+                time.sleep(10 + attempt * 20)
             except OSError as error:
                 # ComfyUI went away (crash or restart); wait for it to come back and try again.
-                if attempt == 2:
+                if attempt == 4:
                     raise
                 print(f'  {key}: lost ComfyUI ({error}), waiting for it', flush=True)
                 self.wait()
@@ -191,10 +203,26 @@ class Builder:
         self.redo = redo
         self._cutter = None
         self.extra_negative: dict[str, str] = {}
-        self.pose_keys = {f'{c["id"]}-{pose}' for c in self.recipe['characters'] for pose in self.recipe['character']['poses']}
+        self.pose_keys = {
+            f'{who["id"]}-{pose}'
+            for c in self.recipe['characters']
+            for who in [c, *(self.outfit_spec(c, o) for o in c.get('outfits', []))]
+            for pose in self.recipe['character']['poses']
+        }
         # Seats are where feet stand; the same layout goes into the package so the app puts people where the art expects.
         self.layout = self.recipe['layout']
         self.style = self.recipe.get('style', '')
+
+    @staticmethod
+    def outfit_spec(spec: dict, outfit: dict) -> dict:
+        """The character drawn again in other clothes: same seeds by default, so the pose and face stay close."""
+        return {
+            **spec,
+            'id': f'{spec["id"]}-{outfit["id"]}',
+            'look': outfit['look'],
+            'seed': outfit.get('seed', spec['seed']),
+            'poseSeeds': outfit.get('poseSeeds', spec.get('poseSeeds', {})),
+        }
 
     def styled(self, prompt: str) -> str:
         return f'{prompt}, {self.style}' if self.style else prompt
@@ -214,6 +242,8 @@ class Builder:
         return ('room', self.styled(spec['prompt']), spec['seed'], spec['width'], spec['height'])
 
     def prop_job(self, key: str, spec: dict):
+        if spec.get('negative'):
+            self.extra_negative[f'prop-{key}'] = spec['negative']
         return (f'prop-{key}', self.styled(spec['prompt']), spec['seed'], spec['width'], spec['height'])
 
     def pose_job(self, spec: dict, pose: str):
@@ -229,7 +259,11 @@ class Builder:
         key = f'{spec["id"]}-{pose}'
         if entry.get('negative'):
             self.extra_negative[key] = entry['negative']
-        return (key, f'{kept(common["base"])}, {kept(spec["look"])}, {entry["prompt"]}', seed, 832, 1216)
+        prompt = f'{kept(common["base"])}, {kept(spec["look"])}, {entry["prompt"]}'
+        # Pale hair seen from behind melts into white; such a character can be drawn on another plain colour.
+        if spec.get('background'):
+            prompt = prompt.replace('white background', f'({spec["background"]}:1.3)')
+        return (key, prompt, seed, 832, 1216)
 
     def face_job(self, spec: dict, expression: str):
         common = self.recipe['character']
@@ -260,6 +294,8 @@ class Builder:
         for spec in self.recipe['characters']:
             for pose in self.recipe['character']['poses']:
                 yield self.pose_job(spec, pose)
+                for outfit in spec.get('outfits', []):
+                    yield self.pose_job(self.outfit_spec(spec, outfit), pose)
             for expression in self.recipe['character']['portraits']:
                 yield self.face_job(spec, expression)
         for key, spec in self.recipe.get('accessories', {}).items():
@@ -350,6 +386,12 @@ class Builder:
         inside.putdata([0 if px == marker else 255 for px in work.get_flattened_data()])
         if sum(1 for v in inside.get_flattened_data() if v == 0) < w * h * 0.3:
             return alpha  # Busy background: the flood fill tells us nothing.
+        # Back views often confuse the model into keeping the whole figure only faintly; then the plain-background
+        # silhouette is the better mask.
+        area = sum(1 for v in inside.get_flattened_data() if v)
+        held = sum(a for a, v in zip(alpha.get_flattened_data(), inside.get_flattened_data()) if v)
+        if area and held < area * 255 * 0.6:
+            return ImageChops.lighter(alpha, inside.filter(ImageFilter.GaussianBlur(1)))
         kept = alpha.point(lambda a: 255 if a > 8 else 0)
         return ImageChops.lighter(alpha, ImageChops.multiply(inside, kept))
 
@@ -365,11 +407,12 @@ class Builder:
         With "areas" ({"work": {"x", "w"}, "lounge": {"x", "w", "colors"}}), each space gets its own wall and
         floor colors and a pillar between them.
         """
+        styles = lambda area: {k: area.get(k, spec.get(k)) for k in ('wallStyle', 'floorStyle')}
         if 'areas' not in spec:
-            return self.wall_and_floor(spec['colors'], spec['floorY'])
+            return self.wall_and_floor(spec['colors'], spec['floorY'], **styles({}))
         img = Image.new('RGB', (SCENE_W, SCENE_H))
         for area in spec['areas'].values():
-            whole = self.wall_and_floor({**spec['colors'], **area.get('colors', {})}, spec['floorY'])
+            whole = self.wall_and_floor({**spec['colors'], **area.get('colors', {})}, spec['floorY'], **styles(area))
             img.paste(whole.crop((area['x'], 0, area['x'] + area['w'], SCENE_H)), (area['x'], 0))
         d = ImageDraw.Draw(img)
         for area in spec['areas'].values():
@@ -382,27 +425,70 @@ class Builder:
             d.line((x, spec['floorY'], x, SCENE_H), fill=c['floorLine'], width=3)
         return img
 
-    def wall_and_floor(self, c: dict, floor_y: int) -> Image.Image:
+    def wall_and_floor(self, c: dict, floor_y: int, wallStyle: str | None = None, floorStyle: str | None = None) -> Image.Image:
+        """Wall styles: `stripes` (wainscoted wallpaper), `glass` (office partition panes), `panels` (metal with a glow strip).
+        Floor styles: `boards`, `carpet` (tiles), `grid` (dark with glowing lines). `glow` is the colour of light lines."""
         img = Image.new('RGB', (SCENE_W, SCENE_H), c['wall'])
         d = ImageDraw.Draw(img)
-        for x in range(0, SCENE_W, 48):
-            d.rectangle((x, 0, x + 23, floor_y), fill=c['wallStripe'])
-        d.rectangle((0, 0, SCENE_W, 9), fill=c['trim'])
         rail = floor_y - 58
-        d.rectangle((0, rail, SCENE_W, floor_y), fill=c['panel'])
-        for x in range(8, SCENE_W, 100):
-            d.rounded_rectangle((x, rail + 12, x + 84, floor_y - 12), radius=4, outline=c['panelLine'], width=2)
-        d.rectangle((0, rail - 3, SCENE_W, rail + 3), fill=c['trim'])
+        wall = wallStyle or 'stripes'
+        if wall == 'glass':
+            # Frosted partition panes in slim frames above a solid lower band.
+            top = 34
+            d.rectangle((0, 0, SCENE_W, top), fill=c['wallStripe'])
+            for x in range(0, SCENE_W, 125):
+                d.rectangle((x + 6, top + 8, x + 119, rail - 10), fill=c['panel'])
+                d.polygon([(x + 30, top + 8), (x + 58, top + 8), (x + 22, rail - 10), (x + 6, rail - 10), (x + 6, rail - 40)], fill=c['wallStripe'])
+                d.rectangle((x + 6, top + 8, x + 119, rail - 10), outline=c['panelLine'], width=3)
+            d.rectangle((0, rail - 10, SCENE_W, floor_y), fill=c['trim'])
+            d.line((0, rail - 10, SCENE_W, rail - 10), fill=c['panelLine'], width=3)
+        elif wall == 'panels':
+            # Riveted plates with seams, and a glowing strip along the top and at the rail.
+            for x in range(0, SCENE_W, 96):
+                d.rectangle((x + 2, 14, x + 93, rail - 4), fill=c['wallStripe'] if (x // 96) % 2 else c['wall'], outline=c['panelLine'], width=2)
+                for rx, ry in ((x + 10, 22), (x + 85, 22), (x + 10, rail - 12), (x + 85, rail - 12)):
+                    d.ellipse((rx - 2, ry - 2, rx + 2, ry + 2), fill=c['panelLine'])
+            d.rectangle((0, 0, SCENE_W, 12), fill=c['trim'])
+            d.rectangle((0, 12, SCENE_W, 15), fill=c['glow'])
+            d.rectangle((0, rail, SCENE_W, floor_y), fill=c['panel'])
+            d.rectangle((0, rail - 2, SCENE_W, rail + 2), fill=c['glow'])
+            for x in range(30, SCENE_W, 120):
+                d.rectangle((x, rail + 18, x + 60, rail + 24), fill=c['panelLine'])
+        else:
+            for x in range(0, SCENE_W, 48):
+                d.rectangle((x, 0, x + 23, floor_y), fill=c['wallStripe'])
+            d.rectangle((0, 0, SCENE_W, 9), fill=c['trim'])
+            d.rectangle((0, rail, SCENE_W, floor_y), fill=c['panel'])
+            for x in range(8, SCENE_W, 100):
+                d.rounded_rectangle((x, rail + 12, x + 84, floor_y - 12), radius=4, outline=c['panelLine'], width=2)
+            d.rectangle((0, rail - 3, SCENE_W, rail + 3), fill=c['trim'])
         d.rectangle((0, floor_y - 8, SCENE_W, floor_y), fill=c['baseboard'])
         # Rows get taller toward the viewer, so the floor reads as receding without any vanishing point.
+        floor = floorStyle or 'boards'
         y, row, h = floor_y, 0, 20.0
         while y < SCENE_H:
             bottom = min(SCENE_H, round(y + h))
-            d.rectangle((0, y, SCENE_W, bottom), fill=c['floor'] if row % 2 == 0 else c['floorAlt'])
-            d.line((0, bottom, SCENE_W, bottom), fill=c['floorLine'], width=2)
-            offset = (row * 97) % 160
-            for x in range(offset - 160, SCENE_W, 160 + row % 3 * 20):
-                d.line((x, y, x, bottom), fill=c['floorLine'], width=2)
+            if floor == 'carpet':
+                # Square-ish tiles in a loose checker; tile width grows with the row like the height does.
+                tw = round(h * 2.2)
+                for i, x in enumerate(range(-(row * 37) % tw - tw, SCENE_W, tw)):
+                    d.rectangle((x, y, x + tw, bottom), fill=c['floor'] if (i + row) % 2 == 0 else c['floorAlt'])
+                    d.line((x, y, x, bottom), fill=c['floorLine'], width=1)
+                d.line((0, bottom, SCENE_W, bottom), fill=c['floorLine'], width=1)
+            elif floor == 'grid':
+                d.rectangle((0, y, SCENE_W, bottom), fill=c['floor'] if row % 2 == 0 else c['floorAlt'])
+                d.line((0, y, SCENE_W, y), fill=c['glow'] if row % 3 == 2 else c['floorLine'], width=2)
+                # Columns fan out from the middle so the floor seems to recede.
+                spread = 1 + row * 0.08
+                for k in range(-12, 13):
+                    x0, x1 = SCENE_W / 2 + k * 80 * (spread - 0.04), SCENE_W / 2 + k * 80 * spread
+                    d.line((x0, y, x1, bottom), fill=c['floorLine'], width=1)
+            else:
+                d.rectangle((0, y, SCENE_W, bottom), fill=c['floor'] if row % 2 == 0 else c['floorAlt'])
+                d.line((0, bottom, SCENE_W, bottom), fill=c['floorLine'], width=2)
+                offset = (row * 97) % 160
+                for x in range(offset - 160, SCENE_W, 160 + row % 3 * 20):
+                    d.line((x, y, x, bottom), fill=c['floorLine'], width=2)
             y, row, h = bottom, row + 1, h * 1.12
         shadow = Image.new('L', (SCENE_W, 26), 0)
         for i in range(26):
@@ -548,25 +634,56 @@ class Builder:
         return canvas
 
     def character(self, spec: dict):
-        """One sprite sheet per character: a frame per pose, all the same size, feet on the bottom edge."""
+        """One sprite sheet per character: a frame per pose, all the same size, feet on the bottom edge.
+
+        "outfits" ([{"id", "name", "look"}]) draws the character again in other clothes, each its own sheet with the same
+        frames. "split" ({"head": 0.42, "legs": 0.74}, fractions of the figure's height from the top of the hair) cuts
+        the sheet into legs, body and head layers instead of one picture, so later outfits can swap one part.
+        """
         common = self.recipe['character']
-        cuts = {}
-        for pose in common['poses']:
-            cuts[pose] = self.cut(self.draw(*self.pose_job(spec, pose)))
         height = common['height']
-        frames = {}
-        for pose, img in cuts.items():
-            scale = height / img.height
-            frames[pose] = img.resize((round(img.width * scale), height), Image.LANCZOS)
-        fw = max(f.width for f in frames.values()) + 8
+
+        def posed(who: dict):
+            frames = {}
+            for pose in common['poses']:
+                img = vivid(self.cut(self.draw(*self.pose_job(who, pose))))
+                frames[pose] = img.resize((round(img.width * height / img.height), height), Image.LANCZOS)
+            return frames
+
+        frames = posed(spec)
+        outfits = [(o, posed(self.outfit_spec(spec, o))) for o in spec.get('outfits', [])]
+        # Every sheet of the character shares one frame size, so outfits line up with the frame rectangles.
+        fw = max(f.width for set_ in [frames, *(f for _, f in outfits)] for f in set_.values()) + 8
         fh = height + 4
-        sheet = Image.new('RGBA', (fw * len(frames), fh), (0, 0, 0, 0))
-        names = {}
-        for i, (pose, img) in enumerate(frames.items()):
-            sheet.alpha_composite(img, (i * fw + (fw - img.width) // 2, fh - img.height))
-            names[pose] = f'f{i}'
+        names = {pose: f'f{i}' for i, pose in enumerate(frames)}
+
+        def sheet_of(set_: dict) -> Image.Image:
+            sheet = Image.new('RGBA', (fw * len(set_), fh), (0, 0, 0, 0))
+            for i, img in enumerate(set_.values()):
+                sheet.alpha_composite(img, (i * fw + (fw - img.width) // 2, fh - img.height))
+            return sheet
+
         idle = frames['idle']
-        sheet_path = self.save(sheet, f'assets/{spec["id"]}.png')
+        sheet = sheet_of(frames)
+        parts = {}
+        if 'split' in spec:
+            # Each frame is cut at the same share of its own figure, so a bowing or cheering pose splits where it should.
+            layers = {slot: Image.new('RGBA', sheet.size, (0, 0, 0, 0)) for slot in ('legs', 'body', 'head')}
+            for i, img in enumerate(frames.values()):
+                top = fh - img.height
+                head_y = top + round(img.height * spec['split']['head'])
+                legs_y = top + round(img.height * spec['split']['legs'])
+                x0, x1 = i * fw, (i + 1) * fw
+                for slot, (y0, y1) in {'head': (0, head_y), 'body': (head_y, legs_y), 'legs': (legs_y, fh)}.items():
+                    layers[slot].paste(sheet.crop((x0, y0, x1, y1)), (x0, y0))
+            sheet_path = self.save(layers['legs'], f'assets/{spec["id"]}-legs.png')
+            parts = {slot: self.save(layers[slot], f'assets/{spec["id"]}-{slot}.png') for slot in ('body', 'head')}
+        else:
+            sheet_path = self.save(sheet, f'assets/{spec["id"]}.png')
+        outfit_entries = [
+            {'id': o['id'], 'name': o.get('name', o['id']), 'sheet': self.save(sheet_of(f), f'assets/{spec["id"]}-{o["id"]}.png')}
+            for o, f in outfits
+        ]
 
         portraits = {}
         for expression in common['portraits']:
@@ -596,6 +713,8 @@ class Builder:
                 **({'back': {'frames': [names['back']]}} if 'back' in names else {}),
             },
             'portraits': portraits,
+            **({'parts': parts} if parts else {}),
+            **({'outfits': outfit_entries} if outfit_entries else {}),
         }, idle
 
     def accessories(self):
@@ -689,8 +808,8 @@ class Builder:
             'site': self.recipe.get('site', {}),
             'accessories': self.accessories(),
             'props': props,
-            # Icons, lines, friendly menu items and event reactions are written in the recipe as they go in the package.
-            **{k: self.recipe[k] for k in ('emotes', 'interactions', 'events') if k in self.recipe},
+            # Icons, lines, friendly menu items, event reactions and dress rules are written in the recipe as they go in the package.
+            **{k: self.recipe[k] for k in ('emotes', 'interactions', 'events', 'dress') if k in self.recipe},
             'variants': variants,
         }
         (self.theme / 'theme.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')

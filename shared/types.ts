@@ -69,6 +69,8 @@ export interface Agent {
   /** Default working style added to every prompt of this agent. */
   personality: Personality;
   skin: AgentSkin;
+  /** Outfit id picked for the theme character; characters without that outfit wear their usual clothes. */
+  outfit?: string;
   status: AgentStatus;
   expression: Expression;
   activity: string;

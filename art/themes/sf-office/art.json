@@ -1,0 +1,288 @@
+{
+  "id": "sf-office",
+  "themeVersion": "1.0.0",
+  "name": "SF 오피스",
+  "author": "AI 에이전트 오피스",
+  "license": "CC-BY-4.0",
+  "description": "네온 격자 바닥과 금속 패널의 우주정거장 사무실. 우주복 차림 SD 직원과 별이 보이는 휴게실.",
+  "credits": "Generated locally with Animagine XL 4.0 Opt (Cagliostro Research Lab, CreativeML Open RAIL++-M) in ComfyUI.",
+  "checkpoint": "animagine-xl-4.0-opt.safetensors",
+  "quality": "masterpiece, high score, great score, absurdres",
+  "style": "anime style, cute, clean lineart, science fiction, futuristic, neon accents, mobile game asset",
+  "negative": "lowres, bad anatomy, bad hands, text, error, missing finger, extra digits, fewer digits, cropped, worst quality, low quality, low score, bad score, average score, signature, watermark, username, blurry, multiple views, reference sheet, 2girls, 3girls, multiple girls, 2boys, multiple boys, clones, cropped legs, out of frame, border, frame, realistic, photorealistic, 3d, tall, long legs, realistic proportions, mature female, shadow, drop shadow, cast shadow, shadow on floor, mecha, robot",
+  "tokens": {
+    "accent": "#e040c8",
+    "primary": "#2f7dff",
+    "yellow": "#5ef0ff",
+    "bg": "#e6eef6",
+    "paper": "#f6faff",
+    "surface": "#ffffff",
+    "line": "#1d3554",
+    "muted": "#5d7391",
+    "topbar": "#0a1324",
+    "topbarInk": "#7ff3ff",
+    "topbarLine": "#00d5ff",
+    "tabBar": "#d0e0ee",
+    "tab": "#dfeaf4",
+    "note": "#d3f5ff",
+    "hover": "#e0eeff"
+  },
+  "site": { "font": "mono", "radius": 2 },
+  "layout": {
+    "seats": {
+      "researcher": { "x": 110, "y": 300 },
+      "manager": { "x": 290, "y": 300 },
+      "reviewer": { "x": 470, "y": 300 },
+      "writer": { "x": 290, "y": 435 }
+    },
+    "extraSeats": [
+      { "x": 650, "y": 300 },
+      { "x": 110, "y": 435 },
+      { "x": 470, "y": 435 },
+      { "x": 650, "y": 435 }
+    ],
+    "lounge": {
+      "manager": { "x": 830, "y": 372 },
+      "researcher": { "x": 940, "y": 372 },
+      "writer": { "x": 830, "y": 462 },
+      "reviewer": { "x": 940, "y": 462 }
+    },
+    "extraLounge": [
+      { "x": 885, "y": 400 },
+      { "x": 775, "y": 420 },
+      { "x": 970, "y": 420 },
+      { "x": 885, "y": 476 }
+    ],
+    "door": { "x": 956, "y": 234 },
+    "spots": {
+      "board": { "x": 196, "y": 18, "w": 330, "h": 140 },
+      "shelf": { "x": 534, "y": 64, "w": 104, "h": 152 },
+      "safe": { "x": 680, "y": 150, "w": 70, "h": 70 },
+      "archive": { "x": 18, "y": 118, "w": 76, "h": 100 }
+    }
+  },
+  "room": {
+    "stage": {
+      "floorY": 214,
+      "wallStyle": "panels",
+      "floorStyle": "grid",
+      "colors": {
+        "wall": "#2a3a55",
+        "wallStripe": "#24334c",
+        "trim": "#131c2c",
+        "panel": "#1b2638",
+        "panelLine": "#3e5578",
+        "baseboard": "#0e1522",
+        "floor": "#1a2335",
+        "floorAlt": "#172031",
+        "floorLine": "#36507c",
+        "glow": "#38e8ff"
+      },
+      "areas": {
+        "work": { "x": 0, "w": 760 },
+        "lounge": {
+          "x": 760,
+          "w": 240,
+          "colors": {
+            "wall": "#3a2f58",
+            "wallStripe": "#33294f",
+            "panelLine": "#5c4d88",
+            "floor": "#231c38",
+            "floorAlt": "#1f1933",
+            "floorLine": "#43356b",
+            "glow": "#ff5ce1"
+          }
+        }
+      }
+    }
+  },
+  "props": {
+    "window": {
+      "prompt": "no humans, round spaceship window, porthole, outer space, stars, blue planet, thick metal rim, front view, straight-on, simple background, white background, game asset, item",
+      "seed": 9101,
+      "width": 1024,
+      "height": 1024,
+      "fit": "width",
+      "size": 104,
+      "at": [{ "x": 120, "y": 150 }, { "x": 840, "y": 150 }],
+      "below": 0
+    },
+    "door": {
+      "prompt": "no humans, sci-fi door, closed metal door, single door, gray and white panels, glowing cyan light strip, small control panel, door frame, front view, straight-on, full shot, whole door visible, simple background, white background, game asset, item",
+      "seed": 9201,
+      "width": 832,
+      "height": 1216,
+      "size": 150,
+      "at": [{ "x": 956, "y": 216 }],
+      "below": 0,
+      "door": true,
+      "states": {
+        "open": { "swing": true, "frame": 0.12, "top": 0.1, "leaf": 0.18 }
+      }
+    },
+    "plant": {
+      "prompt": "no humans, potted alien plant, glowing blue bioluminescent leaves, white futuristic pot, front view, simple background, white background, game asset, item",
+      "seed": 9301,
+      "width": 832,
+      "height": 1216,
+      "size": 70,
+      "at": [{ "x": 36, "y": 472 }],
+      "below": 0
+    },
+    "desk": {
+      "prompt": "no humans, cute small futuristic white desk, holographic blue screen floating above desk, glowing keyboard, front view, straight-on, full shot, whole desk visible, simple background, white background, game asset, item",
+      "seed": 9401,
+      "width": 1216,
+      "height": 832,
+      "fit": "width",
+      "size": 96,
+      "at": ["seats"],
+      "dx": 46,
+      "below": -8
+    },
+    "board": {
+      "prompt": "no humans, blank dark green screen, empty display, nothing on screen, plain dark green surface, wall-mounted futuristic monitor, thin white metal frame, front view, straight-on, simple background, white background, game asset, item",
+      "seed": 9501,
+      "width": 1536,
+      "height": 640,
+      "spot": "board",
+      "surface": true
+    },
+    "shelf": {
+      "prompt": "no humans, cute futuristic server rack, blinking blue and green lights, white metal cabinet, front view, straight-on, simple background, white background, game asset, item",
+      "seed": 9611,
+      "width": 832,
+      "height": 1216,
+      "spot": "shelf"
+    },
+    "safe": {
+      "prompt": "no humans, futuristic vault, cube-shaped white metal safe, glowing cyan keypad, round hatch door, cute, full shot, whole object visible, centered, front view, straight-on, simple background, white background, game asset, item",
+      "seed": 9701,
+      "width": 1024,
+      "height": 1024,
+      "spot": "safe"
+    },
+    "archive": {
+      "prompt": "no humans, cute sci-fi storage locker, white capsule cabinet, glowing drawer lights, front view, straight-on, simple background, white background, game asset, item",
+      "seed": 9801,
+      "width": 832,
+      "height": 1216,
+      "spot": "archive"
+    },
+    "sofa": {
+      "prompt": "no humans, couch, futuristic white rounded sofa, purple glowing trim, two cushions, empty sofa, front view, straight-on, simple background, white background, game asset, item",
+      "seed": 9901,
+      "width": 1216,
+      "height": 832,
+      "fit": "width",
+      "size": 170,
+      "at": [{ "x": 885, "y": 330 }],
+      "below": 0
+    }
+  },
+  "character": {
+    "base": "solo, chibi, super deformed, 2-head proportions, big head, small body, short legs, full body, standing, boots, single character, centered, looking at viewer, simple background, white background, flat color, thick outlines, cute, mobile game sprite",
+    "portrait": "solo, chibi, big head, portrait, upper body, looking at viewer, simple background, white background, flat color, thick outlines, cute",
+    "height": 300,
+    "sceneHeight": 92,
+    "maxAspect": 2.1,
+    "handX": 0.3,
+    "handFromBottom": 0.33,
+    "poses": {
+      "idle": "arms at sides, gentle smile",
+      "celebrate": "one arm raised, fist pump, happy, open mouth, closed eyes",
+      "troubled": "hands clasped in front of chest, worried, sweatdrop, frown",
+      "back": {
+        "prompt": "(from behind:1.4), (back view:1.3), (chibi:1.3), (big head:1.2), facing away from viewer, back of head, (full head of hair seen from behind:1.3), arms at sides, standing straight, vivid colors, clean lineart",
+        "drop": ["looking at viewer", "eyes", "visor", "glasses", "smile"],
+        "negative": "face, eyes, looking at viewer, looking back, looking to the side, from side, profile, glasses, front view, floor, ground, censored, mosaic censoring, ass focus, blurry, bald, bald head, beard, facial hair, faded, washed out, monochrome, fog, ghost"
+      }
+    },
+    "portraits": {
+      "normal": "light smile",
+      "smile": "smile, happy, open mouth",
+      "troubled": "worried, sweatdrop, frown",
+      "panic": "surprised, wide-eyed, open mouth, sweat"
+    }
+  },
+  "characters": [
+    {
+      "id": "nova",
+      "name": "노바",
+      "look": "1girl, short teal hair, bob cut, cyan eyes, white and cyan sci-fi bodysuit, headset with microphone",
+      "seed": 10101
+    },
+    {
+      "id": "rex",
+      "name": "렉스",
+      "look": "1boy, spiky silver hair, red eyes, dark navy space crew uniform, orange shoulder patches, utility belt",
+      "seed": 10201,
+      "background": "dark gray background",
+      "poseSeeds": { "back": 10211 }
+    },
+    {
+      "id": "luna",
+      "name": "루나",
+      "look": "1girl, long lavender hair, twin buns, purple eyes, white lab coat over black bodysuit, glowing earrings",
+      "seed": 10301,
+      "background": "dark gray background",
+      "poseSeeds": { "back": 10321 }
+    },
+    {
+      "id": "kai",
+      "name": "카이",
+      "look": "1boy, short black hair, blue eyes, transparent cyan visor on forehead, white pilot jacket, blue stripes",
+      "seed": 10401,
+      "poseSeeds": { "back": 10441 }
+    }
+  ],
+  "paths": {
+    "waypoints": {
+      "aisle-left": { "x": 40, "y": 368 },
+      "aisle-mid": { "x": 380, "y": 368 },
+      "aisle-right": { "x": 720, "y": 368 },
+      "lounge": { "x": 880, "y": 420 },
+      "wall-right": { "x": 720, "y": 240 },
+      "door-step": { "x": 930, "y": 250 },
+      "shelf-front": { "x": 586, "y": 240 },
+      "board-front": { "x": 380, "y": 236 }
+    },
+    "links": [
+      ["aisle-left", "aisle-mid"],
+      ["aisle-mid", "aisle-right"],
+      ["aisle-right", "lounge"],
+      ["lounge", "door-step"],
+      ["aisle-right", "wall-right"],
+      ["wall-right", "door-step"],
+      ["wall-right", "shelf-front"],
+      ["shelf-front", "board-front"],
+      ["board-front", "aisle-mid"]
+    ],
+    "walkSpeed": 200
+  },
+  "emotes": [
+    { "when": { "status": ["help_requested", "error"] }, "icon": "🚨", "say": [{ "ko": "경보! 지원이 필요합니다!", "en": "Alert! Need backup!", "ja": "警報! 支援求む!", "zh": "警报! 需要支援!" }], "every": 40 },
+    { "when": { "status": "working", "hours": [22, 6] }, "icon": "🛰️", "say": [{ "ko": "야간 당직 중…", "en": "On night watch…", "ja": "夜間当直中…", "zh": "夜间值班中…" }], "every": 90 },
+    { "when": { "place": "lounge", "walking": false }, "icon": "🌌", "say": [{ "ko": "별이 참 예쁘네요.", "en": "The stars look lovely.", "ja": "星がきれいですね。", "zh": "星星真美。" }, { "ko": "무중력 커피 마실래요?", "en": "Zero-g coffee?", "ja": "無重力コーヒーどう?", "zh": "来杯失重咖啡?" }], "every": 70 }
+  ],
+  "interactions": [
+    {
+      "id": "salute",
+      "label": { "ko": "경례하기", "en": "Salute", "ja": "敬礼する", "zh": "敬礼" },
+      "reactions": [{ "state": "smile", "say": [{ "ko": "임무 수행 중입니다!", "en": "On mission, sir!", "ja": "任務遂行中です!", "zh": "正在执行任务!" }], "effect": "sparkle" }]
+    },
+    {
+      "id": "ration",
+      "label": { "ko": "우주식량 주기", "en": "Share a ration", "ja": "宇宙食をあげる", "zh": "分享太空食品" },
+      "when": { "place": "lounge" },
+      "reactions": [{ "state": "celebrate", "say": [{ "ko": "튜브 비빔밥이다!", "en": "Tube bibimbap!", "ja": "チューブビビンバだ!", "zh": "管装拌饭!" }], "effect": "hearts" }]
+    }
+  ],
+  "events": [
+    { "on": "agent.arrived", "say": [{ "ko": "도킹 완료, 근무 시작!", "en": "Docked. Starting shift!", "ja": "ドッキング完了、勤務開始!", "zh": "对接完成，开始值班!" }] },
+    { "on": "agent.left", "say": [{ "ko": "워프 아웃합니다~", "en": "Warping out~", "ja": "ワープアウトします〜", "zh": "跃迁离开~" }] },
+    { "on": "task.completed", "when": { "role": "manager" }, "say": [{ "ko": "임무 완수! 전원 수고했다!", "en": "Mission complete! Well done, crew!", "ja": "任務完了! 総員ご苦労!", "zh": "任务完成! 全员辛苦了!" }], "effect": "confetti" }
+  ],
+  "variants": [],
+  "accessories": {}
+}

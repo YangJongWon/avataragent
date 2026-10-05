@@ -93,7 +93,7 @@ export const api = {
     call('POST', `/api/tasks/${taskId}/request-changes`, { comment }),
   setActionEnabled: (taskId: string, actionId: string, enabled: boolean) =>
     call<PlannedAction>('PUT', `/api/tasks/${taskId}/actions/${actionId}`, { enabled }),
-  updateAgent: (agentId: string, patch: { name?: string; rules?: string; model?: string; skin?: AgentSkin; personality?: Personality; workPolicy?: Agent['workPolicy'] }) =>
+  updateAgent: (agentId: string, patch: { name?: string; rules?: string; model?: string; skin?: AgentSkin; outfit?: string | null; personality?: Personality; workPolicy?: Agent['workPolicy'] }) =>
     call('PUT', `/api/agents/${agentId}`, patch),
   hireAgent: (officeId: string, body: { role: Role; name?: string; personality?: Personality }) =>
     call<Agent>('POST', `/api/offices/${officeId}/agents`, body),

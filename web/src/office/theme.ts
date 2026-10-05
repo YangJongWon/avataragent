@@ -4,6 +4,7 @@ import {
   DEFAULT_THEME,
   SPOT_NAMES,
   type EmoteRule,
+  type DressRule,
   type EventRule,
   type Interaction,
   type Point,
@@ -96,6 +97,8 @@ export interface CharacterLook {
   expression: Agent['expression'];
   /** A short moment from an office event, such as a rejected review. */
   moment: ThemeState | null;
+  /** Outfits the theme's dress rules call for now, first match first; themes without outfits ignore them. */
+  dress?: readonly string[];
 }
 
 export interface CharacterArt {
@@ -139,6 +142,7 @@ export interface OfficeTheme {
   emotes?: EmoteRule[];
   interactions?: Interaction[];
   events?: EventRule[];
+  dress?: DressRule[];
   /** A loaded picture from the package, for icon images. */
   texture?(path: string): Texture | undefined;
   /** The dated variant showing; the office reloads once `variantAt` says another one is due. */

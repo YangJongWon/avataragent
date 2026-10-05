@@ -4,6 +4,7 @@ import { TEAMS, type TeamMeta } from '../../../shared/teams.ts';
 import { DEFAULT_EMOTES, DEFAULT_INTERACTIONS } from '../../../shared/theme-defaults.ts';
 import {
   DEFAULT_THEME,
+  type DressRule,
   type EffectName,
   type EmoteRule,
   type EventRule,
@@ -15,7 +16,7 @@ import {
   type ThemeEvent,
   type ThemeState,
 } from '../../../shared/theme-pack.ts';
-import { findRoute, firstMatch, localText, pickOne, type LocalText, type RuleContext } from '../../../shared/theme-rules.ts';
+import { findRoute, firstMatch, localText, matches, pickOne, type LocalText, type RuleContext } from '../../../shared/theme-rules.ts';
 import { currentStepLabel, planProgress } from '../../../shared/workflow.ts';
 import { type Agent, type OfficeEvent, type Role, type Snapshot, type StepKind, type TeamId } from '../../../shared/types.ts';
 import { krw } from '../format.ts';
@@ -61,6 +62,7 @@ interface CharacterEnv {
   speed: number;
   team: TeamId;
   emotes: EmoteRule[];
+  dress: DressRule[];
   route(from: Point, to: Point): Point[];
   texture(path: string): Texture | undefined;
   /** Someone sets off for home or walks in; theme rules may have them say something. */
@@ -103,6 +105,8 @@ class CharacterView {
   private sayRule: EmoteRule | undefined;
   private nextSay = 0;
   private nextRules = 0;
+  /** Outfits named by the dress rules that hold now, first match first. */
+  private dress: string[] = [];
   label: Text;
   labelBg = new Graphics();
   roleTag = new Container();
@@ -243,6 +247,8 @@ class CharacterView {
   /** Re-reads the emote rules: the first rule with an icon draws it, the first with lines may speak. */
   private updateRules() {
     const ctx = this.context();
+    const dress = this.env.dress.filter((r) => matches(r.when, ctx)).map((r) => r.outfit);
+    if (dress.join() !== this.dress.join()) this.dress = dress;
     this.showIcon(firstMatch(this.env.emotes, ctx, (r) => r.icon !== undefined)?.icon ?? null);
     const rule = firstMatch(this.env.emotes, ctx, (r) => Boolean(r.say));
     const now = performance.now();
@@ -400,6 +406,7 @@ class CharacterView {
       status: this.status,
       expression: this.expression,
       moment: this.moment?.state ?? null,
+      dress: this.dress,
     });
 
     this.root.position.set(Math.round(this.pos.x), Math.round(this.pos.y));
@@ -501,6 +508,7 @@ export class OfficeScene {
       speed: this.layout.walkSpeed,
       team: this.team.id,
       emotes: [...(this.theme.emotes ?? []), ...DEFAULT_EMOTES],
+      dress: this.theme.dress ?? [],
       route: (from, to) => findRoute({ waypoints, links }, from, to),
       texture: (path) => this.theme.texture?.(path),
       onDoor: (view, kind) => this.themeEvent(kind, [view]),

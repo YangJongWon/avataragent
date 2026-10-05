@@ -28,6 +28,8 @@ export const THEME_LIMITS = {
   variants: 12,
   waypoints: 48,
   links: 128,
+  outfits: 16,
+  dress: 32,
 } as const;
 
 export const THEME_FILE_EXTS = ['png', 'webp', 'json', 'css', 'txt', 'woff2'] as const;
@@ -105,6 +107,34 @@ export interface ThemeCharacter {
   scale: number;
   states: Partial<Record<ThemeState, StateClip>> & { idle: StateClip };
   portraits: Partial<Record<Expression, string>>;
+  /**
+   * Paper-doll layers drawn over `sheet` (then the bottom layer, such as the legs or a bare body), legs then body then
+   * head. Each is laid out exactly like `sheet` (same frame names and rectangles), transparent outside its part,
+   * so an outfit can swap one part.
+   */
+  parts: Partial<Record<PartSlot, string>>;
+  outfits: Outfit[];
+}
+
+/** Body parts a character can be layered from, in drawing order. */
+export const PART_SLOTS = ['legs', 'body', 'head'] as const;
+export type PartSlot = (typeof PART_SLOTS)[number];
+
+/**
+ * Clothes a character can change into. Ids are shared words (`casual`, `suit`) so one choice or rule
+ * dresses every character that has that outfit; `sheet` replaces the whole sprite, `parts` single layers.
+ */
+export interface Outfit {
+  id: string;
+  name: LocalText;
+  sheet?: string;
+  parts: Partial<Record<PartSlot, string>>;
+}
+
+/** Changes clothes when its conditions hold (a cardigan in the lounge); the first match wins over the staff's own pick. */
+export interface DressRule {
+  when?: When;
+  outfit: string;
 }
 
 /** A picture worn on the head or held in the hand, offset in scene pixels from that point. */
@@ -236,6 +266,7 @@ export interface ThemeVariant {
   emotes?: EmoteRule[];
   interactions?: Interaction[];
   events?: EventRule[];
+  dress?: DressRule[];
   /** Site colors and look for the season, over the theme's own. */
   tokens?: Partial<Record<TokenName, string>>;
   site?: SiteLook;
@@ -261,6 +292,7 @@ export interface ThemeManifest {
   interactions: Interaction[];
   props: ThemeProp[];
   events: EventRule[];
+  dress: DressRule[];
   variants: ThemeVariant[];
   /** Applied by the app for a dated variant; never in a package. */
   wear?: AccessoryLayer[];
@@ -476,6 +508,19 @@ function parseCharacter(input: unknown, index: number, files: ReadonlySet<string
     if (portraitsIn[expression] !== undefined) portraits[expression] = filePath(portraitsIn[expression], `${where}의 ${expression} 초상화`, files);
   }
 
+  const outfits = limited(raw.outfits, THEME_LIMITS.outfits, `${where}의 의상`).map((item, i): Outfit => {
+    const o = obj(item);
+    const at = `${where}의 의상 ${i + 1}`;
+    const outfitId = str(o.id, 40);
+    if (!SLUG.test(outfitId)) fail(`${at}의 id는 영어 소문자·숫자·하이픈으로 2~40자여야 해요.`);
+    const outfit: Outfit = { id: outfitId, name: o.name === undefined ? outfitId : localTextOf(o.name, `${at}의 이름`, 40), parts: parseParts(o.parts, at, files) };
+    if (o.sheet !== undefined) outfit.sheet = filePath(o.sheet, `${at}의 스프라이트 시트`, files);
+    if (!outfit.sheet && !Object.keys(outfit.parts).length) fail(`${at}에 sheet나 parts가 있어야 해요.`);
+    return outfit;
+  });
+  const dupOutfit = outfits.find((o, i) => outfits.findIndex((x) => x.id === o.id) !== i);
+  if (dupOutfit) fail(`${where}의 의상 id ${dupOutfit.id}가 겹쳐요.`);
+
   const anchor = obj(raw.anchor);
   const head = obj(raw.head);
   const hand = obj(raw.hand);
@@ -490,7 +535,46 @@ function parseCharacter(input: unknown, index: number, files: ReadonlySet<string
     scale: num(raw.scale, 0.05, 16) ?? 1,
     states: states as ThemeCharacter['states'],
     portraits,
+    parts: parseParts(raw.parts, where, files),
+    outfits,
   };
+}
+
+function parseParts(input: unknown, where: string, files: ReadonlySet<string> | null): Partial<Record<PartSlot, string>> {
+  const raw = obj(input);
+  const unknown = Object.keys(raw).find((k) => !(PART_SLOTS as readonly string[]).includes(k));
+  if (unknown) fail(`${where}의 parts에는 ${PART_SLOTS.join(', ')}만 쓸 수 있어요 (${unknown.slice(0, 20)}).`);
+  const parts: Partial<Record<PartSlot, string>> = {};
+  for (const slot of PART_SLOTS) if (raw[slot] !== undefined) parts[slot] = filePath(raw[slot], `${where}의 ${slot} 부위`, files);
+  return parts;
+}
+
+function parseDress(input: unknown, label = '옷 규칙'): DressRule[] {
+  return limited(input, THEME_LIMITS.dress, label).map((item, i) => {
+    const raw = obj(item);
+    const where = `${label} ${i + 1}`;
+    const outfit = str(raw.outfit, 40);
+    if (!SLUG.test(outfit)) fail(`${where}의 outfit은 의상 id여야 해요.`);
+    const when = parseWhen(raw.when, where);
+    return when ? { when, outfit } : { outfit };
+  });
+}
+
+/**
+ * The sheets to stack for a character, back to front. An outfit with a whole `sheet` is drawn alone with only its own
+ * parts; otherwise the character's sheet comes first and each part slot is the outfit's or the character's.
+ * Unknown outfits (another theme's, or none) show the usual clothes.
+ */
+export function characterLayers(character: ThemeCharacter, outfitId?: string | null): string[] {
+  const outfit = outfitId ? character.outfits.find((o) => o.id === outfitId) : undefined;
+  const parts = outfit?.sheet ? outfit.parts : { ...character.parts, ...outfit?.parts };
+  return [outfit?.sheet ?? character.sheet, ...PART_SLOTS.flatMap((slot) => parts[slot] ?? [])];
+}
+
+/** What a character wears now: the first dress rule naming an outfit it has, else the staff's own pick if it has that. */
+export function outfitFor(character: ThemeCharacter, ruled: readonly string[], picked: string | null | undefined): string | null {
+  const has = (id: string | null | undefined): id is string => Boolean(id && character.outfits.some((o) => o.id === id));
+  return ruled.find(has) ?? (has(picked) ? picked : null);
 }
 
 const COMPANY_KEY = /^([a-z0-9][a-z0-9_-]{0,39}|\*)$/;
@@ -733,6 +817,7 @@ function parseVariants(input: unknown, files: ReadonlySet<string> | null): Theme
     if (raw.emotes !== undefined) variant.emotes = parseEmotes(raw.emotes, files, `${where} 머리 위 표시`);
     if (raw.interactions !== undefined) variant.interactions = parseInteractions(raw.interactions, `${where} 교감 메뉴`);
     if (raw.events !== undefined) variant.events = parseEvents(raw.events, `${where} 이벤트 반응`);
+    if (raw.dress !== undefined) variant.dress = parseDress(raw.dress, `${where} 옷 규칙`);
     if (raw.tokens !== undefined) variant.tokens = parseTokens(raw.tokens);
     if (raw.site !== undefined) variant.site = parseSite(raw.site, files);
     return variant;
@@ -788,6 +873,7 @@ export function applyVariant(theme: ThemeManifest, variant: ThemeVariant | undef
     emotes: [...(variant.emotes ?? []), ...theme.emotes],
     interactions: byId(theme.interactions, variant.interactions),
     events: [...(variant.events ?? []), ...theme.events],
+    dress: [...(variant.dress ?? []), ...theme.dress],
     tokens: { ...theme.tokens, ...variant.tokens },
     site: { ...theme.site, ...variant.site },
     ...(variant.wear && { wear: variant.wear }),
@@ -811,7 +897,13 @@ export const activeVariant = (theme: ThemeManifest, now: Date): ThemeVariant | u
 /** Every file a manifest refers to, its variants included. */
 export function manifestFiles(theme: ThemeManifest): string[] {
   const layers = (list: SceneLayer[] = []) => list.map((l) => l.image);
-  const characters = (list: ThemeCharacter[] = []) => list.flatMap((c) => [c.sheet, ...Object.values(c.portraits)]);
+  const characters = (list: ThemeCharacter[] = []) =>
+    list.flatMap((c) => [
+      c.sheet,
+      ...Object.values(c.parts),
+      ...c.outfits.flatMap((o) => [...(o.sheet ? [o.sheet] : []), ...Object.values(o.parts)]),
+      ...Object.values(c.portraits),
+    ]);
   const accessories = (set: Accessories = {}) => Object.values(set).flatMap((tiers) => Object.values(tiers).flatMap((list) => list.map((l) => l.image)));
   const props = (list: ThemeProp[] = []) => list.flatMap((p) => [p.image, ...Object.values(p.states)]);
   const icons = (list: EmoteRule[] = []) => list.flatMap((e) => (e.icon?.image ? [e.icon.image] : []));
@@ -890,6 +982,7 @@ export function parseThemeManifest(input: unknown, files: ReadonlySet<string> | 
     interactions: parseInteractions(raw.interactions),
     props: parseProps(raw.props, files),
     events: parseEvents(raw.events),
+    dress: parseDress(raw.dress),
     variants: parseVariants(raw.variants, files),
   };
 }

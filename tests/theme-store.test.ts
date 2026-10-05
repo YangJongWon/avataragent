@@ -8,7 +8,7 @@ import { strToU8, unzipSync, zipSync } from 'fflate';
 // Relative on purpose: the default DATA_DIR is './data'.
 process.env.DATA_DIR = relative(process.cwd(), mkdtempSync(join(tmpdir(), 'avataragent-themes-')));
 
-const { exportTheme, importTheme, imageSize, isUsableSkin, isUsableTheme, listThemes, removeTheme, themeFile, themeManifest } = await import('../server/themes.ts');
+const { exportTheme, importTheme, imageSize, isUsableOutfit, isUsableSkin, isUsableTheme, listThemes, removeTheme, themeFile, themeManifest } = await import('../server/themes.ts');
 const { isAgentSkin, builtinSkin } = await import('../shared/skins.ts');
 
 /** Just enough of a PNG for the header checks. */
@@ -84,6 +84,15 @@ test('offices and agents can only use what is installed', () => {
   assert.ok(!isUsableSkin('missing:mina'));
   removeTheme('cozy');
   assert.ok(!isUsableSkin('cozy:mina'));
+
+  const dressed = manifest({
+    characters: [{ id: 'mina', sheet: 'assets/mina.png', frames: { a: { x: 0, y: 0, w: 64, h: 96 } }, states: { idle: { frames: ['a'] } }, outfits: [{ id: 'casual', sheet: 'assets/casual.png' }] }],
+  });
+  importTheme(pack({ ...baseFiles(), 'theme.json': strToU8(JSON.stringify(dressed)), 'assets/casual.png': png(128, 96) }));
+  assert.ok(isUsableOutfit('cozy:mina', 'casual'));
+  assert.ok(!isUsableOutfit('cozy:mina', 'suit'));
+  assert.ok(!isUsableOutfit('pixel', 'casual'));
+  removeTheme('cozy');
 
   // Stored skins are checked by shape only, so a removed theme does not wipe choices on restart.
   assert.ok(isAgentSkin('cozy:mina'));

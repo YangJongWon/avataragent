@@ -62,6 +62,13 @@ export function isUsableSkin(skin: unknown): skin is AgentSkin {
   return Boolean(pack && themeManifest(pack.themeId)?.characters.some((c) => c.id === pack.characterId));
 }
 
+/** An outfit the theme character behind `skin` has. */
+export function isUsableOutfit(skin: string, outfit: unknown): outfit is string {
+  const pack = splitPackSkin(skin);
+  if (!pack || typeof outfit !== 'string') return false;
+  return Boolean(themeManifest(pack.themeId)?.characters.find((c) => c.id === pack.characterId)?.outfits.some((o) => o.id === outfit));
+}
+
 export function listThemes(): ThemeSummary[] {
   if (!existsSync(root())) return [];
   return readdirSync(root(), { withFileTypes: true })

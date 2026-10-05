@@ -40,6 +40,13 @@ export const THEME_CATALOGUE: Entries = {
   '기간별 테마': { zh: '按期间的主题', ja: '期間ごとのテーマ', en: 'Seasonal themes' },
   '기간별 테마 변경': { zh: '更改按期间的主题', ja: '期間ごとのテーマを変更', en: 'Seasonal themes changed' },
   '기간별 테마를 저장했어요.': { zh: '已保存按期间的主题。', ja: '期間ごとのテーマを保存しました。', en: 'Seasonal themes saved.' },
+  '의상': { zh: '服装', ja: '衣装', en: 'Outfit' },
+  '기본 옷': { zh: '默认服装', ja: 'いつもの服', en: 'Usual clothes' },
+  '테마의 옷 규칙(예: 휴게실에서는 편한 옷)이 맞을 때는 그 옷이 먼저 보여요.': {
+    zh: '当主题的服装规则（例如在休息室穿便服）成立时，会优先显示那套服装。',
+    ja: 'テーマの服ルール（例: 休憩室では楽な服）に当てはまるときは、その服が優先されます。',
+    en: "When one of the theme's dress rules applies (say, comfy clothes in the lounge), that outfit shows first.",
+  },
   '사이트 테마': { zh: '网站主题', ja: 'サイトテーマ', en: 'Site theme' },
   '사이트 테마 변경': { zh: '更改网站主题', ja: 'サイトテーマを変更', en: 'Site theme changed' },
   '사이트에 쓰기': { zh: '用于网站', ja: 'サイトに使う', en: 'Use for site' },
