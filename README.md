@@ -44,7 +44,18 @@ AI 직원들이 픽셀 사무실에서 실제로 일하는 모습을 보면서 �
 
 ## 쉽게 설치하기 (Windows 10/11)
 
-프로그래밍을 몰라도 됩니다. 아래 두 방법 중 하나만 하면 됩니다.
+프로그래밍을 몰라도 됩니다. 아래 방법 중 하나만 하면 됩니다.
+
+**방법 0. 설치 파일 (가장 쉬움)**
+
+1. [Releases](https://github.com/YangJongWon/avataragent/releases/latest)에서 `AIAgentOffice-Setup-<버전>.exe`를 받습니다.
+2. 두 번 눌러 설치합니다. "Windows의 PC 보호" 창이 뜨면 **추가 정보 → 실행**을 누릅니다(아직 코드 서명이 없어서 뜹니다).
+3. 끝나면 브라우저로 사무실이 열립니다. 관리자 권한도, Node.js 설치도 필요 없습니다. 프로그램 안에 Node.js가 들어 있습니다.
+
+- 프로그램은 `%LOCALAPPDATA%\Programs\AI Agent Office`, 설정(`.env`)·데이터·로그는 `%APPDATA%\AI Agent Office`에 둡니다. 새 버전 설치 파일을 그대로 실행하면 업데이트되고, 설정과 데이터는 그대로 남습니다.
+- 시작 메뉴(와 바탕화면)에 **AI Agent Office**(켜고 열기), **AI Agent Office 끄기**가 생깁니다. 지울 때는 Windows 설정의 앱 제거에서 지우고, 데이터까지 지울지 묻습니다.
+- 마지막 화면의 **Tailscale 설치하고 로그인**을 체크하면 휴대폰·외부에서 쓸 수 있게 Tailscale을 설치합니다. Tailscale 가입과 로그인은 직접 합니다.
+- 설치 파일 만들기: `powershell -File installer/build.ps1` (Inno Setup 6 필요). 버전 태그(`v0.2.0`)를 올리면 GitHub Actions가 만들어 Release에 붙입니다.
 
 **방법 1. 명령 한 줄**
 

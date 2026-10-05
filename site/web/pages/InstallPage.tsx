@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Link } from '../router.tsx';
 
 const WINDOWS = 'irm https://raw.githubusercontent.com/YangJongWon/avataragent/main/scripts/get.ps1 | iex';
-const UNIX = 'curl -fsSL https://raw.githubusercontent.com/YangJongWon/avataragent/main/scripts/get.sh | bash';
+const RELEASES = 'https://github.com/YangJongWon/avataragent/releases/latest';
+const UNIX ='curl -fsSL https://raw.githubusercontent.com/YangJongWon/avataragent/main/scripts/get.sh | bash';
 
 function Command({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -28,10 +29,31 @@ export function InstallPage() {
   return (
     <section className="page narrow">
       <h1>설치하기</h1>
-      <p className="lead">프로그래밍을 몰라도 돼요. 명령 한 줄이면 필요한 것을 알아서 설치하고 사무실을 열어 줘요. 처음에는 5~10분쯤 걸려요.</p>
+      <p className="lead">프로그래밍을 몰라도 돼요. Windows는 설치 파일을 두 번 누르면 끝나요.</p>
 
       <div className="card">
-        <h2>Windows 10/11</h2>
+        <h2>Windows 10/11 — 설치 파일 (추천)</h2>
+        <p>
+          <a className="button big" href={RELEASES}>
+            AI Agent Office 설치 파일 받기
+          </a>
+        </p>
+        <ol>
+          <li>
+            받은 <b>AIAgentOffice-Setup-…exe</b>를 두 번 눌러요. "Windows의 PC 보호" 창이 뜨면 <b>추가 정보 → 실행</b>을 눌러요.
+          </li>
+          <li>다음을 몇 번 누르면 설치되고 브라우저로 사무실이 열려요. 관리자 권한도, 따로 설치할 것도 없어요(1~2분).</li>
+          <li>
+            휴대폰이나 밖에서도 쓰려면 마지막 화면에서 <b>Tailscale 설치하고 로그인</b>을 체크하세요. Tailscale 가입·로그인은 직접 해야 해요.
+          </li>
+        </ol>
+        <p className="muted small">
+          시작 메뉴와 바탕화면에 바로가기가 생겨요. 새 버전은 새 설치 파일을 그대로 실행하면 되고, 설정과 데이터는 그대로 남아요.
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>Windows 10/11 — 명령 한 줄</h2>
         <ol>
           <li>
             시작 메뉴에서 <b>PowerShell</b>을 검색해 열어요.

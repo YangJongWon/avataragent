@@ -1132,7 +1132,7 @@ app.delete('/api/shares/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-const webDist = resolve('dist/web');
+const webDist = resolve(process.env.WEB_DIST || 'dist/web');
 if (existsSync(webDist)) {
   app.use(express.static(webDist));
 }

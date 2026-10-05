@@ -1,7 +1,8 @@
 // Tests must never pick up the real DATABASE_URL or API keys from .env.
 if (!process.env.NODE_TEST_CONTEXT) {
   try {
-    process.loadEnvFile('.env');
+    // The desktop install keeps settings apart from the program (ENV_FILE in the user's AppData).
+    process.loadEnvFile(process.env.ENV_FILE || '.env');
   } catch {
     // .env is optional; defaults below run the mock provider.
   }
