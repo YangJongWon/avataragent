@@ -2,7 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { TEAM_ORDER, TEAMS } from '../../../shared/teams.ts';
 import type { Agent, Office, PlanMode, SavedFlow, Task, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
 import { loopTargetLabel, STEP_KIND, templatePlan, validatePlan } from '../../../shared/workflow.ts';
-import { api } from '../api.ts';
+import { api, type FlowPick } from '../api.ts';
+import { flowToSteps } from '../../../shared/flow-pack.ts';
 import { krw, modelLabel, roi } from '../format.ts';
 import { themeApi } from '../themeApi.ts';
 import { DEFAULT_THEME, type ThemeSummary } from '../../../shared/theme-pack.ts';
@@ -185,7 +186,34 @@ export function NewTaskModal({
   const [planNote, setPlanNote] = useState('');
   const [designing, setDesigning] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [helping, setHelping] = useState<'prompt' | 'flows' | 'steps' | null>(null);
+  const [promptIdea, setPromptIdea] = useState<{ title: string; description: string; tips: string[] } | null>(null);
+  const [picks, setPicks] = useState<{ picks: FlowPick[]; note: string } | null>(null);
   const titleRequired = office.team === 'dev';
+  const request = { title, description, taskType };
+  const help = async (kind: 'prompt' | 'flows' | 'steps', work: () => Promise<void>) => {
+    setHelping(kind);
+    try {
+      await work();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setHelping(null);
+    }
+  };
+  const usePick = (pick: FlowPick) =>
+    help('flows', async () => {
+      if (pick.source === 'template') {
+        changeMode('template');
+      } else {
+        const flow = pick.source === 'saved' ? flows.find((f) => f.id === pick.id)?.flow : await api.communityFlow(pick.id, office.id);
+        if (!flow) throw new Error('흐름을 찾을 수 없어요.');
+        setSteps(flowToSteps(flow, agents));
+        setPlanMode('custom');
+      }
+      setPlanNote(`추천 흐름 "${pick.name}": ${pick.reason}`);
+      setPicks(null);
+    });
   const noInput = team.inputLabel !== null && pendingCount === 0;
   const planError = planMode === 'custom' ? validatePlan(steps, agents) : null;
 
@@ -260,6 +288,47 @@ export function NewTaskModal({
           placeholder={DESCRIPTION_PLACEHOLDER[office.team]}
         />
       </label>
+      <div className="row assist-row">
+        <button
+          type="button"
+          className="pixel-btn small"
+          disabled={helping !== null || (!title.trim() && !description.trim())}
+          title={t('팀장이 목표·배경·결과물·주의할 점으로 요청을 다듬어 줘요. AI 비용이 조금 들어요.')}
+          onClick={() => void help('prompt', async () => setPromptIdea(await api.suggestPrompt(office.id, request)))}
+        >
+          {helping === 'prompt' ? t('다듬는 중…') : t('✨ 요청 다듬기')}
+        </button>
+      </div>
+      {promptIdea && (
+        <div className="callout assist-box">
+          <b className="small">{t('이렇게 써 보면 어때요?')}</b>
+          {promptIdea.title && <div className="small">{promptIdea.title}</div>}
+          <pre className="assist-text">{promptIdea.description}</pre>
+          {promptIdea.tips.length > 0 && (
+            <ul className="small muted">
+              {promptIdea.tips.map((tip) => (
+                <li key={tip}>{tip}</li>
+              ))}
+            </ul>
+          )}
+          <div className="row end">
+            <button type="button" className="pixel-btn small" onClick={() => setPromptIdea(null)}>
+              {t('닫기')}
+            </button>
+            <button
+              type="button"
+              className="pixel-btn small primary"
+              onClick={() => {
+                if (promptIdea.title && !title.trim()) setTitle(promptIdea.title);
+                setDescription(promptIdea.description);
+                setPromptIdea(null);
+              }}
+            >
+              {t('적용')}
+            </button>
+          </div>
+        </div>
+      )}
       <label className="field">
         프로젝트 마일스톤
         <select value={milestoneId} onChange={(e) => setMilestoneId(e.target.value)}>
@@ -299,6 +368,44 @@ export function NewTaskModal({
           ))}
         </div>
       </div>
+      <div className="row assist-row">
+        <button
+          type="button"
+          className="pixel-btn small"
+          disabled={helping !== null}
+          title={t('저장한 흐름과 커뮤니티 인기 흐름 중에서 이 요청에 맞는 것을 골라 줘요. AI 비용이 조금 들어요.')}
+          onClick={() => void help('flows', async () => setPicks(await api.recommendFlows(office.id, request)))}
+        >
+          {helping === 'flows' ? t('고르는 중…') : t('🧭 어울리는 흐름 추천')}
+        </button>
+      </div>
+      {picks && (
+        <div className="callout assist-box">
+          {picks.picks.length === 0 ? (
+            <p className="small">{picks.note}</p>
+          ) : (
+            <ul className="flow-picks">
+              {picks.picks.map((p) => (
+                <li key={`${p.source}:${p.id}`} className="row">
+                  <span className="flow-pick-text small">
+                    <b>{p.name}</b> <span className="theme-badge">{p.source === 'saved' ? t('저장한 흐름') : p.source === 'community' ? t('커뮤니티') : t('유형 기본')}</span>
+                    <br />
+                    <span className="muted">{p.reason}</span>
+                  </span>
+                  <button type="button" className="pixel-btn small primary" disabled={helping !== null} onClick={() => void usePick(p)}>
+                    {t('이 흐름 쓰기')}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="row end">
+            <button type="button" className="pixel-btn small" onClick={() => setPicks(null)}>
+              {t('닫기')}
+            </button>
+          </div>
+        </div>
+      )}
       {planMode === 'template' && <PlanChain steps={steps} agents={agents} />}
       {planMode === 'ai' && (
         <div className="callout plan-ai">
@@ -311,8 +418,17 @@ export function NewTaskModal({
       {planMode === 'custom' && (
         <>
           {planNote && <p className="plan-note small">🧭 팀장 의견: {planNote}</p>}
-          <FlowTools team={office.team} agents={agents} steps={steps} flows={flows} canSave={canSaveFlows} onLoad={setSteps} onError={onError} />
+          <FlowTools officeId={office.id} team={office.team} agents={agents} steps={steps} flows={flows} canSave={canSaveFlows} onLoad={setSteps} onError={onError} />
           <PlanEditor team={office.team} agents={agents} steps={steps} onChange={setSteps} />
+          <button
+            type="button"
+            className="pixel-btn small"
+            disabled={helping !== null}
+            title={t('비어 있는 단계 지시만 채워요. 직접 쓴 지시는 그대로 둬요.')}
+            onClick={() => void help('steps', async () => setSteps((await api.suggestInstructions(office.id, { ...request, steps })).steps))}
+          >
+            {helping === 'steps' ? t('채우는 중…') : t('✨ 단계별 지시 추천')}
+          </button>
           <button type="button" className="pixel-btn small" disabled={designing} onClick={preview}>
             {designing ? '설계 중…' : '🧭 AI 추천으로 다시 채우기'}
           </button>

@@ -175,3 +175,63 @@
 .community-tab > h3 {
   margin-top: 20px;
 }
+
+/* ── task assist: request polish, flow picks, popular flows ── */
+.assist-row {
+  margin: 4px 0 8px;
+}
+
+.assist-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.assist-text {
+  white-space: pre-wrap;
+  font: inherit;
+  font-size: 13px;
+  margin: 0;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.flow-picks {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.flow-picks li {
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.flow-pick-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.flow-popular {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin: 4px 0;
+}
+
+.flow-chip {
+  font: inherit;
+  padding: 2px 8px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.flow-chip:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

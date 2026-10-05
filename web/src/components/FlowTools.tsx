@@ -2,10 +2,12 @@ import { flowFromPlan, flowToSteps, parseFlowPack, type FlowPack } from '../../.
 import { t, tpl } from '../../../shared/i18n.ts';
 import type { Agent, SavedFlow, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
 import { validatePlan } from '../../../shared/workflow.ts';
-import { api } from '../api.ts';
+import { useEffect, useState } from 'react';
+import { api, type PopularFlow } from '../api.ts';
 import './themes.css';
 
 interface Props {
+  officeId: string;
   team: TeamId;
   agents: Agent[];
   steps: WorkflowStepInput[];
@@ -25,8 +27,26 @@ function download(flow: FlowPack) {
 }
 
 /** Load a saved or shared journey into the editor, or keep this one: save it, or export it for the community. */
-export function FlowTools({ team, agents, steps, flows, canSave, onLoad, onError }: Props) {
+export function FlowTools({ officeId, team, agents, steps, flows, canSave, onLoad, onError }: Props) {
   const ready = !validatePlan(steps, agents);
+  const [popular, setPopular] = useState<PopularFlow[]>([]);
+  const [loading, setLoading] = useState<string | null>(null);
+
+  // Lately popular community flows, shown when the editor opens; empty when the site is not set. No AI cost.
+  useEffect(() => {
+    api.popularFlows().then(setPopular, () => setPopular([]));
+  }, []);
+
+  const loadCommunity = async (flow: PopularFlow) => {
+    setLoading(flow.id);
+    try {
+      onLoad(flowToSteps(await api.communityFlow(flow.id, officeId), agents));
+    } catch (e) {
+      onError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(null);
+    }
+  };
   const pack = (name: string) => flowFromPlan(steps, agents, { name, team });
   const ask = () => window.prompt(t('흐름 이름'), '')?.trim();
 
@@ -39,6 +59,24 @@ export function FlowTools({ team, agents, steps, flows, canSave, onLoad, onError
   };
 
   return (
+    <>
+    {popular.length > 0 && (
+      <div className="flow-popular small">
+        <span className="muted">{t('🔥 요즘 인기 흐름')}</span>
+        {popular.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className="flow-chip"
+            disabled={loading !== null}
+            title={p.summary || p.title}
+            onClick={() => void loadCommunity(p)}
+          >
+            {loading === p.id ? t('불러오는 중…') : p.title} <span className="muted">♥ {p.likes}</span>
+          </button>
+        ))}
+      </div>
+    )}
     <div className="row flow-tools small">
       {flows.length > 0 && (
         <select
@@ -100,5 +138,6 @@ export function FlowTools({ team, agents, steps, flows, canSave, onLoad, onError
         {t('📤 흐름 내보내기')}
       </button>
     </div>
+    </>
   );
 }

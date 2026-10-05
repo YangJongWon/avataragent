@@ -1,0 +1,9 @@
+{
+  "1": {"class_type":"CheckpointLoaderSimple","inputs":{"ckpt_name":"animagine-xl-4.0-opt.safetensors"}},
+  "2": {"class_type":"CLIPTextEncode","inputs":{"clip":["1",1],"text":"masterpiece, best quality, modern cozy mobile game office interior, cute chibi game environment, clean polished pixel art, soft pastel lavender mint peach palette, orthographic three-quarter view, compact coworking office, four small desks arranged with clear walking space, low desks designed for super deformed characters, monitors placed on desk backs, chairs visibly in front of desks, lounge corner, coffee machine, whiteboard, plants, warm soft daylight, cohesive sprite game art, crisp shapes, subtle ambient lighting, no people, no characters, no text, 16:9 game background"}},
+  "3": {"class_type":"CLIPTextEncode","inputs":{"clip":["1",1],"text":"worst quality, low quality, realistic photo, photorealistic, 3d render, old game, retro brown palette, medieval, tall human proportions, people, character, text, letters, watermark, logo, fisheye, extreme perspective, cluttered, messy, dark, horror, duplicated furniture, computer in front of chair, chair behind desk"}},
+  "4": {"class_type":"EmptyLatentImage","inputs":{"width":1024,"height":576,"batch_size":1}},
+  "5": {"class_type":"KSampler","inputs":{"model":["1",0],"positive":["2",0],"negative":["3",0],"latent_image":["4",0],"seed":20261006,"steps":28,"cfg":6.5,"sampler_name":"dpmpp_2m","scheduler":"karras","denoise":1.0}},
+  "6": {"class_type":"VAEDecode","inputs":{"samples":["5",0],"vae":["1",2]}},
+  "7": {"class_type":"SaveImage","inputs":{"images":["6",0],"filename_prefix":"avataragent/sd-office-modern-v1"}}
+}

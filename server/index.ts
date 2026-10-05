@@ -31,7 +31,8 @@ import { canSeeEvent, ForbiddenError, snapshotFor } from './access.ts';
 import { listModels } from './ai.ts';
 import { authEnabled, authRouter, stillValid, viewerOf } from './auth.ts';
 import { chatNews, forwardChat, postChat, setAssignee } from './chat.ts';
-import { communityInstall, communityItem, communityList, communityPreview, removeFlow, saveFlow } from './community.ts';
+import { communityFlow, communityInstall, communityItem, communityList, communityPreview, popularFlows, removeFlow, saveFlow } from './community.ts';
+import { recommendFlows, suggestInstructions, suggestPrompt } from './recommend.ts';
 import { config } from './config.ts';
 import { closeStorage, storageInfo } from './db.ts';
 import { createMember, deleteMember, updateMember } from './members.ts';
@@ -304,6 +305,39 @@ app.get('/api/community/items/:id/preview', async (req, res) => {
   res.setHeader('content-type', file.contentType);
   res.setHeader('cache-control', 'private, max-age=300');
   res.send(Buffer.from(file.bytes));
+});
+
+// Help while making a task. Popular flows cost nothing; the rest ask the office manager (charged to the office).
+app.get('/api/community/popular-flows', async (_req, res) => {
+  res.json(await popularFlows());
+});
+
+app.get('/api/community/items/:id/flow', async (req, res) => {
+  guard(res, 'operate', typeof req.query.officeId === 'string' ? req.query.officeId : undefined);
+  res.json(await communityFlow(req.params.id));
+});
+
+const requestOf = (req: Request) => ({
+  officeId: req.params.id as string,
+  title: String(req.body?.title ?? '').slice(0, 200),
+  description: String(req.body?.description ?? '').slice(0, 4000),
+  taskType: String(req.body?.taskType ?? ''),
+});
+
+app.post('/api/offices/:id/flow-recommendations', async (req, res) => {
+  guard(res, 'operate', req.params.id);
+  res.json(await recommendFlows(requestOf(req)));
+});
+
+app.post('/api/offices/:id/prompt-suggestion', async (req, res) => {
+  guard(res, 'operate', req.params.id);
+  res.json(await suggestPrompt(requestOf(req)));
+});
+
+app.post('/api/offices/:id/step-instructions', async (req, res) => {
+  guard(res, 'operate', req.params.id);
+  const steps = Array.isArray(req.body?.steps) ? req.body.steps.slice(0, 10) : [];
+  res.json({ steps: await suggestInstructions({ ...requestOf(req), steps: toStepInputs(steps) }) });
 });
 
 app.post('/api/community/install', async (req, res) => {

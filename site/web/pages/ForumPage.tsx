@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react';
 import { siteApi, type Category, type Me, type PostCard, type PostView } from '../api.ts';
 import { ago, AuthorLink, Avatar, errorText, Markdown } from '../parts.tsx';
 import { Link, navigate } from '../router.tsx';
+import { SiteIcon, type SiteIconName } from '../components/SiteIcon.tsx';
 
-export const CATEGORY: Record<Category, { icon: string; label: string }> = {
-  notice: { icon: '📢', label: '공지' },
-  question: { icon: '❓', label: '질문' },
-  tip: { icon: '💡', label: '팁' },
-  idea: { icon: '🛠️', label: '기능 제안' },
-  showcase: { icon: '🏢', label: '내 사무실 자랑' },
+export const CATEGORY: Record<Category, { icon: SiteIconName; label: string }> = {
+  notice: { icon: 'notice', label: '공지' },
+  question: { icon: 'question', label: '질문' },
+  tip: { icon: 'tip', label: '팁' },
+  idea: { icon: 'idea', label: '기능 제안' },
+  showcase: { icon: 'office', label: '내 사무실 자랑' },
 };
 
 export function ForumPage({ search }: { search: string }) {
@@ -51,6 +52,7 @@ export function ForumPage({ search }: { search: string }) {
       <div className="row between">
         <h1>게시판</h1>
         <Link href={`/forum/new${category && category !== 'notice' ? `?category=${category}` : ''}`} className="button">
+          <SiteIcon name="pen" />
           글쓰기
         </Link>
       </div>
@@ -70,7 +72,7 @@ export function ForumPage({ search }: { search: string }) {
           </button>
           {(Object.keys(CATEGORY) as Category[]).map((c) => (
             <button key={c} className={category === c ? 'active' : ''} onClick={() => go({ category: c })}>
-              {CATEGORY[c].icon} {CATEGORY[c].label}
+              <SiteIcon name={CATEGORY[c].icon} /> {CATEGORY[c].label}
             </button>
           ))}
         </div>
@@ -97,8 +99,8 @@ export function ForumPage({ search }: { search: string }) {
             <li key={p.id} className={`card post-row${p.pinned ? ' pinned' : ''}`}>
               <div className="post-main">
                 <div className="small muted">
-                  {p.pinned && '📌 '}
-                  {CATEGORY[p.category].icon} {CATEGORY[p.category].label}
+                  {p.pinned && <SiteIcon name="pin" />}
+                  <SiteIcon name={CATEGORY[p.category].icon} /> {CATEGORY[p.category].label}
                   {p.category === 'question' && (p.answered ? <span className="badge ok">해결됨</span> : <span className="badge">답변 기다림</span>)}
                 </div>
                 <Link href={`/forum/${p.id}`} className="post-title">
@@ -112,7 +114,7 @@ export function ForumPage({ search }: { search: string }) {
                 </div>
               </div>
               <div className="post-count" title="댓글">
-                💬 {p.comments}
+                <SiteIcon name="comment" /> {p.comments}
               </div>
             </li>
           ))}
@@ -203,7 +205,7 @@ export function PostEditorPage({ me, search, editId }: { me: Me | null; search: 
                 .filter((c) => c !== 'notice' || admin)
                 .map((c) => (
                   <option key={c} value={c}>
-                    {CATEGORY[c].icon} {CATEGORY[c].label}
+                    {CATEGORY[c].label}
                   </option>
                 ))}
             </select>
@@ -302,11 +304,11 @@ export function PostPage({ id, me }: { id: string; me: Me | null }) {
     <section className="page narrow post-page">
       <p className="small">
         <Link href={`/forum?category=${post.category}`}>
-          ← {CATEGORY[post.category].icon} {CATEGORY[post.category].label}
+          ← <SiteIcon name={CATEGORY[post.category].icon} /> {CATEGORY[post.category].label}
         </Link>
       </p>
       <h1>
-        {post.pinned && '📌 '}
+        {post.pinned && <SiteIcon name="pin" />}
         {post.title}
       </h1>
       <div className="row small muted">

@@ -1,5 +1,8 @@
 import officeShot from '../../../docs/office-mobile.png';
 import { Link } from '../router.tsx';
+import { SiteIcon, type SiteIconName } from '../components/SiteIcon.tsx';
+
+const FEATURE_ICONS: SiteIconName[] = ['spark', 'flow', 'profit', 'theme', 'model', 'team'];
 
 const FEATURES: [string, string, string][] = [
   ['👀', '일하는 모습이 보여요', 'AI 직원이 칠판에서 과제를 가져가고, 자료를 찾고, 서류를 직접 건네주며 일해요. 누가 무엇을 하는지 한눈에 보여요.'],
@@ -35,9 +38,9 @@ export function HomePage() {
 
       <section className="page">
         <div className="features">
-          {FEATURES.map(([icon, title, text]) => (
+          {FEATURES.map(([_icon, title, text], index) => (
             <article key={title} className="card">
-              <div className="feature-icon">{icon}</div>
+              <div className="feature-icon"><SiteIcon name={FEATURE_ICONS[index]} /></div>
               <h3>{title}</h3>
               <p>{text}</p>
             </article>

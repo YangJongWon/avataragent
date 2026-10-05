@@ -136,12 +136,41 @@ export const api = {
     return { blob: await res.blob(), filename: encoded ? decodeURIComponent(encoded) : `export.${format}` };
   },
   saveFlow: (flow: FlowPack, source: 'mine' | 'file') => call<SavedFlow>('POST', '/api/flows', { flow, source }),
+  popularFlows: () => call<PopularFlow[]>('GET', '/api/community/popular-flows'),
+  communityFlow: (id: string, officeId: string) => call<FlowPack>('GET', `/api/community/items/${encodeURIComponent(id)}/flow?officeId=${encodeURIComponent(officeId)}`),
+  recommendFlows: (officeId: string, input: TaskRequest) => call<{ picks: FlowPick[]; note: string }>('POST', `/api/offices/${officeId}/flow-recommendations`, input),
+  suggestPrompt: (officeId: string, input: TaskRequest) => call<{ title: string; description: string; tips: string[] }>('POST', `/api/offices/${officeId}/prompt-suggestion`, input),
+  suggestInstructions: (officeId: string, input: TaskRequest & { steps: WorkflowStepInput[] }) =>
+    call<{ steps: WorkflowStepInput[] }>('POST', `/api/offices/${officeId}/step-instructions`, input),
   removeFlow: (id: string) => call('DELETE', `/api/flows/${encodeURIComponent(id)}`),
   communityItems: (query: Record<string, string>) =>
     call<{ site: string; items: CommunityItem[]; total: number }>('GET', `/api/community/items?${new URLSearchParams(query)}`),
   communityInstall: (id: string) =>
     call<{ type: 'theme'; theme: { id: string; name: string } } | { type: 'flow'; flow: SavedFlow } | { type: 'playbook'; playbook: Playbook }>('POST', '/api/community/install', { id }),
 };
+
+export interface TaskRequest {
+  title: string;
+  description: string;
+  taskType: string;
+}
+
+export interface PopularFlow {
+  id: string;
+  title: string;
+  summary: string;
+  tags: string[];
+  likes: number;
+  downloads: number;
+  owner: string;
+}
+
+export interface FlowPick {
+  source: 'saved' | 'community' | 'template';
+  id: string;
+  name: string;
+  reason: string;
+}
 
 /** A gallery card from the project site (see site/server/community.ts). */
 export interface CommunityItem {

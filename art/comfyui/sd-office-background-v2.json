@@ -1,0 +1,9 @@
+{
+  "1":{"class_type":"CheckpointLoaderSimple","inputs":{"ckpt_name":"RealVisXL_V5.0_fp16.safetensors"}},
+  "2":{"class_type":"CLIPTextEncode","inputs":{"clip":["1",1],"text":"A polished contemporary mobile game background, isometric dollhouse cutaway of one complete cozy startup office room, camera looking down at 30 degrees, entire floor visible, four clearly separated compact workstations in a 2 by 2 arrangement, each workstation has a low desk with monitor on the far edge and an empty chair on the near edge, wide walkable aisles between desks, a small pastel sofa and coffee table on the right, whiteboard on back wall, coffee machine, potted plants, large windows, soft lavender mint peach cream palette, rounded furniture, clean kawaii chibi scale environment, crisp high-end 2D game illustration, subtle pixel texture, soft daylight, no characters, no people, no text, no logo, horizontal composition"}},
+  "3":{"class_type":"CLIPTextEncode","inputs":{"clip":["1",1],"text":"people, person, human, character, text, letters, logo, watermark, photorealistic, photograph, old retro game, dark brown, medieval, empty shelf closeup, storefront, exterior, fisheye, cropped room, extreme perspective, clutter, messy, duplicate monitors, monitor in front of chair, chair behind monitor, tall furniture, hard black outlines"}},
+  "4":{"class_type":"EmptyLatentImage","inputs":{"width":1024,"height":576,"batch_size":1}},
+  "5":{"class_type":"KSampler","inputs":{"model":["1",0],"positive":["2",0],"negative":["3",0],"latent_image":["4",0],"seed":4815162342,"steps":32,"cfg":6.0,"sampler_name":"dpmpp_2m_sde","scheduler":"karras","denoise":1.0}},
+  "6":{"class_type":"VAEDecode","inputs":{"samples":["5",0],"vae":["1",2]}},
+  "7":{"class_type":"SaveImage","inputs":{"images":["6",0],"filename_prefix":"avataragent/sd-office-modern-v2"}}
+}

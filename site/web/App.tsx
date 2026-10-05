@@ -15,6 +15,11 @@ import { PaddleCheckoutPage } from './pages/PaddleCheckoutPage.tsx';
 import { PricingPage } from './pages/PricingPage.tsx';
 import { UploadPage } from './pages/UploadPage.tsx';
 import { Link, useLocation } from './router.tsx';
+import { SiteIcon, type SiteIconName } from './components/SiteIcon.tsx';
+
+const NAV_ICON: Record<string, SiteIconName> = {
+  '/pricing': 'pricing', '/install': 'download', '/community': 'community', '/forum': 'forum', '/ranking': 'ranking', '/docs': 'docs',
+};
 
 const NAV: [string, string][] = [
   ['/pricing', '가격'],
@@ -68,11 +73,13 @@ export function App() {
     <div className="site">
       <header className="site-head">
         <Link href="/" className="brand">
-          🏢 AI 에이전트 오피스
+          <span className="brand-mark"><SiteIcon name="spark" /></span>
+          <span className="brand-name">AI 에이전트 오피스</span>
         </Link>
         <nav>
           {NAV.map(([href, label]) => (
             <Link key={href} href={href} className={path.startsWith(href) ? 'active' : ''}>
+              <SiteIcon name={NAV_ICON[href]} />
               {label}
             </Link>
           ))}

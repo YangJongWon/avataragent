@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { siteApi, type ItemCard, type ItemType } from '../api.ts';
 import { Link, navigate } from '../router.tsx';
+import { SiteIcon, type SiteIconName } from '../components/SiteIcon.tsx';
+
+const TYPE_ICON: Record<ItemType, SiteIconName> = { theme: 'theme', flow: 'flow', playbook: 'playbook' };
 
 export const TYPE_LABEL: Record<ItemType, { icon: string; label: string }> = {
   theme: { icon: '🎨', label: '테마' },
@@ -19,10 +22,10 @@ export function ItemCardView({ item }: { item: ItemCard }) {
   const type = TYPE_LABEL[item.type];
   return (
     <Link href={`/community/items/${item.id}`} className="card item-card">
-      <div className="item-thumb">{item.preview ? <img src={item.preview} alt="" loading="lazy" /> : <span>{type.icon}</span>}</div>
+      <div className="item-thumb">{item.preview ? <img src={item.preview} alt="" loading="lazy" /> : <span className="empty-art"><SiteIcon name={TYPE_ICON[item.type]} /></span>}</div>
       <div className="item-body">
         <div className="item-type">
-          {type.icon} {type.label}
+          <SiteIcon name={TYPE_ICON[item.type]} /> {type.label}
           {item.verified && <span className="badge">검수 통과</span>}
           {item.status && item.status !== 'published' && <span className="badge warn">{item.status === 'hidden' ? '숨김' : item.status}</span>}
           <span className={`price-tag${item.priceKrw ? ' paid' : ''}`}>{item.priceKrw ? `${item.priceKrw.toLocaleString('ko-KR')}원` : '무료'}</span>
@@ -88,6 +91,7 @@ export function CommunityPage({ search }: { search: string }) {
       <div className="row between">
         <h1>커뮤니티</h1>
         <Link href={`/community/upload${type ? `?type=${type}` : ''}`} className="button">
+          <SiteIcon name="upload" />
           올리기
         </Link>
       </div>
@@ -100,7 +104,7 @@ export function CommunityPage({ search }: { search: string }) {
           </button>
           {(Object.keys(TYPE_LABEL) as ItemType[]).map((t) => (
             <button key={t} className={type === t ? 'active' : ''} onClick={() => go({ type: t })}>
-              {TYPE_LABEL[t].icon} {TYPE_LABEL[t].label}
+              <SiteIcon name={TYPE_ICON[t]} /> {TYPE_LABEL[t].label}
             </button>
           ))}
         </div>

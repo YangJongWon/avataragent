@@ -62,6 +62,53 @@ export async function communityPreview(id: unknown) {
   return { bytes: new Uint8Array(await res.arrayBuffer()), contentType: type };
 }
 
+export interface PopularFlow {
+  id: string;
+  title: string;
+  summary: string;
+  tags: string[];
+  likes: number;
+  downloads: number;
+  owner: string;
+}
+
+const POPULAR_TTL_MS = 10 * 60_000;
+let popularCache: { at: number; flows: PopularFlow[] } | null = null;
+/** Tests start each case without the cache. */
+export const clearPopularCache = () => void (popularCache = null);
+
+/**
+ * Lately popular community flows, for the plan editor. Cached for a while, and empty (not an error) when the site
+ * is not set or cannot be reached, so the task dialog never waits on it.
+ */
+export async function popularFlows(limit = 6): Promise<PopularFlow[]> {
+  if (!config.siteUrl) return [];
+  if (popularCache && Date.now() - popularCache.at < POPULAR_TTL_MS) return popularCache.flows.slice(0, limit);
+  try {
+    const data = (await (await get('/api/items?type=flow&sort=popular&limit=12')).json()) as { items?: Record<string, unknown>[] };
+    const flows = (data.items ?? []).map((i) => ({
+      id: String(i.id),
+      title: String(i.title ?? '').slice(0, 60),
+      summary: String(i.summary ?? '').slice(0, 200),
+      tags: Array.isArray(i.tags) ? i.tags.map(String).slice(0, 5) : [],
+      likes: Number(i.likes) || 0,
+      downloads: Number(i.downloads) || 0,
+      owner: String((i.owner as { handle?: string; name?: string } | undefined)?.handle ?? (i.owner as { name?: string } | undefined)?.name ?? ''),
+    }));
+    popularCache = { at: Date.now(), flows };
+    return flows.slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+/** A community flow to load into the editor, without saving it. */
+export async function communityFlow(id: unknown): Promise<FlowPack> {
+  const res = await get(`/api/items/${itemId(id)}/download`);
+  if (res.headers.get('x-item-type') !== 'flow') throw new Error('업무 흐름 항목이 아니에요.');
+  return parseFlowPack(JSON.parse(await res.text()));
+}
+
 /** Saves a flow, replacing an earlier copy of the same community item. */
 export function saveFlow(flow: FlowPack, source: SavedFlow['source'], itemId?: string): SavedFlow {
   const saved: SavedFlow = { id: `flow_${randomUUID().slice(0, 8)}`, source, ...(itemId ? { itemId } : {}), flow, savedAt: new Date().toISOString() };
