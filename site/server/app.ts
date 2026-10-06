@@ -123,7 +123,7 @@ export function createSiteApp(deps: SiteDeps) {
   // ── plan sales ─────────────────────────────────────────────
   app.post('/api/checkout', async (req, res) => {
     const account = signedIn(res);
-    res.json(await billing.startPlanCheckout(account.id, { plan: req.body?.plan, install: req.body?.install, ref: req.body?.ref, returnUrl: req.body?.returnUrl }));
+    res.json(await billing.startPlanCheckout(account.id, { plan: req.body?.plan, install: req.body?.install, ref: req.body?.ref, returnUrl: req.body?.returnUrl, interval: req.body?.interval }));
   });
 
   app.get('/api/checkout/:id', async (req, res) => {

@@ -17,7 +17,7 @@ const config = {
   apiKey: 'pdl_sdbx_apikey',
   clientToken: 'test_clienttoken',
   webhookSecret: SECRET,
-  prices: { team: 'pri_team', business: 'pri_business' },
+  prices: { team: { month: 'pri_team', year: 'pri_team_year' }, business: { month: 'pri_business' } },
   currency: 'KRW',
 };
 
@@ -95,6 +95,9 @@ test('checkouts, cancel, resume and refund call the Paddle API', async () => {
   assert.deepEqual((item.price as unknown as { quantity: unknown }).quantity, { minimum: 1, maximum: 1 }, 'one copy per purchase');
 
   await assert.rejects(paddlePayments({ ...config, prices: {} }, fake.impl).createCheckout({ id: 'c', kind: 'plan', plan: 'business', amountKrw: 1, title: 't' }, ''), /PADDLE_PRICE_BUSINESS/);
+  await assert.rejects(paddle.createCheckout({ id: 'c', kind: 'plan', plan: 'business', interval: 'year', amountKrw: 1, title: 't' }, ''), /PADDLE_PRICE_BUSINESS_YEARLY/);
+  await paddle.createCheckout({ id: 'chk_year', kind: 'plan', plan: 'team', interval: 'year', amountKrw: 90000, title: '팀 플랜 (연간)' }, 'http://site.test');
+  assert.deepEqual(fake.calls.at(-1)!.body!.items, [{ price_id: 'pri_team_year', quantity: 1 }], 'a yearly plan uses its yearly price');
   const noLink = (async () => Response.json({ data: { id: 'txn_9', checkout: { url: null } } })) as unknown as typeof fetch;
   await assert.rejects(paddlePayments(config, noLink).createCheckout({ id: 'c', kind: 'item', amountKrw: 1000, title: 't' }, ''), /기본 결제 링크/);
   const failing = (async () => Response.json({ error: { code: 'forbidden', detail: 'bad key' } }, { status: 403 })) as unknown as typeof fetch;

@@ -1,4 +1,4 @@
-import { isPlan, type Plan } from './plans.ts';
+import { isPlan, type BillingInterval, type Plan } from './plans.ts';
 
 /**
  * Plan licenses sold on the project site. The site signs a payload with Ed25519; a self-hosted install checks
@@ -23,6 +23,8 @@ export interface LicensePayload {
   periodEnd: string;
   issuedAt: string;
   status: LicenseStatus;
+  /** Billed yearly when 'year'; missing means monthly (licenses issued before yearly plans). */
+  interval?: BillingInterval;
 }
 
 export const INSTALL_ID = /^ins_[A-Za-z0-9_-]{16,40}$/;
@@ -48,6 +50,7 @@ export function parseLicensePayload(input: unknown): LicensePayload {
   if (!isDate(p.periodEnd)) fail('periodEnd');
   if (!isDate(p.issuedAt)) fail('issuedAt');
   if (!STATUSES.includes(p.status as LicenseStatus)) fail('status');
+  if (p.interval !== undefined && p.interval !== 'month' && p.interval !== 'year') fail('interval');
   return {
     v: 1,
     kid: p.kid as string,
@@ -59,5 +62,6 @@ export function parseLicensePayload(input: unknown): LicensePayload {
     periodEnd: p.periodEnd as string,
     issuedAt: p.issuedAt as string,
     status: p.status as LicenseStatus,
+    ...(p.interval === 'year' ? { interval: 'year' as const } : {}),
   };
 }

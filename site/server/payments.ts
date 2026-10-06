@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Plan } from '../../shared/plans.ts';
+import type { BillingInterval, Plan } from '../../shared/plans.ts';
 
 /**
  * The payment company behind the site, for plans (subscriptions) and later paid themes (one-off). Same shape as
@@ -22,6 +22,8 @@ export interface CheckoutRequest {
   id: string;
   kind: 'plan' | 'item';
   plan?: Plan;
+  /** Plans only: billed monthly unless 'year'. */
+  interval?: BillingInterval;
   amountKrw: number;
   title: string;
 }

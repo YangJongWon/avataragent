@@ -78,7 +78,7 @@ function LicenseCard({ license, onChange }: { license: LicenseView; onChange: (l
     <div className="card license">
       <div className="row between">
         <b>
-          {planOf(license.plan as never).emoji} {planOf(license.plan as never).label} 플랜
+          {planOf(license.plan as never).emoji} {planOf(license.plan as never).label} 플랜{license.interval === 'year' ? ' · 연간' : ''}
         </b>
         <span className={license.status === 'active' ? 'pos' : 'error'}>{STATUS[license.status]}</span>
       </div>

@@ -17,7 +17,8 @@ export interface PaddleConfig {
   /** For Paddle.js in the browser; safe to show. */
   clientToken: string;
   webhookSecret: string;
-  prices: Partial<Record<Plan, string>>;
+  /** Paddle price ids per plan, monthly and yearly. */
+  prices: Partial<Record<Plan, { month?: string; year?: string }>>;
   /** Currency for one-off theme prices. Paddle takes KRW in whole won. */
   currency: string;
 }
@@ -106,8 +107,12 @@ export function paddlePayments(config: PaddleConfig, fetchImpl: typeof fetch = (
     async createCheckout(checkout: CheckoutRequest) {
       let item: Record<string, unknown>;
       if (checkout.kind === 'plan') {
-        const priceId = checkout.plan && config.prices[checkout.plan];
-        if (!priceId) throw new PaymentError(`Paddle에 ${checkout.plan} 플랜 가격이 설정되지 않았어요 (PADDLE_PRICE_${String(checkout.plan).toUpperCase()}).`);
+        const interval = checkout.interval ?? 'month';
+        const priceId = checkout.plan && config.prices[checkout.plan]?.[interval];
+        if (!priceId) {
+          const name = `PADDLE_PRICE_${String(checkout.plan).toUpperCase()}${interval === 'year' ? '_YEARLY' : ''}`;
+          throw new PaymentError(`Paddle에 ${checkout.plan} 플랜 ${interval === 'year' ? '연간' : '월간'} 가격이 설정되지 않았어요 (${name}).`);
+        }
         item = { price_id: priceId, quantity: 1 };
       } else {
         item = {
@@ -161,7 +166,10 @@ export function paddleConfigFromEnv(env: (name: string, fallback?: string) => st
     apiKey: env('PADDLE_API_KEY'),
     clientToken: env('PADDLE_CLIENT_TOKEN'),
     webhookSecret: env('PADDLE_WEBHOOK_SECRET'),
-    prices: { team: env('PADDLE_PRICE_TEAM') || undefined, business: env('PADDLE_PRICE_BUSINESS') || undefined },
+    prices: {
+      team: { month: env('PADDLE_PRICE_TEAM') || undefined, year: env('PADDLE_PRICE_TEAM_YEARLY') || undefined },
+      business: { month: env('PADDLE_PRICE_BUSINESS') || undefined, year: env('PADDLE_PRICE_BUSINESS_YEARLY') || undefined },
+    },
     currency: env('PADDLE_CURRENCY', 'USD'),
   };
 }

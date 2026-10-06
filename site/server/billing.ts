@@ -1,9 +1,8 @@
 import { createPublicKey, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PERIOD_DAYS } from '../../shared/billing.ts';
 import { INSTALL_ID, type LicensePayload, type LicenseStatus } from '../../shared/license.ts';
-import { isPlan, planOf, type Plan } from '../../shared/plans.ts';
+import { INTERVAL_DAYS, isInterval, isPlan, planOf, priceFor, type BillingInterval, type Plan } from '../../shared/plans.ts';
 import { newLicenseKeys, signLicense, verifyLicense } from '../../server/license-crypto.ts';
 import type { Db } from './db.ts';
 import type { PaymentEvent, PaymentProvider } from './payments.ts';
@@ -34,6 +33,7 @@ interface SubscriptionRow {
   provider_ref: string | null;
   period_end: Date;
   cancel_at_period_end: boolean;
+  billing_interval: BillingInterval;
 }
 
 interface LicenseRow {
@@ -82,24 +82,29 @@ export class SiteBilling {
   }
 
   // ── checkout ───────────────────────────────────────────────
-  async startPlanCheckout(accountId: string, input: { plan: unknown; install: unknown; ref?: unknown; returnUrl?: unknown }) {
+  async startPlanCheckout(accountId: string, input: { plan: unknown; install: unknown; ref?: unknown; returnUrl?: unknown; interval?: unknown }) {
     if (!isPlan(input.plan) || planOf(input.plan).priceKrw === 0) throw new BillingError('살 수 있는 플랜이 아니에요.');
     if (typeof input.install !== 'string' || !INSTALL_ID.test(input.install)) throw new BillingError('설치 정보가 올바르지 않아요. 앱의 플랜 화면에서 다시 시작해 주세요.');
     const returnUrl = typeof input.returnUrl === 'string' ? input.returnUrl : '';
     if (returnUrl && (!/^https?:\/\//.test(returnUrl) || returnUrl.length > 500)) throw new BillingError('돌아갈 주소가 올바르지 않아요.');
     const ref = typeof input.ref === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(input.ref) ? input.ref : null;
     const meta = planOf(input.plan);
+    const interval: BillingInterval = isInterval(input.interval) ? input.interval : 'month';
+    const amount = priceFor(meta.id, interval);
     const checkoutId = id('chk');
     await this.db.query(
-      'INSERT INTO checkouts (id, account_id, kind, plan, install_id, app_ref, return_url, amount_krw, provider) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-      [checkoutId, accountId, 'plan', meta.id, input.install, ref, returnUrl || null, meta.priceKrw, this.provider.id],
+      'INSERT INTO checkouts (id, account_id, kind, plan, install_id, app_ref, return_url, amount_krw, provider, billing_interval) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+      [checkoutId, accountId, 'plan', meta.id, input.install, ref, returnUrl || null, amount, this.provider.id, interval],
     );
-    return this.provider.createCheckout({ id: checkoutId, kind: 'plan', plan: meta.id, amountKrw: meta.priceKrw, title: `${meta.label} 플랜 (월)` }, this.publicUrl);
+    return this.provider.createCheckout(
+      { id: checkoutId, kind: 'plan', plan: meta.id, interval, amountKrw: amount, title: `${meta.label} 플랜 (${interval === 'year' ? '연간' : '월간'})` },
+      this.publicUrl,
+    );
   }
 
   async checkout(accountId: string, checkoutId: string) {
-    const [row] = await this.db.query<{ id: string; kind: 'plan' | 'item'; plan: Plan; item_id: string | null; title: string | null; amount_krw: number; status: string; return_url: string | null; install_id: string }>(
-      'SELECT c.id, c.kind, c.plan, c.item_id, i.title, c.amount_krw, c.status, c.return_url, c.install_id FROM checkouts c LEFT JOIN items i ON i.id = c.item_id WHERE c.id = $1 AND c.account_id = $2',
+    const [row] = await this.db.query<{ id: string; kind: 'plan' | 'item'; plan: Plan; item_id: string | null; title: string | null; amount_krw: number; status: string; return_url: string | null; install_id: string; billing_interval: BillingInterval }>(
+      'SELECT c.id, c.kind, c.plan, c.item_id, i.title, c.amount_krw, c.status, c.return_url, c.install_id, c.billing_interval FROM checkouts c LEFT JOIN items i ON i.id = c.item_id WHERE c.id = $1 AND c.account_id = $2',
       [checkoutId, accountId],
     );
     if (!row) throw new BillingError('없는 결제예요.', 404);
@@ -109,6 +114,7 @@ export class SiteBilling {
       id: row.id,
       kind: row.kind,
       plan: row.plan,
+      interval: row.billing_interval,
       itemId: row.item_id,
       itemTitle: row.title,
       amountKrw: row.amount_krw,
@@ -155,7 +161,7 @@ export class SiteBilling {
       const now = this.now();
 
       if (event.kind === 'checkout.paid' || event.kind === 'checkout.failed') {
-        const [checkout] = await tx.query<{ id: string; account_id: string; kind: 'plan' | 'item'; plan: Plan; item_id: string; install_id: string; app_ref: string | null; return_url: string | null; amount_krw: number; status: string }>(
+        const [checkout] = await tx.query<{ id: string; account_id: string; kind: 'plan' | 'item'; plan: Plan; item_id: string; install_id: string; app_ref: string | null; return_url: string | null; amount_krw: number; status: string; billing_interval: BillingInterval }>(
           'SELECT * FROM checkouts WHERE id = $1',
           [event.checkoutId],
         );
@@ -174,13 +180,15 @@ export class SiteBilling {
         const subscriptionId = id('sub');
         const licenseId = id('lic');
         await tx.query("UPDATE checkouts SET status = 'paid' WHERE id = $1", [checkout.id]);
-        await tx.query("INSERT INTO subscriptions (id, account_id, plan, status, provider, provider_ref, period_end) VALUES ($1, $2, $3, 'active', $4, $5, $6)", [
+        const interval = checkout.billing_interval ?? 'month';
+        await tx.query("INSERT INTO subscriptions (id, account_id, plan, status, provider, provider_ref, period_end, billing_interval) VALUES ($1, $2, $3, 'active', $4, $5, $6, $7)", [
           subscriptionId,
           checkout.account_id,
           checkout.plan,
           this.provider.id,
           event.providerRef,
-          new Date(now.getTime() + PERIOD_DAYS * DAY_MS),
+          new Date(now.getTime() + INTERVAL_DAYS[interval] * DAY_MS),
+          interval,
         ]);
         await tx.query('INSERT INTO licenses (id, subscription_id, account_id, install_id) VALUES ($1, $2, $3, $4)', [licenseId, subscriptionId, checkout.account_id, checkout.install_id]);
         await record(event.kind, { account: checkout.account_id, subscription: subscriptionId, checkout: checkout.id, amount: checkout.amount_krw });
@@ -196,7 +204,7 @@ export class SiteBilling {
       if (!sub) throw new BillingError('없는 구독이에요.', 404);
       if (event.kind === 'renewal.paid') {
         const from = Math.max(now.getTime(), new Date(sub.period_end).getTime());
-        await tx.query("UPDATE subscriptions SET status = 'active', period_end = $2 WHERE id = $1", [sub.id, new Date(from + PERIOD_DAYS * DAY_MS)]);
+        await tx.query("UPDATE subscriptions SET status = 'active', period_end = $2 WHERE id = $1", [sub.id, new Date(from + INTERVAL_DAYS[sub.billing_interval] * DAY_MS)]);
         await record(event.kind, { account: sub.account_id, subscription: sub.id, amount: event.amountKrw });
       } else if (event.kind === 'renewal.failed') {
         await tx.query("UPDATE subscriptions SET status = 'past_due' WHERE id = $1", [sub.id]);
@@ -227,6 +235,7 @@ export class SiteBilling {
       periodEnd: new Date(row.period_end).toISOString(),
       issuedAt: this.now().toISOString(),
       status: row.status,
+      ...(row.billing_interval === 'year' ? { interval: 'year' as const } : {}),
     };
     return signLicense(payload, this.key.privateKey);
   }
@@ -258,6 +267,7 @@ export class SiteBilling {
         status: r.status,
         periodEnd: new Date(r.period_end).toISOString(),
         cancelAtPeriodEnd: r.cancel_at_period_end,
+        interval: r.billing_interval,
         installId: r.install_id,
         token: await this.tokenWith(this.db, r.license_id),
       })),
@@ -288,7 +298,7 @@ export class SiteBilling {
       if (sub.cancel_at_period_end) {
         await this.db.query("UPDATE subscriptions SET status = 'canceled' WHERE id = $1", [sub.id]);
       } else if (this.provider.selfRenewing && sub.provider_ref) {
-        await this.handle({ id: `renew_${sub.id}_${new Date(sub.period_end).getTime()}`, kind: 'renewal.paid', providerRef: sub.provider_ref, amountKrw: planOf(sub.plan).priceKrw });
+        await this.handle({ id: `renew_${sub.id}_${new Date(sub.period_end).getTime()}`, kind: 'renewal.paid', providerRef: sub.provider_ref, amountKrw: priceFor(sub.plan, sub.billing_interval) });
       }
     }
   }

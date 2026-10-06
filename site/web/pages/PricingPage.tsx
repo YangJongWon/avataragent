@@ -39,6 +39,7 @@ export function PricingPage() {
               {plan.priceKrw ? (
                 <>
                   <b>{formatProductUsd(plan.priceKrw)}</b> / 월
+                  <div className="muted small">또는 연 {formatProductUsd(plan.priceYearly)} (2개월 무료)</div>
                 </>
               ) : (
                 <b>무료</b>

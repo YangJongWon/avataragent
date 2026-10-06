@@ -77,6 +77,31 @@ test('installs refresh their license; a moved license is gone for the old instal
   await s.close();
 });
 
+test('a yearly plan runs a year at ten months the price, and the license says so', async () => {
+  const s = await setup();
+  const { url } = await s.billing.startPlanCheckout('acc_1', { plan: 'team', install: INSTALL, interval: 'year' });
+  const checkoutId = url.split('/').pop()!;
+  const view = await s.billing.checkout('acc_1', checkoutId);
+  assert.deepEqual([view.interval, view.amountKrw], ['year', 90_000]);
+  await s.billing.handle(mockOutcome(checkoutId, true));
+  const [license] = await s.billing.licenses('acc_1');
+  assert.equal(license.interval, 'year');
+  const payload = s.verify(license.token);
+  assert.equal(payload.interval, 'year');
+  assert.equal(payload.periodEnd, '2027-10-05T00:00:00.000Z');
+
+  s.advance(366 * DAY);
+  await s.billing.tick();
+  const renewed = s.verify((await s.billing.refresh(license.token, INSTALL)).token);
+  // The clock moved a day past the period, and a renewal counts from the later of the two.
+  assert.equal(renewed.periodEnd, '2028-10-05T00:00:00.000Z', 'renews for another year');
+  assert.deepEqual(await s.db.query("SELECT amount_krw FROM payments WHERE kind = 'renewal.paid'"), [{ amount_krw: 90_000 }]);
+  await assert.rejects(s.billing.startPlanCheckout('acc_1', { plan: 'personal', install: INSTALL, interval: 'year' }), /살 수 있는 플랜/);
+  const monthly = await s.billing.startPlanCheckout('acc_1', { plan: 'business', install: INSTALL, interval: 'weekly' });
+  assert.equal((await s.billing.checkout('acc_1', monthly.url.split('/').pop()!)).interval, 'month', 'anything else is monthly');
+  await s.close();
+});
+
 test('mock subscriptions renew on the site clock; cancelled ones end at period end', async () => {
   const s = await setup();
   const { redirect } = await s.buy();

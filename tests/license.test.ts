@@ -44,7 +44,16 @@ test('payloads are checked field by field', () => {
     ['periodEnd', 'tomorrow'],
     ['seats', -1],
     ['v', 2],
+    ['interval', 'weekly'],
   ] as const) {
     assert.throws(() => parseLicensePayload({ ...payload, [field]: value }), /라이선스 형식/, `${field}=${value}`);
   }
+});
+
+test('a yearly license says so; older licenses without it are monthly', () => {
+  assert.equal(parseLicensePayload({ ...payload, interval: 'year' }).interval, 'year');
+  assert.equal(parseLicensePayload(payload).interval, undefined);
+  assert.equal(parseLicensePayload({ ...payload, interval: 'month' }).interval, undefined, 'monthly is the default and is left out');
+  const keys2 = newLicenseKeys();
+  assert.equal(verifyLicense(signLicense({ ...payload, interval: 'year' }, keys2.privateKey), { [payload.kid]: keys2.publicKey }).interval, 'year');
 });

@@ -1,5 +1,8 @@
 export type Plan = 'personal' | 'team' | 'business';
 
+/** How often a plan is billed; a year costs ten months. */
+export type BillingInterval = 'month' | 'year';
+
 export type PlanFeature = 'members' | 'chat' | 'projectLounge' | 'officeChannels' | 'assignees' | 'activityExport';
 
 export interface PlanMeta {
@@ -14,6 +17,8 @@ export interface PlanMeta {
    * named after: the storefront shows 1,000 units as USD 1 (shared/product-currency.ts).
    */
   priceKrw: number;
+  /** The yearly price in the same unit (two months free); 0 for the free plan. */
+  priceYearly: number;
 }
 
 export const PLANS: PlanMeta[] = [
@@ -25,6 +30,7 @@ export const PLANS: PlanMeta[] = [
     features: [],
     maxMembers: 0,
     priceKrw: 0,
+    priceYearly: 0,
   },
   {
     id: 'team',
@@ -34,6 +40,7 @@ export const PLANS: PlanMeta[] = [
     features: ['members', 'chat', 'projectLounge', 'assignees'],
     maxMembers: 10,
     priceKrw: 9_000,
+    priceYearly: 90_000,
   },
   {
     id: 'business',
@@ -43,8 +50,14 @@ export const PLANS: PlanMeta[] = [
     features: ['members', 'chat', 'projectLounge', 'officeChannels', 'assignees', 'activityExport'],
     maxMembers: 50,
     priceKrw: 29_000,
+    priceYearly: 290_000,
   },
 ];
+
+export const INTERVAL_DAYS: Record<BillingInterval, number> = { month: 30, year: 365 };
+export const isInterval = (v: unknown): v is BillingInterval => v === 'month' || v === 'year';
+export const priceFor = (plan: Plan | undefined, interval: BillingInterval = 'month') =>
+  interval === 'year' ? planOf(plan).priceYearly : planOf(plan).priceKrw;
 
 export const isPlan = (v: unknown): v is Plan => PLANS.some((p) => p.id === v);
 export const planOf = (id: Plan | undefined) => PLANS.find((p) => p.id === id) ?? PLANS[0];

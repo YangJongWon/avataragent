@@ -24,7 +24,7 @@ export const siteApi = {
   plans: () => call<PlanMeta[]>('GET', '/api/plans'),
   docs: () => call<{ slug: string; title: string }[]>('GET', '/api/docs'),
   doc: (slug: string) => call<{ title: string; markdown: string }>('GET', `/api/docs/${encodeURIComponent(slug)}`),
-  startCheckout: (input: { plan: string; install: string; ref?: string; returnUrl?: string }) => call<{ url: string }>('POST', '/api/checkout', input),
+  startCheckout: (input: { plan: string; install: string; ref?: string; returnUrl?: string; interval?: 'month' | 'year' }) => call<{ url: string }>('POST', '/api/checkout', input),
   checkout: (id: string) => call<CheckoutView>('GET', `/api/checkout/${encodeURIComponent(id)}`),
   paymentsConfig: () => call<{ provider: string; env?: string; token?: string }>('GET', '/api/payments/config'),
   mockPay: (id: string, paid: boolean) => call<{ redirect: string | null }>('POST', `/api/payments/mock/${encodeURIComponent(id)}`, { result: paid ? 'paid' : 'failed' }),
@@ -115,6 +115,7 @@ export interface CheckoutView {
   itemId: string | null;
   itemTitle: string | null;
   plan: string;
+  interval: 'month' | 'year';
   amountKrw: number;
   status: 'open' | 'paid' | 'failed' | 'canceled';
   installId: string;
@@ -128,6 +129,7 @@ export interface LicenseView {
   status: 'active' | 'past_due' | 'canceled';
   periodEnd: string;
   cancelAtPeriodEnd: boolean;
+  interval: 'month' | 'year';
   installId: string;
   token: string;
 }

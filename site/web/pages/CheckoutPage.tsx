@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
-import { planOf, isPlan } from '../../../shared/plans.ts';
+import { planOf, isPlan, priceFor, type BillingInterval } from '../../../shared/plans.ts';
 import { siteApi, type CheckoutView, type Me } from '../api.ts';
 import { Link } from '../router.tsx';
 import { formatProductUsd } from '../../../shared/product-currency.ts';
 
-/** Where the app sends the owner to buy a plan: /checkout?plan=&install=&ref=&return= */
+/** Where the app sends the owner to buy a plan: /checkout?plan=&install=&ref=&return=[&interval=year] */
 export function CheckoutPage({ me, search }: { me: Me | null; search: string }) {
   const params = new URLSearchParams(search);
   const plan = params.get('plan') ?? '';
   const install = params.get('install') ?? '';
   const returnUrl = params.get('return') ?? '';
+  const [interval, setBillingInterval] = useState<BillingInterval>(params.get('interval') === 'year' ? 'year' : 'month');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -46,7 +47,7 @@ export function CheckoutPage({ me, search }: { me: Me | null; search: string }) 
     setBusy(true);
     setError('');
     try {
-      const { url } = await siteApi.startCheckout({ plan, install, ref: params.get('ref') ?? undefined, returnUrl: returnUrl || undefined });
+      const { url } = await siteApi.startCheckout({ plan, install, ref: params.get('ref') ?? undefined, returnUrl: returnUrl || undefined, interval });
       window.location.assign(url);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -60,13 +61,22 @@ export function CheckoutPage({ me, search }: { me: Me | null; search: string }) 
         {meta.emoji} {meta.label} 플랜 결제
       </h1>
       <div className="card">
+        <div className="tabs interval-tabs" role="radiogroup" aria-label="결제 주기">
+          <button type="button" role="radio" aria-checked={interval === 'month'} className={interval === 'month' ? 'active' : ''} onClick={() => setBillingInterval('month')}>
+            월간 {formatProductUsd(meta.priceKrw)}
+          </button>
+          <button type="button" role="radio" aria-checked={interval === 'year'} className={interval === 'year' ? 'active' : ''} onClick={() => setBillingInterval('year')}>
+            연간 {formatProductUsd(meta.priceYearly)} <span className="badge ok">2개월 무료</span>
+          </button>
+        </div>
         <div className="price">
-          <b>{formatProductUsd(meta.priceKrw)}</b> / 월
+          <b>{formatProductUsd(priceFor(meta.id, interval))}</b> / {interval === 'year' ? '년' : '월'}
+          {interval === 'year' && <span className="muted small"> (월 {formatProductUsd(Math.round(meta.priceYearly / 12))} 꼴)</span>}
         </div>
         <p>{meta.description}</p>
         <ul className="checks">
           <li>구성원 최대 {meta.maxMembers}명</li>
-          <li>30일마다 자동 결제, 내 계정에서 언제든 해지</li>
+          <li>{interval === 'year' ? '1년' : '30일'}마다 자동 결제, 내 계정에서 언제든 해지</li>
         </ul>
         <p className="muted small">
           적용할 설치: <code>{install}</code>
@@ -80,7 +90,7 @@ export function CheckoutPage({ me, search }: { me: Me | null; search: string }) 
         )}
         {error && <p className="error">{error}</p>}
         <button className="button big" disabled={busy} onClick={() => void pay()}>
-          {busy ? '결제 화면으로 가는 중…' : `${formatProductUsd(meta.priceKrw)} 결제하기`}
+          {busy ? '결제 화면으로 가는 중…' : `${formatProductUsd(priceFor(meta.id, interval))} 결제하기`}
         </button>
       </div>
     </section>

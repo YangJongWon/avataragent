@@ -1,7 +1,7 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { freeSubscription, GRACE_DAYS, PERIOD_DAYS, type BillingInfo, type BillingProviderId, type Checkout, type Subscription } from '../shared/billing.ts';
 import type { LicensePayload } from '../shared/license.ts';
-import { planOf, type Plan } from '../shared/plans.ts';
+import { planOf, priceFor, type Plan } from '../shared/plans.ts';
 import { config } from './config.ts';
 import { installId, readLicense, refreshFromSite, saveLicense, savedLicense } from './license.ts';
 import { store } from './store.ts';
@@ -89,7 +89,7 @@ export function licenseEvent(license: LicensePayload, sub: Subscription, checkou
   if (license.status === 'past_due') return sub.status === 'past_due' ? null : { id, kind: 'payment.failed', subscriptionId: license.lic };
   const later = Date.parse(license.periodEnd) > Date.parse(sub.currentPeriodEnd ?? '1970-01-01');
   if (!later && sub.status === 'active') return null;
-  return { id, kind: 'payment.succeeded', subscriptionId: license.lic, amountKrw: planOf(license.plan).priceKrw, periodEnd: license.periodEnd };
+  return { id, kind: 'payment.succeeded', subscriptionId: license.lic, amountKrw: priceFor(license.plan, license.interval), periodEnd: license.periodEnd };
 }
 
 const REFRESH_BEFORE_DAYS = 3;
@@ -212,8 +212,15 @@ export async function applyLicense(token: string, checkoutRef?: string) {
     if (license.status !== 'active') throw new Error('만료되었거나 해지된 라이선스예요.');
     const open = store.data.billing.checkouts.filter((c) => c.status === 'open' && c.plan === license.plan);
     checkoutId = (open.find((c) => c.id === checkoutRef) ?? open[0])?.id ?? null;
-    if (!checkoutId) {
-      const made: Checkout = { id: `chk_${randomUUID().slice(0, 12)}`, plan: license.plan, amountKrw: planOf(license.plan).priceKrw, status: 'open', createdAt: new Date().toISOString() };
+    if (checkoutId) {
+      // Monthly or yearly is chosen on the site, so the amount comes from the license.
+      const amountKrw = priceFor(license.plan, license.interval);
+      updateBilling((b) => {
+        const c = b.checkouts.find((x) => x.id === checkoutId);
+        if (c) c.amountKrw = amountKrw;
+      });
+    } else {
+      const made: Checkout = { id: `chk_${randomUUID().slice(0, 12)}`, plan: license.plan, amountKrw: priceFor(license.plan, license.interval), status: 'open', createdAt: new Date().toISOString() };
       updateBilling((b) => {
         b.checkouts.unshift(made);
       });

@@ -38,14 +38,15 @@ npm run site:start   # 서버가 dist/site 를 함께 서빙한다
 | `PADDLE_API_KEY` | Paddle API 키(서버만 씀) |
 | `PADDLE_CLIENT_TOKEN` | Paddle.js용 client-side token(브라우저에 보여도 됨) |
 | `PADDLE_WEBHOOK_SECRET` | 알림(notification) 대상의 secret key. 웹훅 서명 검증용 |
-| `PADDLE_PRICE_TEAM`, `PADDLE_PRICE_BUSINESS` | Paddle 대시보드에서 만든 월 구독 가격 ID(`pri_…`) |
+| `PADDLE_PRICE_TEAM`, `PADDLE_PRICE_BUSINESS` | Paddle 대시보드에서 만든 월 구독 가격 ID(`pri_…`, 팀 $9·비즈니스 $29) |
+| `PADDLE_PRICE_TEAM_YEARLY`, `PADDLE_PRICE_BUSINESS_YEARLY` | 연 구독 가격 ID(팀 $90·비즈니스 $290, 2개월 무료). 비우면 그 플랜은 연간 결제를 못 해요 |
 | `PADDLE_CURRENCY` | 유료 테마 가격의 통화. 기본 `USD` |
 
 이 저장소는 공개(AGPL)이므로 비밀값은 코드나 커밋에 넣지 말고 환경 변수로만 넣습니다.
 
 ## 플랜 판매 (라이선스)
 
-1. 앱(`BILLING_PROVIDER=site`, `SITE_URL=<사이트 주소>`)의 플랜·구성원 화면에서 플랜을 고르면 사이트 `/checkout`으로 옵니다. 주소에 플랜, 설치 ID, 돌아갈 앱 주소가 담겨 있습니다.
+1. 앱(`BILLING_PROVIDER=site`, `SITE_URL=<사이트 주소>`)의 플랜·구성원 화면에서 플랜을 고르면 사이트 `/checkout`으로 옵니다. 월간·연간(2개월 무료)은 이 결제 화면에서 고릅니다. 주소에 플랜, 설치 ID, 돌아갈 앱 주소가 담겨 있습니다.
 2. 로그인하고 결제하면 구독과 라이선스(설치 하나에 묶임)가 생기고, 브라우저가 앱의 `/billing/return?license=…`로 돌아가 바로 적용됩니다. 앱에 다시 닿지 못하면 내 계정에서 키를 복사해 앱에 붙여 넣습니다.
 3. 앱은 결제 기간이 끝나기 3일 전부터 `POST /v1/licenses/refresh`로 새 라이선스를 받아 갱신합니다. 사이트가 앱을 부르지 않으므로 앱에 공개 주소가 없어도 됩니다.
 4. 해지·재개·다른 설치로 옮기기는 사이트의 내 계정에서 합니다.
@@ -57,7 +58,7 @@ npm run site:start   # 서버가 dist/site 를 함께 서빙한다
 Paddle은 판매자(merchant of record)로서 고객에게 팔고 나라별 세금·영수증을 처리한 뒤 사이트에 정산합니다.
 
 1. https://sandbox-vendors.paddle.com 에 가입합니다(심사 없음, 실제 돈 없음).
-2. **Catalog → Products**에 팀·비즈니스 상품과 월 구독 가격을 만들고 가격 ID(`pri_…`)를 `PADDLE_PRICE_TEAM`, `PADDLE_PRICE_BUSINESS`에 넣습니다. 유료 테마는 결제할 때마다 금액을 정해 보내므로 따로 만들 필요가 없습니다.
+2. **Catalog → Products**에 팀·비즈니스 상품과 월 구독 가격(팀 $9, 비즈니스 $29)을 만들고 가격 ID(`pri_…`)를 `PADDLE_PRICE_TEAM`, `PADDLE_PRICE_BUSINESS`에 넣습니다. 같은 상품에 연 구독 가격(팀 $90, 비즈니스 $290)도 만들어 `PADDLE_PRICE_TEAM_YEARLY`, `PADDLE_PRICE_BUSINESS_YEARLY`에 넣습니다. 수량은 최소 1, 최대 1로 두세요. 유료 테마는 결제할 때마다 금액을 정해 보내므로 따로 만들 필요가 없습니다.
 3. **Developer tools → Authentication**에서 API 키와 client-side token을 만듭니다.
 4. **Checkout → Checkout settings**의 기본 결제 링크(default payment link)를 `<SITE_PUBLIC_URL>/checkout/paddle`로 정합니다. 결제 창은 이 화면에서 Paddle.js로 열립니다.
 5. **Developer tools → Notifications**에 대상 `<SITE_PUBLIC_URL>/api/payments/webhook/paddle`을 만들고 `transaction.completed`, `transaction.payment_failed`, `subscription.past_due`, `subscription.canceled`를 고릅니다. 나온 secret key를 `PADDLE_WEBHOOK_SECRET`에 넣습니다. 로컬에서 시험하려면 터널(예: Tailscale Funnel, cloudflared)로 사이트를 공개 주소에 열어야 알림이 들어옵니다.
