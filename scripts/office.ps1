@@ -43,17 +43,25 @@ function Start-Office {
   # Win32_Process.Create detaches the server from this terminal, so it keeps running after the window closes.
   # It may see a PATH from before Node.js was installed, so node is called by its full path (same as `npm start`).
   $startup = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0 }
-  $null = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+  $created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
     CommandLine = "cmd.exe /c `"`"$($node.Source)`" node_modules\tsx\dist\cli.mjs server\index.ts > logs\server.log 2> logs\server.err.log`""
     CurrentDirectory = $Root
     ProcessStartupInformation = $startup
   }
-  for ($i = 0; $i -lt 40; $i++) {
+  # A busy PC (low memory, a build just before) can take well over 20 seconds. Wait while the server is alive;
+  # only a server that exited is a failure.
+  for ($i = 1; $i -le 180; $i++) {
     Start-Sleep -Milliseconds 500
     if (Get-ServerPid) { Write-Host "서버를 켰어요: http://localhost:$Port"; return $true }
+    if (-not (Get-Process -Id $created.ProcessId -ErrorAction SilentlyContinue)) {
+      Write-Host '서버가 켜지다가 멈췄어요. logs\server.err.log 의 마지막 내용:' -ForegroundColor Red
+      Get-Content (Join-Path $LogDir 'server.err.log') -Tail 8 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $_" }
+      return $false
+    }
+    if ($i % 20 -eq 0) { Write-Host "켜는 중이에요… ($($i / 2)초)" }
   }
-  Write-Host "서버가 20초 안에 뜨지 않았어요. logs\server.err.log 를 확인해 주세요."
-  return $false
+  Write-Host "서버가 아직 켜지는 중이에요. 잠시 뒤 http://localhost:$Port 를 열어 보세요."
+  return $true
 }
 
 function Open-Office {

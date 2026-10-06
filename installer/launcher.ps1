@@ -57,16 +57,22 @@ function Start-Office {
   # Detached from this window so the server keeps running; settings and data come from the user's AppData.
   $startup = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0 }
   $command = "cmd.exe /c `"set `"ENV_FILE=$EnvFile`"&& set `"DATA_DIR=$DataDir`"&& `"$Node`" server\index.ts > `"$LogDir\server.log`" 2> `"$LogDir\server.err.log`"`""
-  $null = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+  $created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
     CommandLine = $command
     CurrentDirectory = $Root
     ProcessStartupInformation = $startup
   }
-  for ($i = 0; $i -lt 60; $i++) {
+  # A busy PC can take well over 20 seconds; only a server that exited is a failure.
+  for ($i = 0; $i -lt 180; $i++) {
     Start-Sleep -Milliseconds 500
     if (Get-ServerPid $port) { return $port }
+    if (-not (Get-Process -Id $created.ProcessId -ErrorAction SilentlyContinue)) {
+      $tail = (Get-Content (Join-Path $LogDir 'server.err.log') -Tail 5 -ErrorAction SilentlyContinue) -join "`n"
+      throw "서버가 켜지다가 멈췄어요.`n$tail`n`n자세한 내용: $LogDir\server.err.log"
+    }
   }
-  throw "서버가 30초 안에 켜지지 않았어요. $LogDir\server.err.log 를 확인해 주세요."
+  # Still starting after 90 seconds: open anyway, the page loads once it is up.
+  return $port
 }
 
 function Stop-Office {
