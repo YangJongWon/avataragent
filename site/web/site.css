@@ -1094,3 +1094,20 @@ body:has(.site) { background:radial-gradient(circle at 12% 0%,rgba(255,199,214,.
 .site a:focus-visible,.site button:focus-visible,.site input:focus-visible,.site select:focus-visible,.site textarea:focus-visible { outline:3px solid rgba(120,104,230,.32); outline-offset:3px; }
 .site .head-account { display:flex; align-items:center; margin-left:auto; }
 .site .head-account .button { min-height:42px; padding-inline:18px; }
+
+/* A preview is how people choose an item: show all of it, letterboxed on the card's background, never cropped.
+   The frame follows a theme scene's usual 1000x480, so most previews fill it. */
+.site .item-thumb,
+.item-thumb {
+  aspect-ratio: 1000 / 480;
+}
+
+.site .item-thumb img,
+.item-thumb img {
+  object-fit: contain;
+}
+
+.item-type .price-tag {
+  float: none;
+  margin-left: auto;
+}
