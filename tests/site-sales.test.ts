@@ -93,8 +93,8 @@ test('creators price only themes, within the allowed range', async () => {
   const s = await setup();
   const f = (await s.community.upload(s.people.maker, { type: 'flow', bytes: flow })).id;
   await assert.rejects(s.sales.setPrice(s.people.maker, f, 3000), /테마만/);
-  await assert.rejects(s.sales.setPrice(s.people.maker, s.item, 999), /1,000~100,000/);
-  await assert.rejects(s.sales.setPrice(s.people.maker, s.item, 3050), /100원 단위/);
+  await assert.rejects(s.sales.setPrice(s.people.maker, s.item, 999), /\$1~\$100/);
+  await assert.rejects(s.sales.setPrice(s.people.maker, s.item, 3050), /\$0.10 단위/);
   await assert.rejects(s.sales.setPrice(s.people.buyer, s.item, 3000), /없는 항목/);
   assert.deepEqual(await s.sales.setPrice(s.people.maker, s.item, 4900), { priceKrw: 4900 });
   assert.equal((await s.community.detail(s.item, null)).priceKrw, 4900);
@@ -144,8 +144,8 @@ test('refunds reverse both shares and take the download away; payouts never go b
   const after = await s.sales.earnings(s.people.maker);
   assert.deepEqual([after.balance, after.refunds, after.fees], [7000, 10000, 3000]);
 
-  await assert.rejects(s.sales.payout(s.people.boss, 'maker', 8000, ''), /남은 금액\(7,000원\)/);
-  await assert.rejects(s.sales.payout(s.people.boss, 'maker', -5, ''), /원 단위/);
+  await assert.rejects(s.sales.payout(s.people.boss, 'maker', 8000, ''), /남은 금액\(\$7\)/);
+  await assert.rejects(s.sales.payout(s.people.boss, 'maker', -5, ''), /USD 금액/);
   assert.deepEqual(await s.sales.payout(s.people.boss, 'maker', 7000, '10월 정산 계좌이체'), { balance: 0 });
   const final = await s.sales.earnings(s.people.maker);
   assert.deepEqual([final.balance, final.payouts], [0, 7000]);

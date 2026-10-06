@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { siteApi, type AdminUser, type AuditEntry, type Me, type QueueEntry } from '../api.ts';
 import { ago, errorText } from '../parts.tsx';
 import { Link } from '../router.tsx';
+import { formatProductUsd, productUnitsFromUsd, productUsdFromUnits } from '../../../shared/product-currency.ts';
 
 const TYPE_LABEL: Record<QueueEntry['type'], string> = { item: '🎨 항목', post: '📝 글', comment: '💬 댓글' };
 const linkOf = (q: QueueEntry) => (q.type === 'item' ? `/community/items/${q.id}` : `/forum/${q.type === 'post' ? q.id : q.postId}`);
@@ -113,7 +114,7 @@ function Users({ me, onError }: { me: Me; onError: (m: string) => void }) {
   );
 }
 
-const won = (n: number) => `${n.toLocaleString('ko-KR')}원`;
+const won = formatProductUsd;
 
 function Money({ onError }: { onError: (m: string) => void }) {
   type Balances = Awaited<ReturnType<typeof siteApi.adminBalances>>;
@@ -127,10 +128,10 @@ function Money({ onError }: { onError: (m: string) => void }) {
   useEffect(load, []);
 
   const payout = (b: Balances[number]) => {
-    const amount = window.prompt(`@${b.handle ?? b.email}에게 보낸 금액(원)을 적어 주세요. 남은 금액 ${won(b.balance)}`, String(b.balance));
+    const amount = window.prompt(`@${b.handle ?? b.email}에게 보낸 금액(USD)을 적어 주세요. 남은 금액 ${won(b.balance)}`, String(productUsdFromUnits(b.balance)));
     if (!amount) return;
     const note = window.prompt('메모 (예: 10월 정산 계좌이체)') ?? '';
-    siteApi.adminPayout(b.creatorId, Number(amount), note).then(load, (e) => onError(errorText(e)));
+    siteApi.adminPayout(b.creatorId, productUnitsFromUsd(Number(amount)), note).then(load, (e) => onError(errorText(e)));
   };
   const refund = (id: string) => {
     const reason = window.prompt('환불 이유를 적어 주세요. 돈을 돌려주고 내려받기를 막아요.');

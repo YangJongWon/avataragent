@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { planOf, isPlan } from '../../../shared/plans.ts';
 import { siteApi, type CheckoutView, type Me } from '../api.ts';
 import { Link } from '../router.tsx';
-
-const won = (n: number) => `${n.toLocaleString('ko-KR')}원`;
+import { formatProductUsd } from '../../../shared/product-currency.ts';
 
 /** Where the app sends the owner to buy a plan: /checkout?plan=&install=&ref=&return= */
 export function CheckoutPage({ me, search }: { me: Me | null; search: string }) {
@@ -62,7 +61,7 @@ export function CheckoutPage({ me, search }: { me: Me | null; search: string }) 
       </h1>
       <div className="card">
         <div className="price">
-          <b>{won(meta.priceKrw)}</b> / 월
+          <b>{formatProductUsd(meta.priceKrw)}</b> / 월
         </div>
         <p>{meta.description}</p>
         <ul className="checks">
@@ -81,7 +80,7 @@ export function CheckoutPage({ me, search }: { me: Me | null; search: string }) 
         )}
         {error && <p className="error">{error}</p>}
         <button className="button big" disabled={busy} onClick={() => void pay()}>
-          {busy ? '결제 화면으로 가는 중…' : `${won(meta.priceKrw)} 결제하기`}
+          {busy ? '결제 화면으로 가는 중…' : `${formatProductUsd(meta.priceKrw)} 결제하기`}
         </button>
       </div>
     </section>
@@ -116,7 +115,7 @@ export function MockPaymentPage({ id }: { id: string }) {
       {checkout && (
         <div className="card">
           <p>
-            {checkout.kind === 'item' ? `테마 "${checkout.itemTitle ?? ''}"` : `${planOf(checkout.plan as never).label} 플랜`} · <b>{won(checkout.amountKrw)}</b>
+            {checkout.kind === 'item' ? `테마 "${checkout.itemTitle ?? ''}"` : `${planOf(checkout.plan as never).label} 플랜`} · <b>{formatProductUsd(checkout.amountKrw)}</b>
           </p>
           {checkout.status !== 'open' || done ? (
             <>

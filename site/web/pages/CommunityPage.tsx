@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { siteApi, type ItemCard, type ItemType } from '../api.ts';
 import { Link, navigate } from '../router.tsx';
 import { SiteIcon, type SiteIconName } from '../components/SiteIcon.tsx';
+import { formatProductUsd } from '../../../shared/product-currency.ts';
 
 const TYPE_ICON: Record<ItemType, SiteIconName> = { theme: 'theme', flow: 'flow', playbook: 'playbook' };
 
@@ -28,7 +29,7 @@ export function ItemCardView({ item }: { item: ItemCard }) {
           <SiteIcon name={TYPE_ICON[item.type]} /> {type.label}
           {item.verified && <span className="badge">검수 통과</span>}
           {item.status && item.status !== 'published' && <span className="badge warn">{item.status === 'hidden' ? '숨김' : item.status}</span>}
-          <span className={`price-tag${item.priceKrw ? ' paid' : ''}`}>{item.priceKrw ? `${item.priceKrw.toLocaleString('ko-KR')}원` : '무료'}</span>
+          <span className={`price-tag${item.priceKrw ? ' paid' : ''}`}>{item.priceKrw ? formatProductUsd(item.priceKrw) : '무료'}</span>
         </div>
         <h3>{item.title}</h3>
         {item.summary && <p className="muted small clamp">{item.summary}</p>}

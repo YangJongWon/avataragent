@@ -3,10 +3,11 @@ import { planOf } from '../../../shared/plans.ts';
 import { siteApi, type Earnings, type ItemCard, type LicenseView, type Me, type Purchase } from '../api.ts';
 import { Link, navigate } from '../router.tsx';
 import { ItemCardView } from './CommunityPage.tsx';
+import { formatProductUsd } from '../../../shared/product-currency.ts';
 
 const STATUS: Record<LicenseView['status'], string> = { active: '이용 중', past_due: '결제 실패 (유예 중)', canceled: '종료' };
 const day = (iso: string) => new Date(iso).toLocaleDateString('ko-KR');
-const won = (n: number) => `${n.toLocaleString('ko-KR')}원`;
+const won = formatProductUsd;
 const ENTRY: Record<Earnings['entries'][number]['kind'], string> = { sale: '판매', fee: '수수료', refund: '환불', fee_refund: '수수료 돌려받음', payout: '지급' };
 
 function EarningsCard({ earnings }: { earnings: Earnings }) {

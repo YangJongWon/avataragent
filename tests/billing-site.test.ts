@@ -73,7 +73,7 @@ test('the license from the site switches the plan; forged or foreign ones do not
   assert.equal(sub().subscriptionId, 'lic_teamlicense01');
   assert.equal(sub().status, 'active');
   assert.equal(store.data.billing.checkouts.find((c) => c.id === ref)?.status, 'completed');
-  assert.equal(store.data.billing.invoices[0].amountKrw, 29_000);
+  assert.equal(store.data.billing.invoices[0].amountKrw, 9_000);
   assert.ok(savedLicense());
   await assert.rejects(billing.cancelSubscription(), /사이트의 내 계정/);
 });

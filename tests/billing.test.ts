@@ -34,7 +34,7 @@ test('mock checkout pays through the signed webhook, renews, and cancels at peri
   await billing.completeMockCheckout(checkoutId(url), 'pay');
   assert.equal(store.data.plan, 'team');
   assert.equal(sub().status, 'active');
-  assert.equal(store.data.billing.invoices[0].amountKrw, 29_000);
+  assert.equal(store.data.billing.invoices[0].amountKrw, 9_000);
   await assert.rejects(billing.completeMockCheckout(checkoutId(url), 'pay'), /끝났거나 없는 결제/);
   await assert.rejects(billing.startCheckout('team'), /이미 이 플랜/);
 

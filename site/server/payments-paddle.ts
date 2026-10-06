@@ -60,8 +60,9 @@ export function paddleEvent(body: { event_id?: string; event_type?: string; data
       if (txn.origin === 'subscription_recurring') {
         if (!txn.subscription_id) return null;
         const total = Number(txn.details?.totals?.grand_total ?? 0);
-        // The ledger is in won; renewals in other currencies are recorded without an amount.
-        return { id, kind: 'renewal.paid', providerRef: txn.subscription_id, amountKrw: txn.currency_code === 'KRW' ? total : 0 };
+        // USD arrives in cents; legacy product storage uses 1,000 units per dollar.
+        const amount = txn.currency_code === 'USD' ? total * 10 : txn.currency_code === 'KRW' ? total : 0;
+        return { id, kind: 'renewal.paid', providerRef: txn.subscription_id, amountKrw: amount };
       }
       const checkoutId = txn.custom_data?.checkout_id;
       if (!checkoutId) return null;
@@ -114,7 +115,7 @@ export function paddlePayments(config: PaddleConfig, fetchImpl: typeof fetch = (
           price: {
             description: checkout.title.slice(0, 200),
             name: checkout.title.slice(0, 150),
-            unit_price: { amount: String(checkout.amountKrw), currency_code: config.currency },
+            unit_price: { amount: String(config.currency === 'USD' ? Math.round(checkout.amountKrw / 10) : checkout.amountKrw), currency_code: config.currency },
             // One copy per purchase: the checkout window must not offer a quantity.
             quantity: { minimum: 1, maximum: 1 },
             product: { name: checkout.title.slice(0, 150), tax_category: 'standard' },
@@ -161,6 +162,6 @@ export function paddleConfigFromEnv(env: (name: string, fallback?: string) => st
     clientToken: env('PADDLE_CLIENT_TOKEN'),
     webhookSecret: env('PADDLE_WEBHOOK_SECRET'),
     prices: { team: env('PADDLE_PRICE_TEAM') || undefined, business: env('PADDLE_PRICE_BUSINESS') || undefined },
-    currency: env('PADDLE_CURRENCY', 'KRW'),
+    currency: env('PADDLE_CURRENCY', 'USD'),
   };
 }

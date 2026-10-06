@@ -9,7 +9,10 @@ export interface PlanMeta {
   description: string;
   features: PlanFeature[];
   maxMembers: number;
-  /** Monthly price charged through the billing provider; 0 means free. */
+  /**
+   * Monthly price charged through the billing provider; 0 means free. Stored in the legacy unit the field is
+   * named after: the storefront shows 1,000 units as USD 1 (shared/product-currency.ts).
+   */
   priceKrw: number;
 }
 
@@ -30,7 +33,7 @@ export const PLANS: PlanMeta[] = [
     description: '구성원과 업무를 나누고, 프로젝트 라운지에서 완성 과정과 기여를 함께 봐요.',
     features: ['members', 'chat', 'projectLounge', 'assignees'],
     maxMembers: 10,
-    priceKrw: 29_000,
+    priceKrw: 9_000,
   },
   {
     id: 'business',
@@ -39,7 +42,7 @@ export const PLANS: PlanMeta[] = [
     description: '팀 기능에 더해 사무실별 채널, 더 큰 조직과 활동 기록 내보내기를 써요.',
     features: ['members', 'chat', 'projectLounge', 'officeChannels', 'assignees', 'activityExport'],
     maxMembers: 50,
-    priceKrw: 99_000,
+    priceKrw: 29_000,
   },
 ];
 

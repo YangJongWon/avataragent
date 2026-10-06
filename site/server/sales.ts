@@ -4,6 +4,7 @@ import { BillingError } from './billing.ts';
 import type { Db } from './db.ts';
 import { audit, requireAdmin } from './moderation.ts';
 import type { PaymentProvider } from './payments.ts';
+import { formatProductUsd } from '../../shared/product-currency.ts';
 
 /**
  * Paid themes. A creator puts a price on a theme; a purchase unlocks its downloads for the buyer; every sale,
@@ -22,7 +23,7 @@ export function parsePrice(raw: unknown): number {
   const price = Number(raw);
   if (price === 0) return 0;
   if (!Number.isInteger(price) || price < PRICE.min || price > PRICE.max || price % PRICE.step !== 0) {
-    throw new BillingError(`가격은 0원(무료)이나 ${PRICE.min.toLocaleString()}~${PRICE.max.toLocaleString()}원 사이 ${PRICE.step}원 단위로 정해 주세요.`);
+    throw new BillingError(`가격은 무료 또는 ${formatProductUsd(PRICE.min)}~${formatProductUsd(PRICE.max)} 사이에서 $0.10 단위로 정해 주세요.`);
   }
   return price;
 }
@@ -194,13 +195,13 @@ export class Sales {
   async payout(admin: Account, creatorId: string, rawAmount: unknown, note: unknown) {
     requireAdmin(admin);
     const amount = Number(rawAmount);
-    if (!Number.isInteger(amount) || amount <= 0) throw new BillingError('보낸 금액을 원 단위로 적어 주세요.');
+    if (!Number.isInteger(amount) || amount <= 0) throw new BillingError('지급액을 올바른 USD 금액으로 적어 주세요.');
     const memo = typeof note === 'string' ? note.trim().slice(0, 200) : '';
     return this.db.transaction(async (tx) => {
       // Lock the creator's rows so two payouts at once cannot both pass the balance check.
       await tx.query('SELECT id FROM accounts WHERE id = $1 FOR UPDATE', [creatorId]);
       const balance = await this.balanceOf(tx, creatorId);
-      if (amount > balance) throw new BillingError(`남은 금액(${balance.toLocaleString()}원)보다 많이 지급할 수 없어요.`);
+      if (amount > balance) throw new BillingError(`남은 금액(${formatProductUsd(balance)})보다 많이 지급할 수 없어요.`);
       await tx.query("INSERT INTO ledger (creator_id, kind, amount_krw, note, actor_id, created_at) VALUES ($1, 'payout', $2, $3, $4, $5)", [
         creatorId,
         -amount,

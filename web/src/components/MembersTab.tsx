@@ -3,9 +3,9 @@ import { SHARE_ROLES, shareRoleDescription, shareRoleLabel } from '../../../shar
 import { GRACE_DAYS, type SubscriptionStatus } from '../../../shared/billing.ts';
 import { planHas, planOf, PLANS, type Plan } from '../../../shared/plans.ts';
 import { TEAMS } from '../../../shared/teams.ts';
+import { formatProductUsd } from '../../../shared/product-currency.ts';
 import type { Member, ShareRole, Snapshot } from '../../../shared/types.ts';
 import { api } from '../api.ts';
-import { krw } from '../format.ts';
 
 const MIN_PASSWORD = 8;
 const ROLE_IDS = Object.keys(SHARE_ROLES) as ShareRole[];
@@ -118,7 +118,7 @@ function PlanSection(props: { snapshot: Snapshot; busy: boolean; run: (work: () 
             <b>{p.label}</b>
             <span className="small muted">{p.description}</span>
             <span className="small">
-              {p.priceKrw ? `월 ${krw(p.priceKrw)}` : '무료'} · {p.maxMembers ? `구성원 ${p.maxMembers}명까지` : '구성원 없음'}
+              {p.priceKrw ? `월 ${formatProductUsd(p.priceKrw)}` : '무료'} · {p.maxMembers ? `구성원 ${p.maxMembers}명까지` : '구성원 없음'}
             </span>
             {connected && p.id !== plan.id && <span className="small plan-action">{p.priceKrw ? '결제하고 바꾸기' : '구독 해지'}</span>}
             {connected && p.id === plan.id && sub?.cancelAtPeriodEnd && p.priceKrw > 0 && <span className="small plan-action">해지 취소</span>}
@@ -187,7 +187,7 @@ function PlanSection(props: { snapshot: Snapshot; busy: boolean; run: (work: () 
                   <tr key={inv.id}>
                     <td>{day(inv.at)}</td>
                     <td>{planOf(inv.plan).label}</td>
-                    <td className="num">{krw(inv.amountKrw)}</td>
+                    <td className="num">{formatProductUsd(inv.amountKrw)}</td>
                     <td className={inv.status === 'paid' ? 'pos' : 'neg'}>{inv.status === 'paid' ? '결제됨' : '실패'}</td>
                   </tr>
                 ))}

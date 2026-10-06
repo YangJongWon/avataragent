@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { PlanFeature, PlanMeta } from '../../../shared/plans.ts';
 import { siteApi } from '../api.ts';
 import { Link } from '../router.tsx';
+import { formatProductUsd } from '../../../shared/product-currency.ts';
 
 const FEATURE_LABEL: Record<PlanFeature, string> = {
   members: '구성원 계정',
@@ -14,8 +15,6 @@ const FEATURE_LABEL: Record<PlanFeature, string> = {
 
 /** What every plan has, including the free one. */
 const ALWAYS = ['AI 직원 사무실과 업무 여정', '테마·플로우·플레이북 가져오기', '보기·운영 공유 링크', '모든 AI 제공자와 로컬 모델'];
-
-const won = (n: number) => `${n.toLocaleString('ko-KR')}원`;
 
 export function PricingPage() {
   const [plans, setPlans] = useState<PlanMeta[] | null>(null);
@@ -39,7 +38,7 @@ export function PricingPage() {
             <div className="price">
               {plan.priceKrw ? (
                 <>
-                  <b>{won(plan.priceKrw)}</b> / 월
+                  <b>{formatProductUsd(plan.priceKrw)}</b> / 월
                 </>
               ) : (
                 <b>무료</b>

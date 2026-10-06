@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { t, tpl } from '../../../shared/i18n.ts';
 import type { Playbook } from '../../../shared/playbook.ts';
 import type { SavedFlow } from '../../../shared/types.ts';
+import { formatProductUsd } from '../../../shared/product-currency.ts';
 import { api, type CommunityItem } from '../api.ts';
 import './themes.css';
 
@@ -142,7 +143,7 @@ export function CommunityTab({ flows, onError, onNotice }: Props) {
               <div className="row theme-actions">
                 {item.priceKrw > 0 ? (
                   <a className="pixel-btn small primary" href={`${result.site}/community/items/${item.id}`} target="_blank" rel="noreferrer">
-                    {tpl('{price}원 · 사이트에서 사기', { price: item.priceKrw.toLocaleString('ko-KR') })}
+                    {tpl('{price} · 사이트에서 사기', { price: formatProductUsd(item.priceKrw) })}
                   </a>
                 ) : (
                 <button className="pixel-btn small primary" disabled={busy !== null} onClick={() => void install(item)}>

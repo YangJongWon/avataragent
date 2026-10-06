@@ -5,6 +5,7 @@ import type { Playbook } from '../../../shared/playbook.ts';
 import { TEAMS } from '../../../shared/teams.ts';
 import type { Role, TeamId } from '../../../shared/types.ts';
 import { STEP_KIND } from '../../../shared/workflow.ts';
+import { formatProductUsd, productUnitsFromUsd, productUsdFromUnits } from '../../../shared/product-currency.ts';
 import { siteApi, type ItemDetail, type Me } from '../api.ts';
 import { Link, navigate } from '../router.tsx';
 import { TYPE_LABEL } from './CommunityPage.tsx';
@@ -97,27 +98,25 @@ function PlaybookDetails({ details }: { details: Record<string, unknown> }) {
   );
 }
 
-const won = (n: number) => `${n.toLocaleString('ko-KR')}원`;
-
 function PriceEditor({ item, onSaved }: { item: ItemDetail; onSaved: (priceKrw: number) => void }) {
-  const [price, setPrice] = useState(String(item.priceKrw));
+  const [price, setPrice] = useState(String(productUsdFromUnits(item.priceKrw)));
   const [error, setError] = useState('');
-  const creator = Math.floor(Number(price) * 0.7);
+  const creator = productUnitsFromUsd(Number(price) * 0.7);
   return (
     <form
       className="row price-form"
       onSubmit={(e) => {
         e.preventDefault();
         setError('');
-        siteApi.setPrice(item.id, Number(price) || 0).then((r) => onSaved(r.priceKrw), (err) => setError(err instanceof Error ? err.message : String(err)));
+        siteApi.setPrice(item.id, productUnitsFromUsd(Number(price) || 0)).then((r) => onSaved(r.priceKrw), (err) => setError(err instanceof Error ? err.message : String(err)));
       }}
     >
       <label className="small">
-        가격(원, 0이면 무료)
-        <input type="number" min={0} max={100000} step={100} value={price} onChange={(e) => setPrice(e.target.value)} />
+        가격(USD, 0이면 무료)
+        <input type="number" min={0} max={100} step={0.1} value={price} onChange={(e) => setPrice(e.target.value)} />
       </label>
       <button className="button small">가격 저장</button>
-      {Number(price) > 0 && <span className="muted small">한 번 팔릴 때 내 몫 {won(creator)} (70%)</span>}
+      {Number(price) > 0 && <span className="muted small">한 번 팔릴 때 내 몫 {formatProductUsd(creator)} (70%)</span>}
       {error && <span className="error small">{error}</span>}
     </form>
   );
@@ -178,7 +177,7 @@ export function ItemPage({ id, me }: { id: string; me: Me | null }) {
           </div>
           {item.priceKrw > 0 && (
             <p className="price">
-              <b>{won(item.priceKrw)}</b> {item.owned && !item.mine && <span className="badge ok">구매함</span>}
+              <b>{formatProductUsd(item.priceKrw)}</b> {item.owned && !item.mine && <span className="badge ok">구매함</span>}
             </p>
           )}
           <div className="row">
@@ -196,7 +195,7 @@ export function ItemPage({ id, me }: { id: string; me: Me | null }) {
                   })
                 }
               >
-                {won(item.priceKrw)} 구매하기
+                {formatProductUsd(item.priceKrw)} 구매하기
               </button>
             )}
             <button
