@@ -1,4 +1,4 @@
-import officeShot from '../../../docs/office-mobile.png';
+import officeShot from '../../../docs/office.webp';
 import { Link } from '../router.tsx';
 import { SiteIcon, type SiteIconName } from '../components/SiteIcon.tsx';
 
@@ -33,7 +33,7 @@ export function HomePage() {
             </Link>
           </div>
         </div>
-        <img className="hero-shot" src={officeShot} alt="휴대폰에서 본 개발팀 사무실" />
+        <img className="hero-shot" src={officeShot} alt="일러스트 오피스 테마로 꾸민 개발팀 사무실: 팀장과 리서처가 서류를 주고받고, 칠판에 업무 목표와 진행 단계가 보여요" />
       </section>
 
       <section className="page">

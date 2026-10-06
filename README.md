@@ -8,7 +8,7 @@ AI 직원들이 픽셀 사무실에서 실제로 일하는 모습을 보면서 �
 내구성 실행과 PostgreSQL 개발 환경은 Docker Desktop을 켠 뒤 `npm.cmd run infra:up`으로 시작할 수 있습니다. 기존 SQLite 이관과 Temporal 검증 절차는 `OPERATIONS.md`를 참고하세요.
 
 <p align="center">
-  <img src="docs/office-mobile.png" alt="모바일에서 본 개발팀 사무실" width="360">
+  <img src="docs/office.webp" alt="일러스트 오피스 테마로 꾸민 개발팀 사무실" width="720">
 </p>
 
 ## 주요 기능

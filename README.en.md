@@ -6,7 +6,7 @@ A web app where you assign work to AI employees, watch them work in a pixel offi
 
 For durable execution and the PostgreSQL development environment, start Docker Desktop and run `npm.cmd run infra:up`. See `OPERATIONS.md` for SQLite migration and Temporal verification.
 
-<p align="center"><img src="docs/office-mobile.png" alt="Development team office on mobile" width="360"></p>
+<p align="center"><img src="docs/office.webp" alt="Development team office in the illustrated office theme" width="720"></p>
 
 ## Highlights
 

@@ -6,7 +6,7 @@ AI社員に仕事を依頼し、ピクセルオフィスで働く様子を見な
 
 永続的な実行環境とPostgreSQL開発環境は、Docker Desktopを起動して `npm.cmd run infra:up` を実行すると利用できます。SQLiteの移行とTemporalの確認方法は `OPERATIONS.md` を参照してください。
 
-<p align="center"><img src="docs/office-mobile.png" alt="モバイルで表示した開発チームのオフィス" width="360"></p>
+<p align="center"><img src="docs/office.webp" alt="イラストオフィステーマの開発チームのオフィス" width="720"></p>
 
 ## 主な機能
 

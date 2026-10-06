@@ -6,7 +6,7 @@
 
 如需耐久工作流和 PostgreSQL 开发环境，请启动 Docker Desktop 后运行 `npm.cmd run infra:up`。SQLite 迁移和 Temporal 验证步骤请参阅 `OPERATIONS.md`。
 
-<p align="center"><img src="docs/office-mobile.png" alt="移动端开发团队办公室" width="360"></p>
+<p align="center"><img src="docs/office.webp" alt="插画办公室主题的开发团队办公室" width="720"></p>
 
 ## 主要功能
 
