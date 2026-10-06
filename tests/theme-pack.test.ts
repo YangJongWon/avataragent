@@ -4,7 +4,7 @@ import test from 'node:test';
 const { STATE_FALLBACK, THEME_STATES, accessoriesFor, adoptCompanyTheme, characterFor, officeTheme, isSafePath, manifestFiles, parseThemeManifest, portraitFor, resolveState, splitPackSkin } = await import(
   '../shared/theme-pack.ts'
 );
-const { DEFAULT_LAYOUT, mergeLayout } = await import('../web/src/office/theme.ts');
+const { DEFAULT_LAYOUT, FEET_MAX_Y, mergeLayout } = await import('../web/src/office/theme.ts');
 
 const minimal = () => ({
   format: 'avataragent-theme',
@@ -91,6 +91,20 @@ test('a theme layout only overrides what it gives', () => {
   assert.equal(layout.extraLounge.length, 2, 'every extra seat gets a resting spot');
   assert.deepEqual(layout.spots, DEFAULT_LAYOUT.spots);
   assert.deepEqual(mergeLayout({}), DEFAULT_LAYOUT);
+});
+
+test('spots too low for the name tag are lifted so nobody is cut off at the bottom', () => {
+  const layout = mergeLayout({
+    lounge: { writer: { x: 830, y: 462 }, reviewer: { x: 940, y: 440 } },
+    extraSeats: [{ x: 100, y: 470 }],
+    extraLounge: [{ x: 885, y: 476 }],
+    waypoints: { low: { x: 880, y: 479 } },
+  });
+  assert.deepEqual(layout.lounge.writer, { x: 830, y: FEET_MAX_Y });
+  assert.deepEqual(layout.lounge.reviewer, { x: 940, y: 440 }, 'spots that fit stay where the theme put them');
+  assert.equal(layout.extraSeats[0].y, FEET_MAX_Y);
+  assert.equal(layout.extraLounge[0].y, FEET_MAX_Y);
+  assert.equal(layout.waypoints.low.y, FEET_MAX_Y);
 });
 
 test('work and lounge spaces get their own backgrounds, and people walk straight between them', () => {

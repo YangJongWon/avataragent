@@ -69,18 +69,24 @@ export const DEFAULT_LAYOUT: Layout = {
   walkSpeed: 170,
 };
 
+/** The scene is 480 tall and a name tag hangs about 26px under the feet: lower spots would cut it off. */
+export const FEET_MAX_Y = 480 - 28;
+const onStage = (p: Point): Point => (p.y > FEET_MAX_Y ? { ...p, y: FEET_MAX_Y } : p);
+const onStageAll = <K extends string>(points: Record<K, Point>) =>
+  Object.fromEntries(Object.entries(points).map(([k, p]) => [k, onStage(p as Point)])) as Record<K, Point>;
+
 export function mergeLayout(from: Partial<SceneLayout>): Layout {
-  const extraSeats = from.extraSeats?.length ? from.extraSeats : DEFAULT_LAYOUT.extraSeats;
+  const extraSeats = (from.extraSeats?.length ? from.extraSeats : DEFAULT_LAYOUT.extraSeats).map(onStage);
   return {
-    seats: { ...DEFAULT_LAYOUT.seats, ...from.seats },
-    lounge: { ...DEFAULT_LAYOUT.lounge, ...from.lounge },
+    seats: onStageAll({ ...DEFAULT_LAYOUT.seats, ...from.seats }),
+    lounge: onStageAll({ ...DEFAULT_LAYOUT.lounge, ...from.lounge }),
     extraSeats,
     // Pair every extra seat with a resting spot, reusing the defaults when a theme gives fewer.
-    extraLounge: extraSeats.map((_, i) => from.extraLounge?.[i] ?? DEFAULT_LAYOUT.extraLounge[i % DEFAULT_LAYOUT.extraLounge.length]),
+    extraLounge: extraSeats.map((_, i) => onStage(from.extraLounge?.[i] ?? DEFAULT_LAYOUT.extraLounge[i % DEFAULT_LAYOUT.extraLounge.length])),
     door: from.door ?? DEFAULT_LAYOUT.door,
     // Paths of their own replace the corridor; so does a lounge beside the work space.
     passage: Object.keys(from.waypoints ?? {}).length || (from.areas?.work && from.areas.lounge) ? null : (from.door ?? DEFAULT_LAYOUT.door),
-    waypoints: from.waypoints ?? {},
+    waypoints: onStageAll(from.waypoints ?? {}),
     links: from.links ?? [],
     walkSpeed: from.walkSpeed ?? DEFAULT_LAYOUT.walkSpeed,
     spots: Object.fromEntries(SPOT_NAMES.map((name) => [name, from.spots?.[name] ?? DEFAULT_LAYOUT.spots[name]])) as Layout['spots'],
