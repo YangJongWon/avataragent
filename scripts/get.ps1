@@ -10,7 +10,7 @@
   if (Test-Path (Join-Path $dest 'package.json')) {
     Write-Host "Already downloaded to $dest. Checking the installation again..."
   } else {
-    Write-Host "Downloading AvatarCast to $dest ..."
+    Write-Host "Downloading AvatarCast Office to $dest ..."
     $temp = Join-Path $env:TEMP "avataragent-get-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
     New-Item -ItemType Directory -Force -Path $temp | Out-Null
     try {

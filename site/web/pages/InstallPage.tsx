@@ -35,7 +35,7 @@ export function InstallPage() {
         <h2>Windows 10/11 — 설치 파일 (추천)</h2>
         <p>
           <a className="button big" href={RELEASES}>
-            AvatarCast 설치 파일 받기
+            AvatarCast Office 설치 파일 받기
           </a>
         </p>
         <ol>

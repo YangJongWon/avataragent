@@ -6,7 +6,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MIN_NODE=24
-APP_NAME='AvatarCast'
+APP_NAME='AvatarCast Office'
 NO_SHORTCUTS=0
 [ "${1:-}" = '--no-shortcuts' ] && NO_SHORTCUTS=1
 

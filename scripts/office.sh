@@ -22,11 +22,11 @@ export PATH
 
 popup() {
   if [ "$(uname -s)" = 'Darwin' ]; then
-    osascript -e "display dialog \"$1\" with title \"AvatarCast\" buttons {\"확인\"} default button 1" >/dev/null 2>&1 || true
+    osascript -e "display dialog \"$1\" with title \"AvatarCast Office\" buttons {\"확인\"} default button 1" >/dev/null 2>&1 || true
   elif command -v zenity >/dev/null 2>&1; then
-    zenity --info --title='AvatarCast' --text="$1" >/dev/null 2>&1 || true
+    zenity --info --title='AvatarCast Office' --text="$1" >/dev/null 2>&1 || true
   elif command -v notify-send >/dev/null 2>&1; then
-    notify-send 'AvatarCast' "$1" || true
+    notify-send 'AvatarCast Office' "$1" || true
   fi
   echo "$1"
 }

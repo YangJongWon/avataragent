@@ -1,4 +1,4 @@
-# 🏢 AvatarCast
+# 🏢 AvatarCast Office
 
 **AI Agent Office** — your AI staff, at work where you can see it
 
@@ -41,9 +41,9 @@ The installer installs Node.js when needed, downloads dependencies, builds the a
 
 | Desktop shortcut | Purpose |
 | --- | --- |
-| AvatarCast | Start the server and open the office |
-| AvatarCast 끄기 | Stop the server |
-| AvatarCast 업데이트 | Update and restart without removing `.env` or `data/` |
+| AvatarCast Office | Start the server and open the office |
+| AvatarCast Office 끄기 | Stop the server |
+| AvatarCast Office 업데이트 | Update and restart without removing `.env` or `data/` |
 
 The initial setup uses simulation mode. Add API keys from the **Model Management** tab to use real AI models.
 

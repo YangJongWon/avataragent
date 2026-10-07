@@ -1,4 +1,4 @@
-# 🏢 AvatarCast
+# 🏢 AvatarCast Office
 
 **AI 에이전트 오피스** — 일하는 모습이 보이는 AI 직원들
 
@@ -54,8 +54,8 @@ AI 직원들이 픽셀 사무실에서 실제로 일하는 모습을 보면서 �
 2. 두 번 눌러 설치합니다. "Windows의 PC 보호" 창이 뜨면 **추가 정보 → 실행**을 누릅니다(아직 코드 서명이 없어서 뜹니다).
 3. 끝나면 브라우저로 사무실이 열립니다. 관리자 권한도, Node.js 설치도 필요 없습니다. 프로그램 안에 Node.js가 들어 있습니다.
 
-- 프로그램은 `%LOCALAPPDATA%\Programs\AvatarCast`, 설정(`.env`)·데이터·로그는 `%APPDATA%\AvatarCast`에 둡니다. 새 버전 설치 파일을 그대로 실행하면 업데이트되고, 설정과 데이터는 그대로 남습니다.
-- 시작 메뉴(와 바탕화면)에 **AvatarCast**(켜고 열기), **AvatarCast 끄기**가 생깁니다. 지울 때는 Windows 설정의 앱 제거에서 지우고, 데이터까지 지울지 묻습니다.
+- 프로그램은 `%LOCALAPPDATA%\Programs\AvatarCast Office`, 설정(`.env`)·데이터·로그는 `%APPDATA%\AvatarCast Office`에 둡니다. 새 버전 설치 파일을 그대로 실행하면 업데이트되고, 설정과 데이터는 그대로 남습니다.
+- 시작 메뉴(와 바탕화면)에 **AvatarCast Office**(켜고 열기), **AvatarCast Office 끄기**가 생깁니다. 지울 때는 Windows 설정의 앱 제거에서 지우고, 데이터까지 지울지 묻습니다.
 - 마지막 화면의 **Tailscale 설치하고 로그인**을 체크하면 휴대폰·외부에서 쓸 수 있게 Tailscale을 설치합니다. Tailscale 가입과 로그인은 직접 합니다.
 - 설치 파일 만들기: `powershell -File installer/build.ps1` (Inno Setup 6 필요). 버전 태그(`v0.2.0`)를 올리면 GitHub Actions가 만들어 Release에 붙입니다.
 
@@ -83,9 +83,9 @@ AI 직원들이 픽셀 사무실에서 실제로 일하는 모습을 보면서 �
 
 | 바탕화면 바로가기 | 하는 일 |
 | --- | --- |
-| AvatarCast | 서버를 켜고 브라우저로 엽니다 |
-| AvatarCast 끄기 | 서버를 끕니다 |
-| AvatarCast 업데이트 | 새 버전을 받아 다시 켭니다. 설정(.env)과 데이터(data 폴더)는 그대로 둡니다 |
+| AvatarCast Office | 서버를 켜고 브라우저로 엽니다 |
+| AvatarCast Office 끄기 | 서버를 끕니다 |
+| AvatarCast Office 업데이트 | 새 버전을 받아 다시 켭니다. 설정(.env)과 데이터(data 폴더)는 그대로 둡니다 |
 
 설치 폴더에도 같은 일을 하는 `시작.cmd`, `끄기.cmd`, `업데이트.cmd`가 있습니다.
 
@@ -109,7 +109,7 @@ AI 직원들이 픽셀 사무실에서 실제로 일하는 모습을 보면서 �
 프로그램은 홈 폴더의 `avataragent`에 설치됩니다. Windows와 같은 순서로 Node.js, 부품, 설정 파일, 화면 만들기, 실행 아이콘, 첫 실행까지 알아서 합니다.
 
 - Node.js가 없으면 macOS는 Homebrew가 있을 때 Homebrew로, 그 밖에는 내 계정 폴더(nvm)에 설치합니다. 관리자 비밀번호는 필요 없습니다.
-- macOS는 바탕화면에 `AvatarCast.command`(켜기), `… 끄기.command`, `… 업데이트.command`를 만듭니다. 더블클릭하면 터미널 창이 잠깐 열리며 실행됩니다.
+- macOS는 바탕화면에 `AvatarCast Office.command`(켜기), `… 끄기.command`, `… 업데이트.command`를 만듭니다. 더블클릭하면 터미널 창이 잠깐 열리며 실행됩니다.
 - Linux는 앱 목록(과 바탕화면)에 같은 이름의 아이콘 3개를 만듭니다.
 - ZIP으로 받았다면 macOS에서는 폴더의 `설치.command`를 오른쪽 클릭 → **열기**로 실행하고, Linux에서는 폴더에서 `bash scripts/install.sh`를 실행합니다.
 - 터미널에서 직접 다룰 때는 `scripts/office.sh start|stop|restart|status|update|upgrade`를 씁니다. 서버가 켜지지 않으면 `logs/server.err.log`를 확인하세요.

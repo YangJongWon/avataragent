@@ -3,7 +3,7 @@ param([switch]$NoShortcuts)
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 $MinNode = 24
-$AppName = 'AvatarCast'
+$AppName = 'AvatarCast Office'
 
 function Step($n, $text) { Write-Host ''; Write-Host "[$n/6] $text" -ForegroundColor Cyan }
 function Fail($text) {

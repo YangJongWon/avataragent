@@ -1,4 +1,4 @@
-# 🏢 AvatarCast
+# 🏢 AvatarCast Office
 
 **AIエージェントオフィス** — 働く姿が見えるAI社員たち
 
