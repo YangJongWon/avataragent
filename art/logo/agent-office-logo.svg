@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1110 330" role="img" aria-label="Agent Office">
+  <defs>
+    <linearGradient id="trail" x1="40" y1="330" x2="175" y2="40" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4f7cff" stop-opacity="0"/>
+      <stop offset="0.35" stop-color="#4f7cff" stop-opacity="0.85"/>
+      <stop offset="0.75" stop-color="#7b5cff"/>
+      <stop offset="1" stop-color="#c85cff"/>
+    </linearGradient>
+    <linearGradient id="descent" x1="175" y1="50" x2="250" y2="215" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#c85cff"/>
+      <stop offset="1" stop-color="#38c6ff"/>
+    </linearGradient>
+    <linearGradient id="bar" x1="92" y1="0" x2="214" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5a7dff"/>
+      <stop offset="1" stop-color="#9b5cff" stop-opacity="0.35"/>
+    </linearGradient>
+    <radialGradient id="ocean" cx="0.38" cy="0.32" r="0.75">
+      <stop offset="0" stop-color="#6fe0ff"/>
+      <stop offset="0.55" stop-color="#2a7fe0"/>
+      <stop offset="1" stop-color="#1b3f9c"/>
+    </radialGradient>
+    <linearGradient id="ring" x1="180" y1="0" x2="420" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7b5cff"/>
+      <stop offset="1" stop-color="#38c6ff"/>
+    </linearGradient>
+    <linearGradient id="word" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7b5cff"/>
+      <stop offset="1" stop-color="#2a7fe0"/>
+    </linearGradient>
+    <clipPath id="globe"><circle cx="300" cy="262" r="70"/></clipPath>
+  </defs>
+
+  <svg x="0" y="0" width="400" height="330" viewBox="20 20 400 330">
+    <path d="M40 330 C 80 240, 125 120, 172 52" fill="none" stroke="url(#trail)" stroke-width="26" stroke-linecap="round"/>
+    <path d="M190 84 C 206 124, 222 164, 236 200" fill="none" stroke="url(#descent)" stroke-width="15" stroke-linecap="round"/>
+    <path d="M92 222 C 130 200, 172 194, 214 196" fill="none" stroke="url(#bar)" stroke-width="10" stroke-linecap="round"/>
+    <g transform="translate(176 46) rotate(32)">
+      <path d="M-9 26 L-20 40 L-9 36 Z M9 26 L20 40 L9 36 Z" fill="#2b3a78"/>
+      <path d="M0 -34 C 14 -20, 14 10, 10 32 L-10 32 C -14 10, -14 -20, 0 -34 Z" fill="#f4f6ff" stroke="#2b3a78" stroke-width="3" stroke-linejoin="round"/>
+      <circle cx="0" cy="-6" r="6.5" fill="#38c6ff" stroke="#2b3a78" stroke-width="3"/>
+      <path d="M-7 34 Q 0 52, 7 34 Z" fill="#ffb347"/>
+    </g>
+    <path d="M200 282 A 104 32 -18 0 1 400 216" fill="none" stroke="url(#ring)" stroke-width="7" stroke-linecap="round" opacity="0.55"/>
+    <circle cx="300" cy="262" r="70" fill="url(#ocean)"/>
+    <g clip-path="url(#globe)" fill="#46d39a">
+      <path d="M250 214 C 268 206, 290 214, 288 232 C 286 248, 266 246, 262 262 C 258 276, 240 276, 236 260 C 232 242, 238 222, 250 214 Z"/>
+      <path d="M310 240 C 326 232, 350 238, 356 256 C 362 274, 346 292, 330 290 C 318 288, 322 272, 312 266 C 302 260, 300 246, 310 240 Z"/>
+      <path d="M282 300 C 294 296, 306 304, 302 316 C 298 328, 280 326, 276 316 C 274 308, 276 302, 282 300 Z"/>
+    </g>
+    <circle cx="300" cy="262" r="70" fill="none" stroke="#1b2f6e" stroke-width="3" opacity="0.35"/>
+    <path d="M200 282 A 104 32 -18 0 0 400 216" fill="none" stroke="url(#ring)" stroke-width="7" stroke-linecap="round"/>
+    <g fill="#7b8cff">
+      <path d="M300 70 l4 12 12 4 -12 4 -4 12 -4 -12 -12 -4 12 -4 Z"/>
+      <path d="M62 110 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3 Z"/>
+      <path d="M360 140 l2.5 7 7 2.5 -7 2.5 -2.5 7 -2.5 -7 -7 -2.5 7 -2.5 Z"/>
+    </g>
+  </svg>
+
+  <text x="430" y="212" font-family="Pretendard, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="104" font-weight="800" letter-spacing="-2" fill="#1f2f6b"><tspan fill="url(#word)">A</tspan>gent <tspan fill="url(#word)">O</tspan>ffice</text>
+</svg>

@@ -39,6 +39,7 @@ try {
   }
   Copy-Item (Join-Path $Root 'docs\HELP.md') (Join-Path $App 'docs\HELP.md')
   Copy-Item (Join-Path $PSScriptRoot 'launcher.ps1') (Join-Path $App 'launcher.ps1')
+  Copy-Item (Join-Path $PSScriptRoot 'avatarcast.ico') (Join-Path $App 'avatarcast.ico')
 
   Step "server packages (npm install --omit=dev, versions from the lock file)"
   # The pages are already built into dist/web, the site is not part of the app, and Temporal loads only with

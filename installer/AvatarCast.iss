@@ -39,7 +39,8 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayName={#AppName}
-UninstallDisplayIcon={sys}\shell32.dll,13
+SetupIconFile=avatarcast.ico
+UninstallDisplayIcon={app}\avatarcast.ico
 LicenseFile={#SourceDir}\LICENSE
 CloseApplications=no
 
@@ -73,9 +74,9 @@ Type: filesandordirs; Name: "{app}\dist"
 Type: filesandordirs; Name: "{app}\node_modules"
 
 [Icons]
-Name: "{autoprograms}\{#AppName}"; Filename: "{#PowerShell}"; Parameters: "{#Run('open')}"; WorkingDir: "{app}"; IconFilename: "{sys}\shell32.dll"; IconIndex: 13
+Name: "{autoprograms}\{#AppName}"; Filename: "{#PowerShell}"; Parameters: "{#Run('open')}"; WorkingDir: "{app}"; IconFilename: "{app}\avatarcast.ico"
 Name: "{autoprograms}\{cm:StopName}"; Filename: "{#PowerShell}"; Parameters: "{#Run('stop')}"; WorkingDir: "{app}"; IconFilename: "{sys}\shell32.dll"; IconIndex: 27
-Name: "{autodesktop}\{#AppName}"; Filename: "{#PowerShell}"; Parameters: "{#Run('open')}"; WorkingDir: "{app}"; IconFilename: "{sys}\shell32.dll"; IconIndex: 13; Tasks: desktopicon
+Name: "{autodesktop}\{#AppName}"; Filename: "{#PowerShell}"; Parameters: "{#Run('open')}"; WorkingDir: "{app}"; IconFilename: "{app}\avatarcast.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{#PowerShell}"; Parameters: "{#Run('open')}"; WorkingDir: "{app}"; Description: "{cm:OpenNow}"; Flags: postinstall nowait skipifsilent runhidden
