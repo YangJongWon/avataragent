@@ -225,7 +225,7 @@ function addTableSheet(wb: ExcelJS.Workbook, t: TableData, name: string, theme: 
 
 export async function renderXlsx(doc: DocSpec, theme: Theme, plan?: WorkbookSpec): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'AI 에이전트 오피스';
+  wb.creator = 'AvatarCast';
   wb.created = new Date();
   const used = new Set<string>();
   const tables = tablesOf(doc);

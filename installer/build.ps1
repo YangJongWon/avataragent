@@ -1,4 +1,4 @@
-﻿# Builds the Windows installer: build/installer/AIAgentOffice-Setup-<version>.exe
+﻿# Builds the Windows installer: build/installer/AvatarCast-Setup-<version>.exe
 #   powershell -NoProfile -ExecutionPolicy Bypass -File installer/build.ps1 [-Version 0.2.0] [-NodeVersion 24.19.0]
 # Needs Inno Setup 6 (winget install JRSoftware.InnoSetup) and the repository's own npm packages installed.
 param(
@@ -84,9 +84,9 @@ try {
   Write-Host ("staged {0:N0} MB" -f $size)
 
   Step "installer (Inno Setup)"
-  & $iscc "/DAppVersion=$Version" "/DSourceDir=$App" "/DOutputDir=$Out" (Join-Path $PSScriptRoot 'AIAgentOffice.iss')
+  & $iscc "/DAppVersion=$Version" "/DSourceDir=$App" "/DOutputDir=$Out" (Join-Path $PSScriptRoot 'AvatarCast.iss')
   if ($LASTEXITCODE -ne 0) { throw 'ISCC failed' }
-  $exe = Join-Path $Out "AIAgentOffice-Setup-$Version.exe"
+  $exe = Join-Path $Out "AvatarCast-Setup-$Version.exe"
   Write-Host ("built {0} ({1:N0} MB)" -f $exe, ((Get-Item $exe).Length / 1MB)) -ForegroundColor Green
 } finally {
   Pop-Location

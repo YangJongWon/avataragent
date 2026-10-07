@@ -92,7 +92,7 @@ function loginPage(error = '') {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>AI 에이전트 오피스 · 로그인</title>
+<title>AvatarCast · 로그인</title>
 <style>
   body { margin: 0; min-height: 100dvh; display: grid; place-items: center; background: #2b2438; font-family: system-ui, sans-serif; }
   form { background: #fff8ec; border: 3px solid #3a3045; box-shadow: 6px 6px 0 #1a1522; padding: 28px 24px; width: min(320px, 86vw); }
@@ -105,7 +105,7 @@ function loginPage(error = '') {
 </head>
 <body>
 <form method="post" action="/login">
-  <h1>🏢 AI 에이전트 오피스</h1>
+  <h1>🏢 AvatarCast</h1>
   <input type="text" name="loginId" id="loginId" autocomplete="username" autocapitalize="none" placeholder="아이디 (구성원만)" />
   <input type="password" name="password" id="password" inputmode="numeric" autocomplete="current-password" placeholder="비밀번호" autofocus required />
   ${error ? `<p class="error">${escapeHtml(error)}</p>` : ''}

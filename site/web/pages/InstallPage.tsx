@@ -35,12 +35,12 @@ export function InstallPage() {
         <h2>Windows 10/11 — 설치 파일 (추천)</h2>
         <p>
           <a className="button big" href={RELEASES}>
-            AI Agent Office 설치 파일 받기
+            AvatarCast 설치 파일 받기
           </a>
         </p>
         <ol>
           <li>
-            받은 <b>AIAgentOffice-Setup-…exe</b>를 두 번 눌러요. "Windows의 PC 보호" 창이 뜨면 <b>추가 정보 → 실행</b>을 눌러요.
+            받은 <b>AvatarCast-Setup-…exe</b>를 두 번 눌러요. "Windows의 PC 보호" 창이 뜨면 <b>추가 정보 → 실행</b>을 눌러요.
           </li>
           <li>다음을 몇 번 누르면 설치되고 브라우저로 사무실이 열려요. 관리자 권한도, 따로 설치할 것도 없어요(1~2분).</li>
           <li>

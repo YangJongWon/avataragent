@@ -217,7 +217,7 @@ export async function renderPptx(deck: DeckSpec, theme: Theme): Promise<Buffer> 
   const pptx = new PptxGenJS();
   pptx.layout = 'LAYOUT_WIDE';
   pptx.title = deck.title;
-  pptx.company = 'AI 에이전트 오피스';
+  pptx.company = 'AvatarCast';
   pptx.theme = { headFontFace: theme.headFont, bodyFontFace: theme.font };
   pptx.defineSlideMaster({
     title: 'BODY',

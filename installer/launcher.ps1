@@ -1,5 +1,5 @@
-﻿# Starts, stops and opens the installed AI Agent Office. The program lives in this folder (with its own Node.js);
-# settings, data and logs live in %APPDATA%\AI Agent Office so updates and uninstalls never touch them.
+﻿# Starts, stops and opens the installed AvatarCast. The program lives in this folder (with its own Node.js);
+# settings, data and logs live in %APPDATA%\AvatarCast so updates and uninstalls never touch them.
 param(
   [Parameter(Position = 0)]
   [ValidateSet('open', 'start', 'stop', 'status', 'tailscale')]
@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$AppName = 'AI Agent Office'
+$AppName = 'AvatarCast'
 $Root = $PSScriptRoot
 $Node = Join-Path $Root 'node\node.exe'
 $UserDir = Join-Path $env:APPDATA $AppName

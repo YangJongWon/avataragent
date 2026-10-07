@@ -1,4 +1,4 @@
-# Builds the Windows installer (AIAgentOffice-Setup-<version>.exe).
+# Builds the Windows installer (AvatarCast-Setup-<version>.exe).
 # A version tag (v0.2.0) attaches it to that GitHub release; a manual run keeps it as a workflow artifact.
 name: Windows installer
 
@@ -36,11 +36,11 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: AIAgentOffice-Setup
-          path: build/installer/AIAgentOffice-Setup-*.exe
+          name: AvatarCast-Setup
+          path: build/installer/AvatarCast-Setup-*.exe
 
       - name: Attach to the release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          files: build/installer/AIAgentOffice-Setup-*.exe
+          files: build/installer/AvatarCast-Setup-*.exe

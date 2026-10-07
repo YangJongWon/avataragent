@@ -1,6 +1,6 @@
-; One-click Windows installer for AI Agent Office. Built by installer/build.ps1, which prepares the files in
+; One-click Windows installer for AvatarCast. Built by installer/build.ps1, which prepares the files in
 ; build/installer/app (the server, the built pages, production packages and a private Node.js).
-; Installs for the current user only (no administrator), keeps settings and data in %APPDATA%\AI Agent Office.
+; Installs for the current user only (no administrator), keeps settings and data in %APPDATA%\AvatarCast.
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"
@@ -12,7 +12,7 @@
   #define OutputDir "..\build\installer"
 #endif
 
-#define AppName "AI Agent Office"
+#define AppName "AvatarCast"
 #define Launcher "{app}\launcher.ps1"
 #define PowerShell "{sys}\WindowsPowerShell\v1.0\powershell.exe"
 ; Quotes inside a quoted Inno parameter are doubled, so the path comes out as ""{app}\launcher.ps1"".
@@ -32,7 +32,7 @@ DisableProgramGroupPage=yes
 DisableDirPage=auto
 PrivilegesRequired=lowest
 OutputDir={#OutputDir}
-OutputBaseFilename=AIAgentOffice-Setup-{#AppVersion}
+OutputBaseFilename=AvatarCast-Setup-{#AppVersion}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern

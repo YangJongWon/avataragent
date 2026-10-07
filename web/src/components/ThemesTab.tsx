@@ -11,7 +11,7 @@ const PIXEL: ThemeSummary = {
   id: DEFAULT_THEME,
   themeVersion: '',
   name: '기본 픽셀',
-  author: 'AI 에이전트 오피스',
+  author: 'AvatarCast',
   license: 'AGPL-3.0',
   description: '앱에 들어 있는 도트 사무실이에요. 테마가 없거나 불러오지 못하면 이 테마로 보여요.',
   preview: '',

@@ -180,7 +180,7 @@ export async function answerHelp(input: { question: string; tab?: string; office
 
   const office = input.officeId ? store.data.offices.find((o) => o.id === input.officeId) : undefined;
   const prompt = [
-    '지금은 업무가 아니라, 이 앱(AI 에이전트 오피스)의 사용법을 묻는 사용자에게 답하는 도움말 담당이에요.',
+    '지금은 업무가 아니라, 이 앱(AvatarCast, AI 에이전트 오피스)의 사용법을 묻는 사용자에게 답하는 도움말 담당이에요.',
     '규칙:',
     '- 아래 [도움말]과 [현재 설정]만 근거로 한국어로 짧고 정확하게 답해요. 버튼·탭 이름은 화면에 쓰인 그대로 써요.',
     '- 도움말에 없는 내용은 지어내지 말고 "도움말에 없는 내용이에요"라고 말한 뒤, 확인할 수 있는 곳을 알려 줘요.',

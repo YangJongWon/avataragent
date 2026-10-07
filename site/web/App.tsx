@@ -74,7 +74,7 @@ export function App() {
       <header className="site-head">
         <Link href="/" className="brand">
           <span className="brand-mark"><SiteIcon name="spark" /></span>
-          <span className="brand-name">AI 에이전트 오피스</span>
+          <span className="brand-name">AvatarCast</span>
         </Link>
         <nav>
           {NAV.map(([href, label]) => (

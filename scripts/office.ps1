@@ -18,7 +18,7 @@ $Tailscale = 'C:\Program Files\Tailscale\tailscale.exe'
 $ZipUrl = 'https://github.com/YangJongWon/avataragent/archive/refs/heads/main.zip'
 
 function Show-Popup($text, $icon = 64) {
-  $null = (New-Object -ComObject WScript.Shell).Popup($text, 0, 'AI 에이전트 오피스', $icon)
+  $null = (New-Object -ComObject WScript.Shell).Popup($text, 0, 'AvatarCast', $icon)
 }
 
 function Get-ServerPid {

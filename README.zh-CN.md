@@ -1,4 +1,6 @@
-# 🏢 AI 智能体办公室
+# 🏢 AvatarCast
+
+**AI 智能体办公室** — 看得见工作过程的 AI 员工
 
 [한국어](README.md) | [English](README.en.md) | [日本語](README.ja.md) | 简体中文
 

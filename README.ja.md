@@ -1,4 +1,6 @@
-# 🏢 AIエージェントオフィス
+# 🏢 AvatarCast
+
+**AIエージェントオフィス** — 働く姿が見えるAI社員たち
 
 [한국어](README.md) | [English](README.en.md) | 日本語 | [简体中文](README.zh-CN.md)
 

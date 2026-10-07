@@ -187,7 +187,7 @@ export class Auth {
     const link = `${this.config.publicUrl}/api/auth/email/verify?token=${token}`;
     await this.mailer.send({
       to: email,
-      subject: 'AI 에이전트 오피스 로그인 링크',
+      subject: 'AvatarCast 로그인 링크',
       text: `아래 링크를 누르면 로그인돼요. ${MAGIC_MINUTES}분 동안 한 번만 쓸 수 있어요.\n\n${link}\n\n요청하지 않았다면 이 메일은 무시하세요.`,
     });
   }

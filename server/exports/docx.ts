@@ -208,7 +208,7 @@ export async function renderDocx(doc: DocSpec, theme: Theme): Promise<Buffer> {
   }
 
   const document = new Document({
-    creator: 'AI 에이전트 오피스',
+    creator: 'AvatarCast',
     title: doc.title,
     styles: {
       default: { document: { run: { font: theme.font, size: 21, color: theme.ink }, paragraph: { spacing: { line: 300 } } } },
