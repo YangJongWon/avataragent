@@ -1,8 +1,11 @@
 import type { PlanMeta } from '../../shared/plans.ts';
+import { tpl } from './i18n.tsx';
 
 export interface Me {
   account: { id: string; email: string; name: string; avatarUrl: string; role: 'user' | 'admin'; handle: string | null } | null;
   providers: { email: boolean; google: boolean; github: boolean };
+  /** Where the visitor connects from, if the host in front of the site says. */
+  country?: string | null;
 }
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
@@ -13,7 +16,7 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
   });
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? `요청 실패 (${res.status})`);
+  if (!res.ok) throw new Error((data as { error?: string }).error ?? tpl('요청 실패 ({status})', { status: res.status }));
   return data as T;
 }
 
@@ -22,8 +25,8 @@ export const siteApi = {
   sendLink: (email: string, next: string) => call<void>('POST', '/api/auth/email', { email, next }),
   logout: () => call<void>('POST', '/api/auth/logout', {}),
   plans: () => call<PlanMeta[]>('GET', '/api/plans'),
-  docs: () => call<{ slug: string; title: string }[]>('GET', '/api/docs'),
-  doc: (slug: string) => call<{ title: string; markdown: string }>('GET', `/api/docs/${encodeURIComponent(slug)}`),
+  docs: (lang: string) => call<{ slug: string; title: string }[]>('GET', `/api/docs?lang=${lang}`),
+  doc: (slug: string, lang: string) => call<{ title: string; markdown: string; language: string }>('GET', `/api/docs/${encodeURIComponent(slug)}?lang=${lang}`),
   startCheckout: (input: { plan: string; install: string; ref?: string; returnUrl?: string; interval?: 'month' | 'year' }) => call<{ url: string }>('POST', '/api/checkout', input),
   checkout: (id: string) => call<CheckoutView>('GET', `/api/checkout/${encodeURIComponent(id)}`),
   paymentsConfig: () => call<{ provider: string; env?: string; token?: string }>('GET', '/api/payments/config'),
@@ -69,7 +72,7 @@ export const siteApi = {
     const params = new URLSearchParams(Object.entries(query).filter(([, v]) => v) as [string, string][]);
     const res = await fetch(`/api/items?${params}`, { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: file });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error((data as { error?: string }).error ?? `올리지 못했어요 (${res.status})`);
+    if (!res.ok) throw new Error((data as { error?: string }).error ?? tpl('올리지 못했어요 ({status})', { status: res.status }));
     return data as { id: string; version: number; label: string; warnings: string[] };
   },
 };

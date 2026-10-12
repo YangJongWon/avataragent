@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage } from 'node:http';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, sep } from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { can, type Action } from '../shared/access.ts';
@@ -11,6 +11,8 @@ import {
   isColor,
   isHatShape,
   isModelId,
+  isTier,
+  MAX_TIER,
   type Company,
   type ModelEntry,
   type Tier,
@@ -20,8 +22,9 @@ import { isExportFormat } from '../shared/design.ts';
 import { isPersonality } from '../shared/personality.ts';
 import { parsePlaybook, playbookChanges } from '../shared/playbook.ts';
 import { parseFlowPack } from '../shared/flow-pack.ts';
-import { isPlan, planOf } from '../shared/plans.ts';
+import { isPlan, planHas, planOf } from '../shared/plans.ts';
 import { isLanguage, type Language } from '../shared/i18n.ts';
+import { isQuote, krwJpyRate, krwRate } from './exchange-rate.ts';
 import { exportActivity } from './activity.ts';
 import { applyLicense, billingInfo, billingProvider, billingTick, cancelSubscription, completeMockCheckout, handleWebhook, resumeSubscription, startCheckout } from './billing.ts';
 import { isSkin } from '../shared/skins.ts';
@@ -164,8 +167,9 @@ app.delete('/api/offices/:id', (req, res) => {
 
 app.put('/api/offices/:id', async (req, res) => {
   guard(res, 'manage', req.params.id);
-  const { autoRun, autoImprove, budgetKrw, theme, themeCss } = req.body ?? {};
-  if (budgetKrw !== undefined) guard(res, 'owner');
+  const { autoRun, autoImprove, budgetKrw, theme, themeCss, name, description } = req.body ?? {};
+  if (budgetKrw !== undefined || name !== undefined || description !== undefined) guard(res, 'owner');
+  if (name !== undefined && (typeof name !== 'string' || !name.trim())) throw new Error('사무실 이름을 적어 주세요.');
   if (theme !== undefined && theme !== null && !isUsableTheme(theme)) throw new Error('설치되지 않은 테마예요.');
   store.updateOffice(req.params.id, (o) => {
     if (typeof autoRun === 'boolean') o.autoRun = autoRun;
@@ -175,10 +179,15 @@ app.put('/api/offices/:id', async (req, res) => {
     else if (typeof theme === 'string') o.theme = theme;
     if (themeCss === true) delete o.themeCss;
     else if (themeCss === false) o.themeCss = false;
+    if (typeof name === 'string') o.name = name.trim().slice(0, 20);
+    if (typeof description === 'string') {
+      if (description.trim()) o.description = description.trim().slice(0, 160);
+      else delete o.description;
+    }
     if (budgetKrw === null) o.budgetKrw = null;
     else if (typeof budgetKrw === 'number' && budgetKrw >= 0) o.budgetKrw = Math.round(budgetKrw);
   });
-  store.emit('office.updated', { payload: { officeId: req.params.id, autoRun, autoImprove, budgetKrw, theme, themeCss } });
+  store.emit('office.updated', { payload: { officeId: req.params.id, autoRun, autoImprove, budgetKrw, theme, themeCss, name, description } });
   if (autoImprove === true) autoImproveOffice(req.params.id);
   await workflowRuntime.tick();
   res.json(store.office(req.params.id));
@@ -247,6 +256,35 @@ app.put('/api/site-theme', (req, res) => {
   store.emit('theme.site', { payload: { themeId: theme } });
   res.json({ theme });
 });
+
+app.put('/api/company-logo', (req, res) => {
+  guard(res, 'owner');
+  if (!planHas(store.data.plan, 'companyLogo')) throw new Error('회사 로고는 비즈니스 플랜에서 쓸 수 있어요.');
+  const logo = parseLogo(req.body?.logo ?? null);
+  store.mutate((s) => {
+    s.companyLogo = logo;
+  });
+  store.emit('company.logo', { payload: { set: logo !== null } });
+  res.json({ logo });
+});
+
+const LOGO_BYTES = 256 * 1024;
+const LOGO_MAGIC: Record<string, (b: Buffer) => boolean> = {
+  png: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  jpeg: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  webp: (b) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP',
+};
+
+/** A logo is a PNG, JPEG or WebP data URL up to 256KB; the bytes must match the type it claims. */
+function parseLogo(input: unknown): string | null {
+  if (input === null) return null;
+  const match = typeof input === 'string' ? /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+=*)$/.exec(input) : null;
+  if (!match) throw new Error('로고는 PNG, JPG, WebP 그림만 올릴 수 있어요.');
+  const bytes = Buffer.from(match[2], 'base64');
+  if (bytes.length > LOGO_BYTES) throw new Error('로고는 256KB까지 올릴 수 있어요.');
+  if (!LOGO_MAGIC[match[1]](bytes)) throw new Error('그림 파일이 아니에요.');
+  return match[0];
+}
 
 app.delete('/api/themes/:id', (req, res) => {
   guard(res, 'owner');
@@ -590,8 +628,8 @@ function applyModel(model: ModelEntry, body: Record<string, unknown>) {
   if (body.vendor !== undefined) model.vendor = companyById(String(body.vendor)).id;
   if (body.tier !== undefined) {
     const tier = Number(body.tier);
-    if (![1, 2, 3].includes(tier)) throw new Error('등급은 1~3 중에서 골라 주세요.');
-    model.tier = tier as Tier;
+    if (!isTier(tier)) throw new Error(`등급은 1~${MAX_TIER} 사이의 정수로 정해 주세요.`);
+    model.tier = tier;
   }
   if (body.label !== undefined) model.label = text(body.label, 30) || model.label;
   if (body.apiModel !== undefined) model.apiModel = text(body.apiModel, 120);
@@ -961,6 +999,25 @@ app.put('/api/language', (req, res) => {
   res.json({ language: store.data.language });
 });
 
+app.get('/api/exchange-rate/krw-jpy', async (_req, res) => {
+  guard(res, 'view');
+  try {
+    res.json(await krwJpyRate());
+  } catch (error) {
+    res.status(503).json({ error: error instanceof Error ? error.message : '환율을 불러오지 못했어요.' });
+  }
+});
+
+app.get('/api/exchange-rate/krw/:quote', async (req, res) => {
+  guard(res, 'view');
+  if (!isQuote(req.params.quote)) return void res.status(400).json({ error: '지원하지 않는 통화예요.' });
+  try {
+    res.json(await krwRate(req.params.quote));
+  } catch (error) {
+    res.status(503).json({ error: error instanceof Error ? error.message : '환율을 불러오지 못했어요.' });
+  }
+});
+
 app.post('/api/members', (req, res) => {
   guard(res, 'owner');
   res.json(createMember(req.body ?? {}));
@@ -1134,7 +1191,15 @@ app.delete('/api/shares/:id', (req, res) => {
 
 const webDist = resolve(process.env.WEB_DIST || 'dist/web');
 if (existsSync(webDist)) {
-  app.use(express.static(webDist));
+  // index.html always revalidates (it names the hashed assets); hashed assets never change.
+  app.use(
+    express.static(webDist, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html')) res.setHeader('Cache-Control', 'no-store');
+        else if (filePath.includes(`${sep}assets${sep}`)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      },
+    }),
+  );
 }
 
 app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {

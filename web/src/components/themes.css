@@ -1,6 +1,8 @@
 .themes-head {
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 8px;
 }
 
 .theme-actions-head {
@@ -156,6 +158,24 @@
   padding: 4px 6px;
 }
 
+/* The search row wraps and the text field shrinks so nothing spills off narrow screens. */
+.community-bar form.row {
+  flex: 1 1 240px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.community-bar input {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.community-bar select {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .saved-flows {
   list-style: none;
   padding: 0;
@@ -163,6 +183,8 @@
 
 .saved-flows li {
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
   padding: 6px 0;
   border-bottom: 1px dashed rgba(0, 0, 0, 0.15);
 }
@@ -175,6 +197,14 @@
 
 .community-tab > h3 {
   margin-top: 20px;
+}
+
+/* Narrow screens: keep the kind filter inside the card; swipe sideways to see all kinds. */
+@media (max-width: 700px) {
+  .community-bar .segmented {
+    width: 100%;
+    overflow-x: auto;
+  }
 }
 
 /* ── task assist: request polish, flow picks, popular flows ── */

@@ -1072,8 +1072,7 @@ body:has(.site) { background:radial-gradient(circle at 12% 0%,rgba(255,199,214,.
 
 .site-icon { width:20px; height:20px; flex:0 0 auto; vertical-align:-.22em; }
 .brand { display:inline-flex; align-items:center; gap:9px; }
-.brand-mark { width:34px; height:34px; display:grid; place-items:center; color:#fff; background:linear-gradient(145deg,#9082f4,#ff91b3); border-radius:11px; box-shadow:0 7px 16px rgba(120,104,230,.28); }
-.brand-mark .site-icon { width:21px; height:21px; stroke-width:2; }
+.brand-mark { height:36px; width:auto; }
 .site .site-head nav a { display:inline-flex; align-items:center; gap:6px; }
 .site .site-head nav a .site-icon { width:17px; height:17px; }
 .site .button { display:inline-flex; align-items:center; justify-content:center; gap:7px; }
@@ -1088,12 +1087,18 @@ body:has(.site) { background:radial-gradient(circle at 12% 0%,rgba(255,199,214,.
 .post-row .post-main > .small .site-icon,.post-count .site-icon,.post-page > .small .site-icon { width:16px; height:16px; }
 .post-count { color:#77748d; }
 .post-page h1 > .site-icon { width:22px; height:22px; color:#7868e6; }
+.icon-line,.icon-stat,.badge.ok { display:inline-flex; align-items:center; gap:4px; }
+.icon-line .site-icon,.icon-stat .site-icon,.badge.ok .site-icon { width:15px; height:15px; }
+.rank-no .site-icon { width:25px; height:25px; }
+.top-1 .rank-no { color:#f2b84b; }.top-2 .rank-no { color:#9aa5b4; }.top-3 .rank-no { color:#c98762; }
 .site .brand { flex:0 0 auto; white-space:nowrap; color:#29263d; font-weight:800; letter-spacing:-.025em; }
 .brand-name { line-height:1; }
 .site a:focus { outline:none; }
 .site a:focus-visible,.site button:focus-visible,.site input:focus-visible,.site select:focus-visible,.site textarea:focus-visible { outline:3px solid rgba(120,104,230,.32); outline-offset:3px; }
 .site .head-account { display:flex; align-items:center; margin-left:auto; }
 .site .head-account .button { min-height:42px; padding-inline:18px; }
+.site .head-account { gap:8px; }
+.site .lang-select { min-height:42px; padding:0 10px; border:1px solid rgba(90,82,140,.18); border-radius:12px; background:rgba(255,255,255,.7); color:var(--ink); font:inherit; font-size:14px; font-weight:650; cursor:pointer; }
 
 /* A preview is how people choose an item: show all of it, letterboxed on the card's background, never cropped.
    The frame follows a theme scene's usual 1000x480, so most previews fill it. */

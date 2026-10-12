@@ -38,6 +38,8 @@ export interface Office {
   team: TeamId;
   name: string;
   custom?: boolean;
+  /** Shown under the tabs instead of the team's standard description. */
+  description?: string;
   autoRun: boolean;
   /** Applies safe improvement suggestions by itself after each completed task. */
   autoImprove?: boolean;
@@ -63,6 +65,8 @@ export interface Agent {
   id: string;
   officeId: string;
   name: string;
+  /** Web only: the stored name when `name` shows a default name translated for the viewer. */
+  sourceName?: string;
   role: Role;
   model: string;
   rules: string;
@@ -406,6 +410,8 @@ export interface Snapshot {
   themeBookings: ThemeBooking[];
   /** The theme for the page around the offices; null follows the office being viewed. */
   siteTheme: string | null;
+  /** The company's own logo (data URL) shown in the top bar on the business plan; null shows the product's. */
+  companyLogo: string | null;
   /** Work journeys saved for reuse when making a task. */
   flows: SavedFlow[];
   provider: string;

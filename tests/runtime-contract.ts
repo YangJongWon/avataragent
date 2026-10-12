@@ -35,7 +35,7 @@ export function runtimeContract(name: string, runtime: WorkflowRuntime, teardown
 
     await t.test('잘못된 요청은 Promise 거부로 알린다', async () => {
       await assert.rejects(runtime.cancelTask(running.id), /대기 중인 업무만/);
-      await assert.rejects(runtime.updatePlan(running.id, []), /대기 중인 업무의 여정만/);
+      await assert.rejects(runtime.updatePlan(running.id, []));
       await assert.rejects(runtime.approve(queued.id), /승인을 기다리는/);
       await assert.rejects(runtime.requestChanges(queued.id, '고쳐 주세요'), /승인을 기다리는/);
       await assert.rejects(runtime.answerHelp(queued.id, null), /도움을 기다리는/);
@@ -59,6 +59,19 @@ export function runtimeContract(name: string, runtime: WorkflowRuntime, teardown
 
     await t.test('도움 요청에 답하고 수정 요청 뒤 승인하면 완료된다', async () => {
       await until(() => statusOf(running.id) === 'awaiting_help', '도움 요청');
+      const current = store.task(running.id).plan.map(({ kind, label, agentId, instructions, loop }) => ({ kind, label, agentId, instructions, loop }));
+      const renamedBrief = current.map((s, i) => (i === 0 ? { ...s, label: '바뀐 접수' } : s));
+      const reviewAt = current.findIndex((s) => s.kind === 'review');
+      const renamedReview = current.map((s, i) => (i === reviewAt ? { ...s, label: '바뀐 검토' } : s));
+      if (name === 'temporal') {
+        await assert.rejects(runtime.updatePlan(running.id, renamedReview), /대기 중인 업무의 여정만/);
+      } else {
+        // 이미 시작한 단계는 그대로 두고, 아직 시작하지 않은 뒤 단계만 바꿀 수 있다.
+        await assert.rejects(runtime.updatePlan(running.id, renamedBrief), /이미 시작한 단계/);
+        const updated = await runtime.updatePlan(running.id, renamedReview);
+        assert.equal(updated.plan[reviewAt].label, '바뀐 검토');
+        assert.equal(updated.plan[0].id, store.task(running.id).plan[0].id);
+      }
       await runtime.answerHelp(running.id, '비용·효과 중심');
       await until(() => statusOf(running.id) === 'awaiting_approval', '첫 승인 대기');
       assert.deepEqual(store.task(running.id).clarifications, ['비용·효과 중심']);

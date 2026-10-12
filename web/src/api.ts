@@ -1,3 +1,4 @@
+import { t, tpl } from '../../shared/i18n.ts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DesignKind, DesignReview, ExportFormat } from '../../shared/design.ts';
 import type { Language } from '../../shared/i18n.ts';
@@ -37,7 +38,7 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
   });
   if (res.status === 401) location.assign('/login');
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? `요청 실패 (${res.status})`);
+  if (!res.ok) throw new Error((data as { error?: string }).error ?? tpl('요청 실패 ({status})', { status: res.status }));
   return data as T;
 }
 
@@ -59,13 +60,15 @@ export const api = {
   createShare: (input: { name: string; role: ShareRole; officeIds: string[] | 'all'; expiresInDays: number }) =>
     call<ShareLink>('POST', '/api/shares', input),
   deleteShare: (shareId: string) => call('DELETE', `/api/shares/${shareId}`),
-  updateOffice: (officeId: string, patch: { autoRun?: boolean; autoImprove?: boolean; budgetKrw?: number | null; theme?: string | null; themeCss?: boolean }) =>
+  updateOffice: (officeId: string, patch: { autoRun?: boolean; autoImprove?: boolean; budgetKrw?: number | null; theme?: string | null; themeCss?: boolean; name?: string; description?: string }) =>
     call('PUT', `/api/offices/${officeId}`, patch),
   setCompanyTheme: (theme: string) => call<{ theme: string }>('PUT', '/api/theme', { theme }),
   setThemeBookings: (bookings: ThemeBooking[]) => call<{ bookings: ThemeBooking[] }>('PUT', '/api/theme-bookings', { bookings }),
   setSiteTheme: (theme: string | null) => call<{ theme: string | null }>('PUT', '/api/site-theme', { theme }),
+  setCompanyLogo: (logo: string | null) => call<{ logo: string | null }>('PUT', '/api/company-logo', { logo }),
   setPlan: (plan: Plan) => call('PUT', '/api/plan', { plan }),
   setLanguage: (language: Language) => call<{ language: Language }>('PUT', '/api/language', { language }),
+  krwRate: (quote: 'JPY' | 'USD' | 'CNY') => call<{ base: 'KRW'; quote: string; rate: number; date: string; source: string; fetchedAt: string }>('GET', `/api/exchange-rate/krw/${quote}`),
   startCheckout: (plan: Plan) => call<{ url: string }>('POST', '/api/billing/checkout', { plan }),
   cancelSubscription: () => call('POST', '/api/billing/cancel'),
   resumeSubscription: () => call('POST', '/api/billing/resume'),
@@ -129,7 +132,7 @@ export const api = {
     if (res.status === 401) location.assign('/login');
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      throw new Error((data as { error?: string }).error ?? `내보내기 실패 (${res.status})`);
+      throw new Error((data as { error?: string }).error ?? tpl('내보내기 실패 ({status})', { status: res.status }));
     }
     const disposition = res.headers.get('content-disposition') ?? '';
     const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/)?.[1];

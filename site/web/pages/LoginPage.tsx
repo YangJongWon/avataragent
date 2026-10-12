@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { siteApi, type Me } from '../api.ts';
 import { Link } from '../router.tsx';
+import { rich, t } from '../i18n.tsx';
 
 export function LoginPage({ me, search }: { me: Me | null; search: string }) {
   const params = new URLSearchParams(search);
@@ -13,9 +14,9 @@ export function LoginPage({ me, search }: { me: Me | null; search: string }) {
   if (me?.account) {
     return (
       <section className="page narrow">
-        <h1>이미 로그인했어요</h1>
+        <h1>{t('이미 로그인했어요')}</h1>
         <p>
-          {me.account.email} · <Link href="/account">내 계정</Link>
+          {me.account.email} · <Link href="/account">{t('내 계정')}</Link>
         </p>
       </section>
     );
@@ -38,14 +39,12 @@ export function LoginPage({ me, search }: { me: Me | null; search: string }) {
 
   return (
     <section className="page narrow login">
-      <h1>로그인</h1>
-      <p className="lead">테마를 올리고, 좋아요를 누르고, 플랜을 관리하려면 로그인하세요. 처음이면 자동으로 가입돼요.</p>
+      <h1>{t('로그인')}</h1>
+      <p className="lead">{t('테마를 올리고, 좋아요를 누르고, 플랜을 관리하려면 로그인하세요. 처음이면 자동으로 가입돼요.')}</p>
       {error && <p className="error">{error}</p>}
       <div className="card">
         {sent ? (
-          <p>
-            <b>{email}</b>로 로그인 링크를 보냈어요. 15분 안에 메일의 링크를 눌러 주세요.
-          </p>
+          <p>{rich('{email}로 로그인 링크를 보냈어요. 15분 안에 메일의 링크를 눌러 주세요.', { email: <b>{email}</b> })}</p>
         ) : (
           <form
             onSubmit={(e) => {
@@ -54,29 +53,29 @@ export function LoginPage({ me, search }: { me: Me | null; search: string }) {
             }}
           >
             <label>
-              메일 주소
+              {t('메일 주소')}
               <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" />
             </label>
             <button className="button" disabled={busy}>
-              {busy ? '보내는 중…' : '로그인 링크 받기'}
+              {busy ? t('보내는 중…') : t('로그인 링크 받기')}
             </button>
           </form>
         )}
-        {(me?.providers.google || me?.providers.github) && <div className="or">또는</div>}
+        {(me?.providers.google || me?.providers.github) && <div className="or">{t('또는')}</div>}
         <div className="oauth">
           {me?.providers.google && (
             <a className="button ghost" href={oauth('google')}>
-              구글로 계속하기
+              {t('구글로 계속하기')}
             </a>
           )}
           {me?.providers.github && (
             <a className="button ghost" href={oauth('github')}>
-              GitHub로 계속하기
+              {t('GitHub로 계속하기')}
             </a>
           )}
         </div>
       </div>
-      <p className="muted small">같은 메일 주소면 어떤 방법으로 로그인해도 같은 계정이에요.</p>
+      <p className="muted small">{t('같은 메일 주소면 어떤 방법으로 로그인해도 같은 계정이에요.')}</p>
     </section>
   );
 }

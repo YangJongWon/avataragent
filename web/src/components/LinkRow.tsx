@@ -1,4 +1,5 @@
-export function LinkRow({ links, label = '바로가기' }: { links?: { label: string; url: string }[]; label?: string }) {
+import { t } from '../../../shared/i18n.ts';
+export function LinkRow({ links, label = t('바로가기') }: { links?: { label: string; url: string }[]; label?: string }) {
   if (!links?.length) return null;
   return (
     <div className="row wrap link-row">

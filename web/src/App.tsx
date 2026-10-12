@@ -9,7 +9,7 @@ import { Drawer } from './components/Drawer.tsx';
 import { HelpPanel } from './components/HelpPanel.tsx';
 import { CommunityTab } from './components/CommunityTab.tsx';
 import { HireTab } from './components/HireTab.tsx';
-import { AgentCardModal, HelpDialog, NewOfficeModal, NewTaskModal, PlanEditModal, RulesModal } from './components/Modals.tsx';
+import { AgentCardModal, HelpDialog, NewOfficeModal, NewTaskModal, RulesModal } from './components/Modals.tsx';
 import { McpTab } from './components/McpTab.tsx';
 import { ModelsTab } from './components/ModelsTab.tsx';
 import { ChatPanel, isMine } from './components/ChatPanel.tsx';
@@ -21,6 +21,7 @@ import { ProfitTab } from './components/ProfitTab.tsx';
 import { ProjectLounge } from './components/ProjectLounge.tsx';
 import { ReportPanel } from './components/ReportPanel.tsx';
 import { OfficeTabMenu } from './components/OfficeTabMenu.tsx';
+import { OfficeSettingsModal } from './components/OfficeSettingsModal.tsx';
 import { SettingsTab } from './components/SettingsTab.tsx';
 import { ShareModal } from './components/ShareModal.tsx';
 import { TeamDataPanel } from './components/TeamDataPanel.tsx';
@@ -29,7 +30,7 @@ import { WorkTab } from './components/WorkTab.tsx';
 import { krw, roleTitle } from './format.ts';
 import { OfficeView } from './office/OfficeView.tsx';
 import { useDemoPlayback } from './demoPlayback.ts';
-import { useCompact } from './useCompact.ts';
+import { useCompact, useStacked } from './useCompact.ts';
 import { useLanguage } from './LanguageProvider.tsx';
 import { tpl } from '../../shared/i18n.ts';
 import { officeTheme } from '../../shared/theme-pack.ts';
@@ -37,6 +38,7 @@ import { ThemesTab } from './components/ThemesTab.tsx';
 import { ThemeStudio } from './studio/ThemeStudio.tsx';
 import { themeApi } from './themeApi.ts';
 import { useThemePack } from './useThemePack.ts';
+import { currencyFor, saveCurrency, savedCurrency, setDisplayCurrency, type CurrencyChoice } from './currency.ts';
 
 type Tab = 'office' | 'lounge' | 'hire' | 'models' | 'mcp' | 'profit' | 'perf' | 'work' | 'members' | 'settings' | 'themes' | 'studio' | 'community';
 type Dialog =
@@ -44,7 +46,7 @@ type Dialog =
   | { kind: 'newOffice' }
   | { kind: 'help' }
   | { kind: 'share'; officeIds?: string[] }
-  | { kind: 'plan'; taskId: string }
+  | { kind: 'officeSettings'; officeId: string }
   | { kind: 'rules'; agentId: string }
   | { kind: 'card'; agentId: string }
   | null;
@@ -67,8 +69,13 @@ function officeIdOfEvent(event: OfficeEvent, snapshot: Snapshot) {
 }
 
 export function App() {
-  const { t, setLanguage } = useLanguage();
-  const { snapshot, events, connected, onEvent } = useOffice();
+  const { t, language } = useLanguage();
+  const { snapshot: rawSnapshot, events, connected, onEvent } = useOffice();
+  // 기본 직원 이름은 나라별 이름으로 보여 준다. 직접 지은 이름은 그대로 두고, 원래 이름은 sourceName에 남긴다.
+  const snapshot = useMemo(
+    () => (rawSnapshot ? { ...rawSnapshot, agents: rawSnapshot.agents.map((a) => (t(a.name) === a.name ? a : { ...a, name: t(a.name), sourceName: a.name })) } : rawSnapshot),
+    [rawSnapshot, language, t],
+  );
   const [tab, setTab] = useState<Tab>('office');
   const [officeId, setOfficeId] = useState('office_dev');
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -89,13 +96,44 @@ export function App() {
     setChatSeenAt(latestChatAt);
     localStorage.setItem('chatSeenAt', latestChatAt);
   }, [chatOpen, latestChatAt, chatSeenAt]);
-  // 서버가 들고 있는 언어를 provider에 밀어넣는다. provider가 App 위에 있어서
-  // 컨텍스트로는 값을 내려줄 수 없다. snapshot이 오기 전까지는 시드 언어로 그린다.
+  // 화면 언어와 통화는 사람마다 다르게 고를 수 있는 개인 설정이라 이 브라우저에만 저장한다.
+  // 서버의 언어 값은 AI 결과물을 쓸 언어(회사 공통)일 뿐 화면 언어를 바꾸지 않는다.
+  const [currencyChoice, setCurrencyChoice] = useState<CurrencyChoice>(savedCurrency);
+  const currency = currencyFor(currencyChoice, language);
+  const [, setFxVersion] = useState(0);
   useEffect(() => {
-    if (snapshot?.language) setLanguage(snapshot.language);
-  }, [snapshot?.language, setLanguage]);
+    let active = true;
+    if (currency === 'KRW') {
+      setDisplayCurrency('KRW', null);
+      setFxVersion((n) => n + 1);
+      return;
+    }
+    api.krwRate(currency).then(
+      ({ rate }) => {
+        if (!active) return;
+        setDisplayCurrency(currency, rate);
+        setFxVersion((n) => n + 1);
+      },
+      () => {
+        if (!active) return;
+        setDisplayCurrency('KRW', null);
+        setFxVersion((n) => n + 1);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [currency]);
+  const chooseCurrency = (choice: CurrencyChoice) => {
+    saveCurrency(choice);
+    setCurrencyChoice(choice);
+  };
   const demoPress = useRef<number | null>(null);
   const compact = useCompact();
+  const stacked = useStacked() && compact;
+  useEffect(() => {
+    if (stacked) setDrawer((d) => (d === 'flow' ? null : d));
+  }, [stacked]);
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
   const officeIdRef = useRef(officeId);
@@ -119,7 +157,7 @@ export function App() {
       expired: ['끝났거나 없는 결제예요.', 'error'],
     };
     const [text, tone] = message[result] ?? message.expired;
-    toast(text, tone);
+    toast(t(text), tone);
     if (result === 'success') setTab('members');
     url.searchParams.delete('billing');
     window.history.replaceState(null, '', url.pathname + url.search + url.hash);
@@ -133,13 +171,13 @@ export function App() {
         const here = eventOffice === null || eventOffice === officeIdRef.current;
         const officeName = snap?.offices.find((o) => o.id === eventOffice)?.name ?? '';
         if (event.type === 'task.created' && here && !event.payload.queued) setSelectedTaskId(event.taskId ?? null);
-        if (event.type === 'task.created' && event.payload.queued) toast(`${officeName} 대기열에 추가했어요: ${String(event.payload.title ?? '')}`);
-        if (event.type === 'budget.threshold_reached') toast('월 AI 예산의 80%를 사용했어요.', 'error');
-        if (event.type === 'budget.exceeded') toast(`${officeName || '회사'} 예산을 모두 써서 실행을 멈췄어요.`, 'error');
-        if (event.type === 'task.failed') toast(`${officeName} 업무가 중단됐어요: ${String(event.payload.reason ?? '')}`, 'error');
+        if (event.type === 'task.created' && event.payload.queued) toast(tpl('{officeName} 대기열에 추가했어요: {v}', { officeName, v: String(event.payload.title ?? '') }));
+        if (event.type === 'budget.threshold_reached') toast(t('월 AI 예산의 80%를 사용했어요.'), 'error');
+        if (event.type === 'budget.exceeded') toast(tpl('{v} 예산을 모두 써서 실행을 멈췄어요.', { v: officeName || t('회사') }), 'error');
+        if (event.type === 'task.failed') toast(tpl('{officeName} 업무가 중단됐어요: {v}', { officeName, v: String(event.payload.reason ?? '') }), 'error');
         if (event.type === 'team.applied') toast(`${officeName}: ${String(event.payload.summary ?? '')}`);
-        if (!here && event.type === 'agent.help_requested') toast(`${officeName} 직원이 곤란해하고 있어요. 탭을 눌러 도와주세요.`);
-        if (!here && event.type === 'approval.requested') toast(`${officeName}에서 승인을 기다리고 있어요.`);
+        if (!here && event.type === 'agent.help_requested') toast(tpl('{officeName} 직원이 곤란해하고 있어요. 탭을 눌러 도와주세요.', { officeName }));
+        if (!here && event.type === 'approval.requested') toast(tpl('{officeName}에서 승인을 기다리고 있어요.', { officeName }));
       }),
     [onEvent, toast],
   );
@@ -198,12 +236,12 @@ export function App() {
   );
 
   if (!snapshot || !view) {
-    return <div className="loading">사무실 문을 여는 중… {connected ? '' : '(서버 연결 대기)'}</div>;
+    return <div className="loading">{t('사무실 문을 여는 중…')} {connected ? '' : t('(서버 연결 대기)')}</div>;
   }
   if (snapshot.offices.length === 0) {
     return (
       <div className="loading">
-        공유받은 사무실이 없어요. 공유한 사람에게 새 링크를 받아 주세요. <a href="/logout">나가기</a>
+        {t('공유받은 사무실이 없어요. 공유한 사람에게 새 링크를 받아 주세요.')} <a href="/logout">{t('나가기')}</a>
       </div>
     );
   }
@@ -213,7 +251,7 @@ export function App() {
   const office = snapshot.offices.find((o) => o.id === officeId) ?? snapshot.offices[0];
   const themeId = officeTheme(office, snapshot.theme, snapshot.themeBookings);
   const allowed = (action: Action) => can(viewer, action, office.id);
-  const denied = (what: string) => toast(`지금 권한으로는 ${what}할 수 없어요.`, 'error');
+  const denied = (what: string) => toast(tpl('지금 권한으로는 {what}할 수 없어요.', { what }), 'error');
   const chatOn = planHas(snapshot.plan, 'chat') && viewer.kind !== 'share';
   const unread = chatOn ? snapshot.chat.filter((m) => m.at > chatSeenAt && !isMine(snapshot, m)).length : 0;
   const openChat = (channel: string) => {
@@ -251,11 +289,11 @@ export function App() {
   };
 
   const closeOffice = async (id: string, name: string) => {
-    if (!window.confirm(`"${name}" 사무실을 닫을까요? 직원과 업무 기록이 함께 사라져요.`)) return;
+    if (!window.confirm(tpl('"{name}" 사무실을 닫을까요? 직원과 업무 기록이 함께 사라져요.', { name }))) return;
     try {
       await api.deleteOffice(id);
       if (id === officeId) switchOffice('office_dev');
-      toast(`${name} 사무실을 닫았어요.`);
+      toast(tpl('{name} 사무실을 닫았어요.', { name }));
     } catch (e) {
       showError(e instanceof Error ? e.message : String(e));
     }
@@ -347,7 +385,7 @@ export function App() {
 
   const needsMeHere = view.tasks.filter((t) => t.status === 'awaiting_help' || t.status === 'awaiting_approval').length;
   const progress = task ? planProgress(task) : null;
-  const flowSummary = task && progress ? `${task.title} · ${currentStepLabel(task)} (${progress.done}/${progress.total})` : '아직 업무가 없어요';
+  const flowSummary = task && progress ? `${t(task.title)} · ${t(currentStepLabel(task))} (${progress.done}/${progress.total})` : t('아직 업무가 없어요');
 
   const scene = (
     <OfficeView
@@ -355,19 +393,19 @@ export function App() {
       snapshot={view}
       office={office}
       onEvent={officeOnEvent}
-      onNewTask={() => (allowed('operate') ? setDialog({ kind: 'newTask' }) : denied('업무를 등록'))}
+      onNewTask={() => (allowed('operate') ? setDialog({ kind: 'newTask' }) : denied(t('업무를 등록')))}
       onHelp={() => {
-        if (!allowed('operate')) return denied('도움 요청에 답');
+        if (!allowed('operate')) return denied(t('도움 요청에 답'));
         if (helpTask) setDialog({ kind: 'help' });
-        else toast('지금은 도움을 기다리는 직원이 없어요.');
+        else toast(t('지금은 도움을 기다리는 직원이 없어요.'));
       }}
       onShowTask={() => {
         setSelectedTaskId(view.tasks[0]?.id ?? null);
         if (compact) setDrawer('report');
       }}
-      onEditRules={(agentId) => (allowed('manage') ? setDialog({ kind: 'rules', agentId }) : denied('규칙을 편집'))}
+      onEditRules={(agentId) => (allowed('manage') ? setDialog({ kind: 'rules', agentId }) : denied(t('규칙을 편집')))}
       onShowCard={(agentId) => setDialog({ kind: 'card', agentId })}
-      onTogglePause={(agent) => (allowed('manage') ? togglePause(agent) : denied('직원을 멈추거나 재개'))}
+      onTogglePause={(agent) => (allowed('manage') ? togglePause(agent) : denied(t('직원을 멈추거나 재개')))}
     />
   );
   const workflow = (
@@ -376,7 +414,27 @@ export function App() {
       task={task}
       agents={view.agents}
       team={office.team}
-      onEdit={task?.status === 'queued' && allowed('operate') ? () => setDialog({ kind: 'plan', taskId: task.id }) : undefined}
+      dense={compact}
+      maxRows={stacked ? 3 : compact ? 2 : undefined}
+      edit={
+        allowed('operate')
+          ? {
+              officeId: office.id,
+              flows: snapshot.flows,
+              canManageFlows: isOwner,
+              canSaveFlows: isOwner,
+              onSave: async (steps) => {
+                await api.updatePlan(task!.id, steps);
+                toast(t('업무 여정을 저장했어요.'));
+              },
+              onSaveFlow: async (flow) => {
+                await api.saveFlow(flow, 'mine');
+                toast(t('다음 업무에서 쓸 흐름으로 저장했어요.'));
+              },
+              onError: showError,
+            }
+          : undefined
+      }
     />
   );
   const report = (
@@ -414,22 +472,24 @@ export function App() {
   return (
     <div className="app" {...themePack.attrs}>
         <header className="topbar">
-          <div className="brand">🏢 {snapshot.companyName}</div>
+          <div className="brand">
+            {planHas(snapshot.plan, 'companyLogo') ? <img className="brand-logo" src={snapshot.companyLogo ?? '/company-logo.png'} alt="" /> : '🏢'} {t(snapshot.companyName)}
+          </div>
           <nav className="main-tabs">
             {(
               [
-                ['office', '사무실'],
-                ['lounge', '프로젝트 라운지'],
-                ['hire', '직원 관리'],
-                ['themes', '테마'],
-                ['community', '커뮤니티'],
-                ['models', '모델 관리'],
-                ['mcp', 'MCP 관리'],
-                ['profit', '손익·결산'],
-                ['perf', '성과·개선'],
-                ['members', '플랜·구성원'],
-                ['settings', '환경 설정'],
-                ['work', '근무·효율'],
+                ['office', t('사무실')],
+                ['lounge', t('프로젝트 라운지')],
+                ['hire', t('직원 관리')],
+                ['themes', t('테마')],
+                ['community', t('커뮤니티')],
+                ['models', t('모델 관리')],
+                ['mcp', t('MCP 관리')],
+                ['profit', t('손익·결산')],
+                ['perf', t('성과·개선')],
+                ['members', t('플랜·구성원')],
+                ['settings', t('환경 설정')],
+                ['work', t('근무·효율')],
               ] as [Tab, string][]
             )
               .filter(([id]) => isOwner || id === 'office' || id === 'lounge')
@@ -460,7 +520,7 @@ export function App() {
               </button>
             )}
             {viewer.kind !== 'owner' && (
-              <span className="share-viewer" title={viewer.officeIds === 'all' ? t('전체 사무실') : `${viewer.officeIds.length}개 사무실`}>
+              <span className="share-viewer" title={viewer.officeIds === 'all' ? t('전체 사무실') : tpl('{officeIdsCount}개 사무실', { officeIdsCount: viewer.officeIds.length })}>
                 {viewer.kind === 'member' ? '🙂' : '👀'} {viewer.name} · {shareRoleLabel(viewer.role)}
                 <a href="/logout">{t('나가기')}</a>
               </span>
@@ -477,12 +537,12 @@ export function App() {
             )}
             <span
               className={`provider ${snapshot.provider}${demo ? ' demo' : ''}`}
-              title={`${snapshot.model}\n길게 누르기(우클릭): 사용법 데모`}
+              title={tpl('{model}\n길게 누르기(우클릭): 사용법 데모', { model: snapshot.model })}
               {...demoPressHandlers}
             >
-              {demo ? '📝 데모 중' : snapshot.provider === 'mock' ? '시뮬레이션' : snapshot.provider === 'agents' ? '직원별 AI' : snapshot.provider.toUpperCase()}
+              {demo ? t('📝 데모 중') : snapshot.provider === 'mock' ? t('시뮬레이션') : snapshot.provider === 'agents' ? t('직원별 AI') : snapshot.provider.toUpperCase()}
             </span>
-            <span className={`dot ${connected ? 'on' : 'off'}`} title={connected ? '서버 연결됨' : '연결 끊김'} />
+            <span className={`dot ${connected ? 'on' : 'off'}`} title={connected ? t('서버 연결됨') : t('연결 끊김')} />
           </div>
         </header>
 
@@ -504,16 +564,18 @@ export function App() {
                       press.current = null;
                       return;
                     }
-                    switchOffice(o.id);
+                    // 이미 고른 사무실을 한 번 더 누르면 그 사무실 설정을 연다.
+                    if (o.id === officeId) setDialog({ kind: 'officeSettings', officeId: o.id });
+                    else switchOffice(o.id);
                   }}
                   {...tabPressHandlers(o.id)}
-                  title={isOwner ? `${meta.description}\n우클릭(길게 누르기): 공유·닫기` : meta.description}
+                  title={[o.description || t(meta.description), o.id === officeId ? t('한 번 더 누르면 사무실 설정') : '', isOwner ? t('우클릭(길게 누르기): 공유·닫기') : ''].filter(Boolean).join('\n')}
                 >
-                  {meta.emoji} {o.name}
-                  {running && <span className="tab-running" title="일하는 중" />}
+                  {meta.emoji} {t(o.name)}
+                  {running && <span className="tab-running" title={t('일하는 중')} />}
                   {needsMe > 0 && <span className="tab-badge">{needsMe}</span>}
                   {waiting > 0 && (
-                    <span className="tab-queue" title={`대기 업무 ${waiting}건`}>
+                    <span className="tab-queue" title={tpl('대기 업무 {waiting}건', { waiting })}>
                       +{waiting}
                     </span>
                   )}
@@ -522,11 +584,13 @@ export function App() {
               );
             })}
             {isOwner && (
-              <button className="office-tab add" onClick={() => setDialog({ kind: 'newOffice' })} title="새 사무실 열기">
-                + 사무실
+              <button className="office-tab add" onClick={() => setDialog({ kind: 'newOffice' })} title={t('새 사무실 열기')}>
+                + {t('사무실')}
               </button>
             )}
-            <span className="office-tab-desc muted small">{team.description}</span>
+            <button type="button" className="office-tab-desc muted small link-button" title={t('사무실 설정')} onClick={() => setDialog({ kind: 'officeSettings', officeId: office.id })}>
+              {office.description || t(team.description)} ⚙️
+            </button>
           </nav>
         )}
         {tabMenu && menuOffice && (
@@ -536,8 +600,15 @@ export function App() {
             y={tabMenu.y}
             onClose={closeTabMenu}
             items={[
-              { label: '🔗 이 사무실 공유', run: () => setDialog({ kind: 'share', officeIds: [menuOffice.id] }) },
-              { label: '🏢 전체 사무실 공유', run: () => setDialog({ kind: 'share' }) },
+              {
+                label: t('⚙️ 사무실 설정'),
+                run: () => {
+                  switchOffice(menuOffice.id);
+                  setDialog({ kind: 'officeSettings', officeId: menuOffice.id });
+                },
+              },
+              { label: t('🔗 이 사무실 공유'), run: () => setDialog({ kind: 'share', officeIds: [menuOffice.id] }) },
+              { label: t('🏢 전체 사무실 공유'), run: () => setDialog({ kind: 'share' }) },
               {
                 label: t('🎨 테마 바꾸기'),
                 run: () => {
@@ -546,11 +617,11 @@ export function App() {
                 },
               },
               {
-                label: '🗑 사무실 닫기',
+                label: t('🗑 사무실 닫기'),
                 danger: true,
                 run: () => void closeOffice(menuOffice.id, menuOffice.name),
                 disabled: !menuOffice.custom || menuBusy,
-                hint: !menuOffice.custom ? '기본 사무실은 닫을 수 없어요' : menuBusy ? '진행 중인 업무가 끝나면 닫을 수 있어요' : undefined,
+                hint: !menuOffice.custom ? t('기본 사무실은 닫을 수 없어요') : menuBusy ? t('진행 중인 업무가 끝나면 닫을 수 있어요') : undefined,
               },
             ]}
           />
@@ -566,24 +637,28 @@ export function App() {
           </main>
         )}
         {tab === 'office' && compact && (
-          <main className="compact-main">
+          <main className={`compact-main${stacked ? ' stacked' : ''}`}>
             <div className="compact-stage">{scene}</div>
-            <Drawer
-              side="bottom"
-              open={drawer === 'flow'}
-              onOpenChange={(open) => setDrawer(open ? 'flow' : null)}
-              handle={
-                <>
-                  <span className="drawer-grip" />
-                  <span className="drawer-handle-text">
-                    업무 여정 · {flowSummary}
-                    {queuedCount > 0 && <span className="tab-queue">대기 {queuedCount}</span>}
-                  </span>
-                </>
-              }
-            >
-              {workflow}
-            </Drawer>
+            {stacked ? (
+              <section className="stacked-flow">{workflow}</section>
+            ) : (
+              <Drawer
+                side="bottom"
+                open={drawer === 'flow'}
+                onOpenChange={(open) => setDrawer(open ? 'flow' : null)}
+                handle={
+                  <>
+                    <span className="drawer-grip" />
+                    <span className="drawer-handle-text">
+                      {tpl('업무 여정 · {flowSummary}', { flowSummary })}
+                      {queuedCount > 0 && <span className="tab-queue">{t('대기')} {queuedCount}</span>}
+                    </span>
+                  </>
+                }
+              >
+                {workflow}
+              </Drawer>
+            )}
             <Drawer
               side="right"
               open={drawer === 'report'}
@@ -593,7 +668,7 @@ export function App() {
                 <>
                   {needsMeHere > 0 && <span className="tab-badge">{needsMeHere}</span>}
                   <span className="drawer-handle-vertical">
-                    {helpTask ? '도움 요청' : view.tasks.some((t) => t.status === 'awaiting_approval') ? '승인 대기' : '업무·보고'}
+                    {helpTask ? t('도움 요청') : view.tasks.some((t) => t.status === 'awaiting_approval') ? t('승인 대기') : t('업무·보고')}
                   </span>
                 </>
               }
@@ -623,7 +698,7 @@ export function App() {
         {tab === 'perf' && <PerformanceTab snapshot={snapshot} officeId={officeId} onError={showError} onNotice={toast} />}
         {tab === 'work' && <WorkTab snapshot={snapshot} onError={showError} onNotice={toast} />}
         {tab === 'members' && <MembersTab snapshot={snapshot} onError={showError} onNotice={toast} />}
-        {tab === 'settings' && <SettingsTab snapshot={snapshot} onError={showError} onNotice={toast} />}
+        {tab === 'settings' && <SettingsTab snapshot={snapshot} currency={currencyChoice} onCurrency={chooseCurrency} onError={showError} onNotice={toast} />}
         {tab === 'community' && (
           <main className="page">
             <CommunityTab flows={snapshot.flows ?? []} onError={showError} onNotice={toast} />
@@ -722,7 +797,7 @@ export function App() {
           <NewOfficeModal
             onCreated={(created) => {
               switchOffice(created.id);
-              toast(`${created.name} 사무실을 열었어요. 직원 4명이 출근했어요!`);
+              toast(tpl('{name} 사무실을 열었어요. 직원 4명이 출근했어요!', { name: created.name }));
             }}
             onClose={() => setDialog(null)}
             onError={showError}
@@ -745,13 +820,21 @@ export function App() {
         {dialog?.kind === 'share' && isOwner && (
           <ShareModal snapshot={snapshot} initialOfficeIds={dialog.officeIds} onClose={() => setDialog(null)} onError={showError} onNotice={toast} />
         )}
-        {dialog?.kind === 'plan' && view.tasks.find((t) => t.id === dialog.taskId) && (
-          <PlanEditModal
-            task={view.tasks.find((t) => t.id === dialog.taskId)!}
-            team={office.team}
-            agents={view.agents}
+        {dialog?.kind === 'officeSettings' && snapshot.offices.find((o) => o.id === dialog.officeId) && (
+          <OfficeSettingsModal
+            office={snapshot.offices.find((o) => o.id === dialog.officeId)!}
+            isOwner={isOwner}
+            canManage={can(viewer, 'manage', dialog.officeId)}
+            busy={snapshot.tasks.some((x) => x.officeId === dialog.officeId && ACTIVE.includes(x.status))}
+            onShare={() => setDialog({ kind: 'share', officeIds: [dialog.officeId] })}
+            onCloseOffice={() => {
+              const target = snapshot.offices.find((o) => o.id === dialog.officeId)!;
+              setDialog(null);
+              void closeOffice(target.id, target.name);
+            }}
             onClose={() => setDialog(null)}
             onError={showError}
+            onNotice={toast}
           />
         )}
         {dialog?.kind === 'help' && helpTask?.help && agentById(helpTask.help.agentId) && (

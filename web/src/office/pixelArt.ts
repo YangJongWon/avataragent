@@ -1,5 +1,5 @@
 import type { Graphics } from 'pixi.js';
-import type { HatShape, Tier } from '../../../shared/models.ts';
+import type { HatShape, TierLook } from '../../../shared/models.ts';
 import type { Expression, Role, Skin } from '../../../shared/types.ts';
 
 export const S = 3;
@@ -273,7 +273,8 @@ function shade(hex: string, amount: number) {
     .join('')}`;
 }
 
-export function drawHat(g: Graphics, hat: HatShape, color: string, tier: Tier) {
+/** `look` is where the model's tier sits (tierLook): 1 the lowest, 3 the highest in use. */
+export function drawHat(g: Graphics, hat: HatShape, color: string, look: TierLook) {
   g.clear();
   switch (hat) {
     case 'beanie':
@@ -340,13 +341,13 @@ export function drawHat(g: Graphics, hat: HatShape, color: string, tier: Tier) {
       break;
   }
 
-  if (tier >= 2) {
+  if (look >= 2) {
     const band = HAT_BAND[hat];
     px(g, band.x, band.y, band.w, 1, GOLD);
     px(g, band.x, band.y, 1, 1, GOLD_DARK);
     px(g, band.x + band.w - 1, band.y, 1, 1, GOLD_DARK);
   }
-  if (tier === 3) {
+  if (look === 3) {
     const top = HAT_TOP[hat];
     px(g, -1, top - 1, 3, 1, GOLD);
     px(g, -1, top - 2, 1, 1, GOLD);

@@ -117,7 +117,7 @@ export function CommunityTab({ flows, onError, onNotice }: Props) {
       </div>
 
       {failure ? (
-        <p className="neg small">{failure}</p>
+        <p className="neg small">{t(failure)}</p>
       ) : result === null ? (
         <p className="muted small">{t('불러오는 중…')}</p>
       ) : result.items.length === 0 ? (

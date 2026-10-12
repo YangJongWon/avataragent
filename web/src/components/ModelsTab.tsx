@@ -7,13 +7,17 @@ import {
   companyLinks,
   hatName,
   linkLabel,
+  MAX_TIER,
+  TIER_LABEL,
   tierHat,
   tierLabel,
+  tiersInUse,
   type ApiKind,
   type Company,
   type HatShape,
   type ModelEntry,
   type Tier,
+  type TierLook,
 } from '../../../shared/models.ts';
 import type { AiMode, Snapshot } from '../../../shared/types.ts';
 import { api, type CompanyInput, type ModelAdvice, type ModelInput } from '../api.ts';
@@ -22,16 +26,24 @@ import { LinkRow } from './LinkRow.tsx';
 
 type Notify = { onError: (m: string) => void; onNotice: (m: string) => void };
 
-const TIERS: Tier[] = [1, 2, 3];
+const LOOKS: TierLook[] = [1, 2, 3];
+
+/** The tiers in use, the one being edited, and one past each end, so a new lowest or highest tier can be made. */
+function tierChoices(current: Tier): Tier[] {
+  const used = tiersInUse();
+  const low = Math.min(...used, current);
+  const high = Math.max(...used, current);
+  return [...new Set([...(low > 1 ? [low - 1] : []), ...used, current, ...(high < MAX_TIER ? [high + 1] : [])])].sort((a, b) => a - b);
+}
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 const PROVIDER_LABEL: Record<string, string> = {
-  mock: '시뮬레이션',
-  agents: '직원별 실제 AI',
-  openai: 'OpenAI 하나로 호출',
-  anthropic: 'Anthropic 하나로 호출',
-  gemini: 'Gemini 하나로 호출',
-  xai: 'xAI 하나로 호출',
+  mock: t('시뮬레이션'),
+  agents: t('직원별 실제 AI'),
+  openai: t('OpenAI 하나로 호출'),
+  anthropic: t('Anthropic 하나로 호출'),
+  gemini: t('Gemini 하나로 호출'),
+  xai: t('xAI 하나로 호출'),
 };
 
 function KeyBadge({ company }: { company: Company }) {
@@ -142,8 +154,8 @@ function CompanyForm({ company, onDone, onError, onNotice }: { company: Company 
   return (
     <div className="company-form">
       <div className="company-form-preview">
-        {TIERS.map((tier) => (
-          <HatPreview key={tier} hat={form.hat} color={form.color} tier={tier} title={tierLabel(tier)} />
+        {LOOKS.map((look) => (
+          <HatPreview key={look} hat={form.hat} color={form.color} look={look} title={t(TIER_LABEL[look])} />
         ))}
       </div>
       {!company && (
@@ -331,10 +343,10 @@ function ModelForm({
           </label>
           <label className="field grow">
             {t('등급 (장식)')}
-            <select value={form.tier} onChange={(e) => set({ tier: Number(e.target.value) as Tier })}>
-              {TIERS.map((tier) => (
+            <select value={form.tier} onChange={(e) => set({ tier: Number(e.target.value) })}>
+              {tierChoices(form.tier).map((tier) => (
                 <option key={tier} value={tier}>
-                  {tierLabel(tier)} · {tierHat(tier)}
+                  {tiersInUse().includes(tier) ? `${tierLabel(tier)} · ${tierHat(tier)}` : tpl('{n}등급 (새 등급)', { n: tier })}
                 </option>
               ))}
             </select>
@@ -526,8 +538,8 @@ export function ModelsTab({ snapshot, onError, onNotice }: { snapshot: Snapshot 
             ) : (
               <div key={c.id} className="company-card">
                 <div className="company-hats">
-                  {TIERS.map((tier) => (
-                    <HatPreview key={tier} hat={c.hat} color={c.color} tier={tier} title={tierLabel(tier)} />
+                  {LOOKS.map((look) => (
+                    <HatPreview key={look} hat={c.hat} color={c.color} look={look} title={t(TIER_LABEL[look])} />
                   ))}
                 </div>
                 <div className="company-name">

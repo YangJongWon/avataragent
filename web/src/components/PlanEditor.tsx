@@ -1,42 +1,14 @@
-import { t } from '../../../shared/i18n.ts';
+import { t, tpl } from '../../../shared/i18n.ts';
 import { TEAMS } from '../../../shared/teams.ts';
-import type { Agent, StepKind, StepLoop, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
-import {
-  LOOP_PLACEHOLDER,
-  LOOPABLE,
-  loopTargets,
-  MAX_LOOP,
-  MAX_PLAN_STEPS,
-  remapLoops,
-  reviewLoop,
-  STEP_KIND,
-  stepKindHint,
-  stepKindTitle,
-  validatePlan,
-} from '../../../shared/workflow.ts';
+import type { Agent, StepLoop, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
+import { LOOP_PLACEHOLDER, LOOPABLE, loopTargets, MAX_LOOP, MAX_PLAN_STEPS, STEP_KIND, stepKindHint, stepKindTitle, validatePlan } from '../../../shared/workflow.ts';
+import { canMove as canMoveStep, canRemove, defaultLoop, insertIndex, insertStep, moveStep, removeStep } from '../planOps.ts';
 
 interface Props {
   team: TeamId;
   agents: Agent[];
   steps: WorkflowStepInput[];
   onChange: (steps: WorkflowStepInput[]) => void;
-}
-
-const REMOVABLE: StepKind[] = ['research', 'review'];
-
-/** After a move, a loop may point past where it is allowed; pull it back to the nearest valid step. */
-function clampLoops(steps: WorkflowStepInput[]) {
-  return steps.map((s, i) => {
-    if (!s.loop) return s;
-    const targets = loopTargets(steps, i);
-    if (targets.includes(s.loop.to)) return s;
-    return { ...s, loop: { ...s.loop, to: targets.at(-1) ?? i } };
-  });
-}
-
-function defaultLoop(steps: WorkflowStepInput[], index: number): StepLoop {
-  if (steps[index].kind === 'review') return reviewLoop(steps);
-  return { to: index, when: (LOOP_PLACEHOLDER[steps[index].kind] ?? '').replace(/^예:\s*/, ''), max: 1 };
 }
 
 export function PlanEditor({ team, agents, steps, onChange }: Props) {
@@ -48,28 +20,12 @@ export function PlanEditor({ team, agents, steps, onChange }: Props) {
     onChange(steps.map((s, i) => (i === index ? { ...s, ...patch } : s)));
   const updateLoop = (index: number, patch: Partial<StepLoop>) => update(index, { loop: { ...steps[index].loop!, ...patch } });
 
-  const move = (index: number, delta: -1 | 1) => {
-    const other = index + delta;
-    const next = remapLoops(steps, (i) => (i === index ? other : i === other ? index : i));
-    [next[index], next[other]] = [next[other], next[index]];
-    onChange(clampLoops(next));
-  };
-  const canMove = (index: number, delta: -1 | 1) => {
-    const other = steps[index + delta];
-    return Boolean(other) && other.kind === steps[index].kind;
-  };
-
-  const remove = (index: number) =>
-    onChange(remapLoops(steps, (i) => (i === index ? null : i > index ? i - 1 : i)).filter((_, j) => j !== index));
-
+  const move = (index: number, delta: -1 | 1) => onChange(moveStep(steps, index, delta));
+  const canMove = (index: number, delta: -1 | 1) => canMoveStep(steps, index, delta);
+  const remove = (index: number) => onChange(removeStep(steps, index));
   const insert = (kind: 'research' | 'review') => {
-    const at = kind === 'research' ? steps.findIndex((s) => s.kind === 'draft') : steps.length - 1;
-    const meta = STEP_KIND[kind];
-    const owner = agents.find((a) => a.role === meta.role)?.id ?? agents[0]?.id ?? null;
-    const next = remapLoops(steps, (i) => (i >= at ? i + 1 : i));
-    next.splice(at, 0, { kind, label: kind === 'research' ? '추가 조사' : '추가 검토', agentId: owner, instructions: '', loop: null });
-    if (kind === 'review') next[at] = { ...next[at], loop: reviewLoop(next) };
-    onChange(next);
+    const at = insertIndex(steps, kind, null);
+    if (at !== null) onChange(insertStep(steps, kind, agents, at, kind === 'research' ? t('추가 조사') : t('추가 검토')));
   };
 
   return (
@@ -88,18 +44,18 @@ export function PlanEditor({ team, agents, steps, onChange }: Props) {
                   value={step.label}
                   maxLength={20}
                   onChange={(e) => update(i, { label: e.target.value })}
-                  aria-label={`${i + 1}단계 이름`}
+                  aria-label={tpl('{v}단계 이름', { v: i + 1 })}
                 />
               </div>
               <div className="plan-step-row">
                 {step.kind === 'approval' ? (
-                  <span className="plan-step-owner muted small">🙋 사용자(나) · 수정 요청하면 결과물 작성으로 돌아가요</span>
+                  <span className="plan-step-owner muted small">{t('🙋 사용자(나) · 수정 요청하면 결과물 작성으로 돌아가요')}</span>
                 ) : (
                   <select
                     className="plan-step-owner"
                     value={step.agentId ?? ''}
                     onChange={(e) => update(i, { agentId: e.target.value })}
-                    aria-label={`${i + 1}단계 담당자`}
+                    aria-label={tpl('{v}단계 담당자', { v: i + 1 })}
                   >
                     {agents.map((a) => (
                       <option key={a.id} value={a.id}>
@@ -109,18 +65,18 @@ export function PlanEditor({ team, agents, steps, onChange }: Props) {
                   </select>
                 )}
                 <span className="plan-step-tools">
-                  <button type="button" className="icon-btn" disabled={!canMove(i, -1)} onClick={() => move(i, -1)} title="위로">
+                  <button type="button" className="icon-btn" disabled={!canMove(i, -1)} onClick={() => move(i, -1)} title={t('위로')}>
                     ▲
                   </button>
-                  <button type="button" className="icon-btn" disabled={!canMove(i, 1)} onClick={() => move(i, 1)} title="아래로">
+                  <button type="button" className="icon-btn" disabled={!canMove(i, 1)} onClick={() => move(i, 1)} title={t('아래로')}>
                     ▼
                   </button>
                   <button
                     type="button"
                     className="icon-btn"
-                    disabled={!REMOVABLE.includes(step.kind)}
+                    disabled={!canRemove(steps, i)}
                     onClick={() => remove(i)}
-                    title={REMOVABLE.includes(step.kind) ? '단계 빼기' : '꼭 필요한 단계예요'}
+                    title={canRemove(steps, i) ? t('단계 빼기') : t('꼭 필요한 단계예요')}
                   >
                     ✕
                   </button>
@@ -131,7 +87,7 @@ export function PlanEditor({ team, agents, steps, onChange }: Props) {
                   className="plan-step-note"
                   value={step.instructions}
                   maxLength={300}
-                  placeholder="이 단계에만 줄 지시 (선택)"
+                  placeholder={t('이 단계에만 줄 지시 (선택)')}
                   onChange={(e) => update(i, { instructions: e.target.value })}
                 />
               )}
@@ -143,9 +99,9 @@ export function PlanEditor({ team, agents, steps, onChange }: Props) {
                       checked={Boolean(step.loop)}
                       onChange={(e) => update(i, { loop: e.target.checked ? defaultLoop(steps, i) : null })}
                     />
-                    🔁 {step.kind === 'review' ? '반려되면 되돌리기' : '조건이 맞으면 되돌리기'}
+                    🔁 {step.kind === 'review' ? t('반려되면 되돌리기') : t('조건이 맞으면 되돌리기')}
                   </label>
-                  {!step.loop && step.kind === 'review' && <span className="small muted">끄면 의견만 남기고 넘어가요</span>}
+                  {!step.loop && step.kind === 'review' && <span className="small muted">{t('끄면 의견만 남기고 넘어가요')}</span>}
                   {step.loop && (
                     <div className="plan-loop-fields">
                       <input
@@ -153,27 +109,27 @@ export function PlanEditor({ team, agents, steps, onChange }: Props) {
                         maxLength={60}
                         placeholder={LOOP_PLACEHOLDER[step.kind]}
                         onChange={(e) => updateLoop(i, { when: e.target.value })}
-                        aria-label={`${i + 1}단계 반복 조건`}
+                        aria-label={tpl('{v}단계 반복 조건', { v: i + 1 })}
                       />
                       <select
                         value={step.loop.to}
                         onChange={(e) => updateLoop(i, { to: Number(e.target.value) })}
-                        aria-label={`${i + 1}단계 되돌아갈 단계`}
+                        aria-label={tpl('{v}단계 되돌아갈 단계', { v: i + 1 })}
                       >
-                        {loopTargets(steps, i).map((t) => (
-                          <option key={t} value={t}>
-                            {t === i ? '이 단계 다시' : `${t + 1}. ${steps[t].label}(으)로`}
+                        {loopTargets(steps, i).map((to) => (
+                          <option key={to} value={to}>
+                            {to === i ? t('이 단계 다시') : tpl('{n}. {label}(으)로', { n: to + 1, label: t(steps[to].label) })}
                           </option>
                         ))}
                       </select>
                       <select
                         value={step.loop.max}
                         onChange={(e) => updateLoop(i, { max: Number(e.target.value) })}
-                        aria-label={`${i + 1}단계 최대 반복`}
+                        aria-label={tpl('{v}단계 최대 반복', { v: i + 1 })}
                       >
                         {Array.from({ length: MAX_LOOP }, (_, n) => n + 1).map((n) => (
                           <option key={n} value={n}>
-                            최대 {n}회
+                            {tpl('최대 {n}회', { n })}
                           </option>
                         ))}
                       </select>
@@ -187,10 +143,10 @@ export function PlanEditor({ team, agents, steps, onChange }: Props) {
       </ol>
       <div className="row">
         <button type="button" className="pixel-btn small" disabled={full} onClick={() => insert('research')}>
-          + 조사·분석 단계
+          {t('+ 조사·분석 단계')}
         </button>
         <button type="button" className="pixel-btn small" disabled={full} onClick={() => insert('review')}>
-          + 검토 단계
+          {t('+ 검토 단계')}
         </button>
       </div>
       {error && <p className="small neg">{error}</p>}

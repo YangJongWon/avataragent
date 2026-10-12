@@ -17,13 +17,46 @@ import { diskStorage, filesDir, type FileStorage } from './storage.ts';
 
 const ROOT = resolve(import.meta.dirname, '..', '..');
 
-/** Documents the site renders, by slug; only these files can be read through the API. */
-export const DOCS: Record<string, { file: string; title: string }> = {
-  'theme-guide': { file: 'docs/THEME_GUIDE.md', title: '테마 만들기' },
-  operations: { file: 'OPERATIONS.md', title: '운영 가이드' },
-  licensing: { file: 'LICENSING.md', title: '라이선스' },
-  contributing: { file: 'CONTRIBUTING.md', title: '기여 안내' },
+/**
+ * The visitor's country (ISO 3166 alpha-2) from the geo header the CDN or host in front of the site adds,
+ * so the page can open in that country's language. Null when nothing in front sets one (local runs).
+ */
+const COUNTRY_HEADERS = ['cf-ipcountry', 'x-vercel-ip-country', 'cloudfront-viewer-country', 'x-appengine-country', 'x-country-code'];
+function countryOf(req: Request): string | null {
+  for (const name of COUNTRY_HEADERS) {
+    const value = String(req.headers[name] ?? '').trim().toUpperCase();
+    // XX: unknown, T1: Tor (Cloudflare).
+    if (/^[A-Z]{2}$/.test(value) && value !== 'XX') return value;
+  }
+  return null;
+}
+
+type DocLanguage = 'ko' | 'zh' | 'ja' | 'en';
+
+/**
+ * Documents the site renders, by slug; only these files can be read through the API.
+ * Translations sit next to the Korean file the way the READMEs do: X.en.md, X.ja.md, X.zh-CN.md.
+ */
+export const DOCS: Record<string, { file: string; title: Record<DocLanguage, string> }> = {
+  'theme-guide': { file: 'docs/THEME_GUIDE.md', title: { ko: '테마 만들기', zh: '制作主题', ja: 'テーマの作り方', en: 'Making themes' } },
+  operations: { file: 'OPERATIONS.md', title: { ko: '운영 가이드', zh: '运营指南', ja: '運用ガイド', en: 'Operations guide' } },
+  licensing: { file: 'LICENSING.md', title: { ko: '라이선스', zh: '许可', ja: 'ライセンス', en: 'Licensing' } },
+  privacy: { file: 'docs/PRIVACY.md', title: { ko: '개인정보 처리방침', zh: '隐私政策', ja: 'プライバシーポリシー', en: 'Privacy policy' } },
+  contributing: { file: 'CONTRIBUTING.md', title: { ko: '기여 안내', zh: '贡献指南', ja: 'コントリビュートの案内', en: 'Contributing' } },
 };
+
+const DOC_SUFFIX: Record<DocLanguage, string> = { ko: '', zh: '.zh-CN', ja: '.ja', en: '.en' };
+const docLanguage = (value: unknown): DocLanguage => (value === 'zh' || value === 'ja' || value === 'en' ? value : 'ko');
+
+/** The asked language's file, else English (closer than Korean for most visitors), else the Korean source. */
+function readDoc(file: string, language: DocLanguage) {
+  const order: DocLanguage[] = language === 'ko' ? ['ko'] : [language, 'en', 'ko'];
+  for (const lang of order) {
+    const path = join(ROOT, file.replace(/\.md$/, `${DOC_SUFFIX[lang]}.md`));
+    if (existsSync(path)) return { language: lang, markdown: readFileSync(path, 'utf8') };
+  }
+  return { language: 'ko' as const, markdown: readFileSync(join(ROOT, file), 'utf8') };
+}
 
 export interface SiteDeps {
   db: Db;
@@ -100,9 +133,9 @@ export function createSiteApp(deps: SiteDeps) {
     res.status(204).end();
   });
 
-  app.get('/api/me', async (_req, res) => {
+  app.get('/api/me', async (req, res) => {
     const account = res.locals.account as Account | null;
-    res.json({ account: publicAccount(account, account ? await creators.handleOf(account.id) : null), providers: auth.providers() });
+    res.json({ account: publicAccount(account, account ? await creators.handleOf(account.id) : null), providers: auth.providers(), country: countryOf(req) });
   });
 
   // ── public content ─────────────────────────────────────────
@@ -110,14 +143,16 @@ export function createSiteApp(deps: SiteDeps) {
     res.json(PLANS);
   });
 
-  app.get('/api/docs', (_req, res) => {
-    res.json(Object.entries(DOCS).map(([slug, d]) => ({ slug, title: d.title })));
+  app.get('/api/docs', (req, res) => {
+    const language = docLanguage(req.query.lang);
+    res.json(Object.entries(DOCS).map(([slug, d]) => ({ slug, title: d.title[language] })));
   });
 
   app.get('/api/docs/:slug', (req, res) => {
     const doc = DOCS[req.params.slug];
     if (!doc) return void res.status(404).json({ error: '없는 문서예요.' });
-    res.json({ title: doc.title, markdown: readFileSync(join(ROOT, doc.file), 'utf8') });
+    const language = docLanguage(req.query.lang);
+    res.json({ title: doc.title[language], ...readDoc(doc.file, language) });
   });
 
   // ── plan sales ─────────────────────────────────────────────

@@ -1,19 +1,18 @@
-import { companyOf, modelOf, TIER_LABEL } from '../../shared/models.ts';
+import { companyOf, modelOf, tierLabel } from '../../shared/models.ts';
 import { currentLanguage, localeOf, num, t, tpl, type Vars } from '../../shared/i18n.ts';
 import { improvementReasonVars } from '../../shared/performance.ts';
 import { TEAMS } from '../../shared/teams.ts';
 import type { Agent, Office, OfficeEvent, TaskStatus } from '../../shared/types.ts';
+import { formatMoney } from './currency.ts';
 
 export function modelLabel(id: string) {
   const m = modelOf(id);
-  return `${m.label} · ${t(TIER_LABEL[m.tier])} (${companyOf(m.vendor).name})`;
+  return `${m.label} · ${tierLabel(m.tier)} (${companyOf(m.vendor).name})`;
 }
 
+/** Money is stored in KRW; this shows it in the viewer's chosen currency. */
 export function krw(value: number) {
-  const abs = Math.abs(value);
-  const digits = abs > 0 && abs < 100 ? 2 : 0;
-  const text = abs.toLocaleString(localeOf(currentLanguage()), { minimumFractionDigits: 0, maximumFractionDigits: digits });
-  return `${value < 0 ? '-' : ''}₩${text}`;
+  return formatMoney(value);
 }
 
 export function roi(value: number, cost: number) {
@@ -144,6 +143,8 @@ export function eventLabel(event: OfficeEvent, agents: Map<string, Agent>) {
       return t('기간별 테마 변경');
     case 'theme.site':
       return t('사이트 테마 변경');
+    case 'company.logo':
+      return t('회사 로고 변경');
     case 'office.created':
       return t('사무실 개설');
     case 'office.removed':

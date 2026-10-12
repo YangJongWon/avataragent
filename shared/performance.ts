@@ -197,12 +197,13 @@ export function perfLines(agents: Agent[], records: PerfRecord[]) {
     .filter(Boolean);
 }
 
-/** The next tier up (or down) at the same company, cheapest first. */
+/** The nearest tier up (or down) the same company has, skipping tiers it has no model in; cheapest first. */
 function neighborModel(models: ModelEntry[], current: ModelEntry | undefined, step: 1 | -1) {
   if (!current) return undefined;
-  return models
-    .filter((m) => m.vendor === current.vendor && m.tier === current.tier + step)
-    .sort((a, b) => a.priceOutPerMTokUsd - b.priceOutPerMTokUsd)[0];
+  const same = models.filter((m) => m.vendor === current.vendor && (m.tier - current.tier) * step > 0);
+  if (!same.length) return undefined;
+  const next = step > 0 ? Math.min(...same.map((m) => m.tier)) : Math.max(...same.map((m) => m.tier));
+  return same.filter((m) => m.tier === next).sort((a, b) => a.priceOutPerMTokUsd - b.priceOutPerMTokUsd)[0];
 }
 
 /**

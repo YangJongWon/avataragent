@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const { STATE_FALLBACK, THEME_STATES, accessoriesFor, adoptCompanyTheme, characterFor, officeTheme, isSafePath, manifestFiles, parseThemeManifest, portraitFor, resolveState, splitPackSkin } = await import(
+const { STATE_FALLBACK, THEME_STATES, accessoriesFor, accessoryLabelFor, adoptCompanyTheme, characterFor, characterLayers, formFor, officeTheme, isSafePath, manifestFiles, parseThemeManifest, portraitFor, resolveState, splitPackSkin } = await import(
   '../shared/theme-pack.ts'
 );
 const { DEFAULT_LAYOUT, FEET_MAX_Y, mergeLayout } = await import('../web/src/office/theme.ts');
@@ -155,12 +155,12 @@ test('accessories stack by tier and fall back to the any-company set', () => {
     '*': { '2': [{ image: 'assets/room.png' }] },
   };
   const theme = parseThemeManifest(t, files);
-  assert.equal(accessoriesFor(theme.accessories, 'claude', 1)?.length, 1);
-  assert.equal(accessoriesFor(theme.accessories, 'claude', 2)?.length, 1, 'claude has no tier 2 layer of its own');
-  assert.deepEqual(accessoriesFor(theme.accessories, 'claude', 3)?.map((l) => l.at), ['head', 'hand']);
-  assert.deepEqual(accessoriesFor(theme.accessories, 'gpt', 1), [], 'the any-company set starts at tier 2, so tier 1 wears nothing, not a pixel hat');
-  assert.equal(accessoriesFor(theme.accessories, 'gpt', 3)?.length, 1);
-  assert.equal(accessoriesFor(parseThemeManifest(minimal(), files).accessories, 'claude', 3), null);
+  assert.equal(accessoriesFor(theme, { id: 'claude-x', vendor: 'claude', tier: 1 })?.length, 1);
+  assert.equal(accessoriesFor(theme, { id: 'claude-x', vendor: 'claude', tier: 2 })?.length, 1, 'claude has no tier 2 layer of its own');
+  assert.deepEqual(accessoriesFor(theme, { id: 'claude-x', vendor: 'claude', tier: 3 })?.map((l) => l.at), ['head', 'hand']);
+  assert.deepEqual(accessoriesFor(theme, { id: 'gpt-x', vendor: 'gpt', tier: 1 }), [], 'the any-company set starts at tier 2, so tier 1 wears nothing, not a pixel hat');
+  assert.equal(accessoriesFor(theme, { id: 'gpt-x', vendor: 'gpt', tier: 3 })?.length, 1);
+  assert.equal(accessoriesFor(parseThemeManifest(minimal(), files), { id: 'claude-opus', vendor: 'claude', tier: 3 }), null);
   assert.deepEqual(theme.characters[0].hand, { x: 0.8, y: 0.6 });
   assert.ok(manifestFiles(theme).includes('assets/mina.png'));
 
@@ -168,6 +168,74 @@ test('accessories stack by tier and fall back to the any-company set', () => {
   broken({ 'Bad Name': { '1': [] } }, /모델사 이름/);
   broken({ claude: { '1': [{ image: '../x.png' }] } }, /경로/);
   broken({ claude: { '1': 'nope' } }, /목록/);
+});
+
+test('a model of its own wears its set instead of its company and tier set', () => {
+  const t = minimal() as any;
+  t.accessories = { claude: { '1': [{ image: 'assets/room.png' }], '3': [{ image: 'assets/room.png', at: 'hand' }] } };
+  t.modelAccessories = { 'claude-opus': [{ image: 'assets/mina.png', at: 'head', y: -4 }] };
+  const theme = parseThemeManifest(t, files);
+  assert.deepEqual(accessoriesFor(theme, { id: 'claude-opus', vendor: 'claude', tier: 3 })?.map((l) => l.image), ['assets/mina.png'], 'tiers do not stack under a model set');
+  assert.equal(accessoriesFor(theme, { id: 'claude-next', vendor: 'claude', tier: 3 })?.length, 2, 'other tier 3 models keep the company set');
+  assert.deepEqual(accessoriesFor(theme, { id: 'gpt-pro', vendor: 'gpt', tier: 3 }), null);
+  assert.ok(manifestFiles(theme).includes('assets/mina.png'));
+
+  const broken = (modelAccessories: unknown, message: RegExp) => assert.throws(() => parseThemeManifest({ ...minimal(), modelAccessories }, files), message);
+  broken({ 'Bad Id': [] }, /모델 id/);
+  broken({ 'claude-opus': 'nope' }, /목록/);
+  broken({ 'claude-opus': [{ image: '../x.png' }] }, /경로/);
+});
+
+test('a character takes a look per model tier, and a model of its own over that', () => {
+  const t = minimal() as any;
+  const ssj = new Set([...files, 'assets/ssj1.png', 'assets/ssj2.png', 'assets/ssj4.png', 'assets/aura.png', 'assets/ssj4-face.png', 'assets/hair.png']);
+  t.characters[0].portraits = { normal: 'assets/mina.png' };
+  t.characters[0].outfits = [{ id: 'casual', parts: { head: 'assets/room.png' } }];
+  t.characters[0].forms = {
+    tiers: {
+      '1': { name: '초사이언 1', parts: { head: 'assets/hair.png' } },
+      '2': { name: { ko: '초사이언 2', en: 'Super Saiyan 2' }, sheet: 'assets/ssj2.png', accessories: [{ image: 'assets/aura.png', at: 'head' }] },
+    },
+    models: { 'claude-opus': { name: '초사이언 4', sheet: 'assets/ssj4.png', portraits: { normal: 'assets/ssj4-face.png' } } },
+  };
+  const theme = parseThemeManifest(t, ssj);
+  const mina = theme.characters[0];
+  assert.equal(formFor(mina, { id: 'claude-haiku', tier: 1 })?.key, 'tier:1');
+  assert.equal(formFor(mina, { id: 'gpt', tier: 2 })?.form.sheet, 'assets/ssj2.png');
+  assert.equal(formFor(mina, { id: 'claude-opus', tier: 3 })?.key, 'model:claude-opus', "the model's own look wins over its tier's");
+  assert.equal(formFor(mina, { id: 'gpt-pro', tier: 3 })?.key, 'tier:2', 'no tier 3 look: the nearest tier below');
+  assert.equal(formFor(mina, { id: 'next', tier: 7 })?.key, 'tier:2', 'tiers past the theme keep its highest look');
+  assert.equal(formFor({ ...mina, forms: { tiers: { '2': mina.forms!.tiers['2'] }, models: {} } }, { id: 'x', tier: 1 }), null, 'below the lowest look: the usual character');
+
+  const tier1 = formFor(mina, { id: 'x', tier: 1 })!.form;
+  const tier2 = formFor(mina, { id: 'x', tier: 2 })!.form;
+  assert.deepEqual(characterLayers(mina, 'casual', tier1), ['assets/mina.png', 'assets/hair.png'], 'form parts come over the outfit');
+  assert.deepEqual(characterLayers(mina, 'casual', tier2), ['assets/ssj2.png'], 'a form sheet replaces the outfit too');
+  assert.deepEqual(characterLayers(mina, 'casual'), ['assets/mina.png', 'assets/room.png']);
+  assert.equal(tier2.accessories?.[0].image, 'assets/aura.png');
+  assert.equal(portraitFor(mina, 'smile', formFor(mina, { id: 'claude-opus', tier: 3 })!.form), 'assets/ssj4-face.png');
+  assert.equal(portraitFor(mina, 'smile', tier1), 'assets/mina.png', "a form without portraits keeps the character's");
+  for (const path of ['assets/ssj2.png', 'assets/ssj4.png', 'assets/aura.png', 'assets/ssj4-face.png', 'assets/hair.png']) assert.ok(manifestFiles(theme).includes(path), path);
+  assert.deepEqual(parseThemeManifest(JSON.parse(JSON.stringify(theme)), ssj), theme);
+
+  const broken = (forms: unknown, message: RegExp) =>
+    assert.throws(() => parseThemeManifest({ ...minimal(), characters: [{ ...minimal().characters[0], forms }] }, ssj), message);
+  broken({ tiers: { '2': {} } }, /하나는 있어야/);
+  broken({ models: { 'Bad Id': { sheet: 'assets/ssj4.png' } } }, /모델별 모습 id/);
+  broken({ tiers: { '1': { sheet: 'assets/missing.png' } } }, /없어요|패키지/);
+});
+
+test('theme tiers are open-ended: any tier number, the nearest below for the rest', () => {
+  const t = minimal() as any;
+  t.accessories = { '*': { '1': [{ image: 'assets/room.png' }], '5': [{ image: 'assets/mina.png', at: 'hand' }] } };
+  t.accessoryLabels = { tiers: { '1': '리본', '5': '지팡이' } };
+  const theme = parseThemeManifest(t, files);
+  assert.equal(accessoriesFor(theme, { id: 'a', vendor: 'gpt', tier: 4 })?.length, 1);
+  assert.equal(accessoriesFor(theme, { id: 'a', vendor: 'gpt', tier: 9 })?.length, 2, 'stacks every tier up to its own');
+  assert.equal(accessoryLabelFor(theme.accessoryLabels, 'a', 4), '리본');
+  assert.equal(accessoryLabelFor(theme.accessoryLabels, 'a', 6), '지팡이');
+  assert.throws(() => parseThemeManifest({ ...minimal(), accessories: { claude: { top: [] } } }, files), /1~99/);
+  assert.throws(() => parseThemeManifest({ ...minimal(), accessoryLabels: { tiers: { '0': 'x' } } }, files), /1~99/);
 });
 
 test('pack skins are told apart from built-in skins', () => {

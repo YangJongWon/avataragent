@@ -1,3 +1,4 @@
+import { t, tpl } from '../../../shared/i18n.ts';
 import { useEffect, useState } from 'react';
 import { EXPORT_FORMATS, REVIEWABLE, type DesignKind, type ExportFormat } from '../../../shared/design.ts';
 import type { Task } from '../../../shared/types.ts';
@@ -57,9 +58,9 @@ export function ExportBox({ task, draftVersion, markdown, canOperate, onError }:
     setNote('');
     try {
       const { dropped, review: r } = await api.designReport(task.id, kind, review);
-      const parts = ['디자인을 적용했어요.'];
-      if (dropped) parts.push(`보고서에 없는 숫자가 든 블록 ${dropped}개는 뺐어요.`);
-      if (r) parts.push(r.passed ? `화면 검수 ${r.rounds}회 만에 통과했어요.` : `화면 검수 ${r.rounds}회 뒤에도 남은 지적이 ${r.issues.length}건 있어요.`);
+      const parts = [t('디자인을 적용했어요.')];
+      if (dropped) parts.push(tpl('보고서에 없는 숫자가 든 블록 {dropped}개는 뺐어요.', { dropped }));
+      if (r) parts.push(r.passed ? tpl('화면 검수 {rounds}회 만에 통과했어요.', { rounds: r.rounds }) : tpl('화면 검수 {rounds}회 뒤에도 남은 지적이 {issuesCount}건 있어요.', { rounds: r.rounds, issuesCount: r.issues.length }));
       setNote(parts.join(' '));
     } catch (e) {
       onError(e instanceof Error ? e.message : String(e));
@@ -77,17 +78,17 @@ export function ExportBox({ task, draftVersion, markdown, canOperate, onError }:
         {(Object.keys(EXPORT_FORMATS) as ExportFormat[]).map((f) => {
           const kind = EXPORT_FORMATS[f].design;
           return (
-            <button key={f} className="pixel-btn small" disabled={busy !== null} onClick={() => download(f)} title={kind && current(kind) ? 'AI 디자인 적용' : '기본 디자인'}>
+            <button key={f} className="pixel-btn small" disabled={busy !== null} onClick={() => download(f)} title={kind && current(kind) ? t('AI 디자인 적용') : t('기본 디자인')}>
               {kind && current(kind) ? '✨ ' : ''}
-              {busy === f ? '만드는 중…' : EXPORT_FORMATS[f].label}
+              {busy === f ? t('만드는 중…') : t(EXPORT_FORMATS[f].label)}
             </button>
           );
         })}
       </div>
       <div className="export-designs">
-        <b>✨ AI 디자인</b>
+        <b>{t('✨ AI 디자인')}</b>
         <span className="small muted">
-          작성자가 보고서를 카드·차트·강조 상자로 다시 배치하고, 주제에 맞는 색을 골라요. 숫자는 보고서에 있는 값만 쓰고, Excel은 원래 표의 값에 합계·비율 같은 실제 수식을 붙여요.
+          {t('작성자가 보고서를 카드·차트·강조 상자로 다시 배치하고, 주제에 맞는 색을 골라요. 숫자는 보고서에 있는 값만 쓰고, Excel은 원래 표의 값에 합계·비율 같은 실제 수식을 붙여요.')}
         </span>
         {DESIGNS.map(({ kind, label }) => {
           const record = task.designs?.[kind];
@@ -98,26 +99,26 @@ export function ExportBox({ task, draftVersion, markdown, canOperate, onError }:
                 <span>
                   {label} ·{' '}
                   {current(kind) ? (
-                    <b className="ok">적용됨{record?.review ? (record.review.passed ? ' · 화면 검수 통과' : ' · 검수 지적 남음') : ''}</b>
+                    <b className="ok">{t('적용됨')}{record?.review ? (record.review.passed ? t(' · 화면 검수 통과') : t(' · 검수 지적 남음')) : ''}</b>
                   ) : record ? (
-                    <span className="muted">이전 초안용 (기본 디자인으로 받아요)</span>
+                    <span className="muted">{t('이전 초안용 (기본 디자인으로 받아요)')}</span>
                   ) : (
-                    <span className="muted">기본 디자인</span>
+                    <span className="muted">{t('기본 디자인')}</span>
                   )}
                 </span>
                 {canOperate && (
                   <span className="row">
                     <button className="pixel-btn small" disabled={busy !== null} onClick={() => design(kind, false)}>
-                      {busy === kind ? '디자인하는 중…' : current(kind) ? '다시 디자인' : 'AI로 디자인'}
+                      {busy === kind ? t('디자인하는 중…') : current(kind) ? t('다시 디자인') : t('AI로 디자인')}
                     </button>
                     {reviewable && (
                       <button
                         className="pixel-btn small"
                         disabled={busy !== null || !caps?.visualReview}
-                        title={caps?.visualReview ? `렌더링한 결과를 검수자가 보고 최대 ${caps.rounds}번까지 고쳐요. AI 호출이 2~4배 들어요.` : caps?.hint}
+                        title={caps?.visualReview ? tpl('렌더링한 결과를 검수자가 보고 최대 {rounds}번까지 고쳐요. AI 호출이 2~4배 들어요.', { rounds: caps.rounds }) : caps?.hint}
                         onClick={() => design(kind, true)}
                       >
-                        {busy === `${kind}:review` ? '검수하며 다듬는 중…' : '🔍 고품질'}
+                        {busy === `${kind}:review` ? t('검수하며 다듬는 중…') : t('🔍 고품질')}
                       </button>
                     )}
                   </span>
@@ -126,7 +127,7 @@ export function ExportBox({ task, draftVersion, markdown, canOperate, onError }:
               {current(kind) && record?.review && (record.review.fixed.length > 0 || record.review.issues.length > 0) && (
                 <details className="small">
                   <summary className="muted">
-                    검수 기록 · {record.review.rounds}회 · 고친 지적 {record.review.fixed.length}건{record.review.issues.length ? ` · 남은 지적 ${record.review.issues.length}건` : ''}
+                    {tpl('검수 기록 · {rounds}회 · 고친 지적 {fixed}건', { rounds: record.review.rounds, fixed: record.review.fixed.length })}{record.review.issues.length ? tpl(' · 남은 지적 {issuesCount}건', { issuesCount: record.review.issues.length }) : ''}
                   </summary>
                   <ul>
                     {record.review.fixed.map((i, n) => (
@@ -141,8 +142,8 @@ export function ExportBox({ task, draftVersion, markdown, canOperate, onError }:
             </div>
           );
         })}
-        {canOperate && caps && !caps.visualReview && <span className="small muted">🔍 고품질(화면 검수)은 꺼져 있어요. {caps.hint}</span>}
-        {canOperate ? <span className="small muted">AI 호출 비용은 이 업무 비용에 더해져요.</span> : <span className="small muted">AI 디자인은 업무 처리 권한이 있는 사람만 만들 수 있어요.</span>}
+        {canOperate && caps && !caps.visualReview && <span className="small muted">🔍 {t('고품질(화면 검수)은 꺼져 있어요.')} {caps.hint}</span>}
+        {canOperate ? <span className="small muted">{t('AI 호출 비용은 이 업무 비용에 더해져요.')}</span> : <span className="small muted">{t('AI 디자인은 업무 처리 권한이 있는 사람만 만들 수 있어요.')}</span>}
         {note && <span className="small">{note}</span>}
       </div>
     </div>

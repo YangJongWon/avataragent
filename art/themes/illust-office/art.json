@@ -344,5 +344,18 @@
       "size": 34,
       "layer": { "company": "*", "tier": "3", "at": "hand", "x": 3, "y": -12 }
     }
+  },
+  "accessoryLabels": {
+    "summary": {
+      "ko": "일러스트 오피스에서는 모자 대신 소품으로 등급을 보여 줘요. 최상위 모델은 별 마법 지팡이를 들어요.",
+      "en": "In Illust Office, tiers show as props instead of hats. Top-tier models hold a star magic wand.",
+      "ja": "イラストオフィスでは帽子の代わりに小物でグレードを表します。最上位モデルは星の魔法の杖を持ちます。",
+      "zh": "在插画办公室中，用道具代替帽子表示等级。最高等级模型手持星星魔法杖。"
+    },
+    "tiers": {
+      "1": { "ko": "소품 없음", "en": "No prop", "ja": "小物なし", "zh": "无道具" },
+      "2": { "ko": "소품 없음", "en": "No prop", "ja": "小物なし", "zh": "无道具" },
+      "3": { "ko": "별 마법 지팡이", "en": "Star magic wand", "ja": "星の魔法の杖", "zh": "星星魔法杖" }
+    }
   }
 }

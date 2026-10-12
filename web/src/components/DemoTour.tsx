@@ -1,3 +1,4 @@
+import { t } from '../../../shared/i18n.ts';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 interface Step {
@@ -9,48 +10,48 @@ interface Step {
 const STEPS: Step[] = [
   {
     targets: [],
-    title: '사용법 데모',
-    body: '화면 곳곳에 메모를 붙여 가며 대략적인 사용법을 보여 드릴게요. 그동안 직원들이 [데모] 업무 하나를 처리하는 모습이 계속 재생돼요. 화면에서만 흉내 내는 거라 저장되거나 AI를 부르지 않아요.',
+    title: t('사용법 데모'),
+    body: t('화면 곳곳에 메모를 붙여 가며 대략적인 사용법을 보여 드릴게요. 그동안 직원들이 [데모] 업무 하나를 처리하는 모습이 계속 재생돼요. 화면에서만 흉내 내는 거라 저장되거나 AI를 부르지 않아요.'),
   },
   {
     targets: ['.office-tabs'],
-    title: '1. 사무실 고르기',
-    body: '팀마다 사무실이 따로 있어요. 탭을 눌러 이동하고, 길게 누르거나 우클릭하면 공유·닫기 메뉴가 나와요. "+ 사무실"로 새 팀을 열 수 있어요.',
+    title: t('1. 사무실 고르기'),
+    body: t('팀마다 사무실이 따로 있어요. 탭을 눌러 이동하고, 길게 누르거나 우클릭하면 공유·닫기 메뉴가 나와요. "+ 사무실"로 새 팀을 열 수 있어요.'),
   },
   {
     targets: ['.office-canvas'],
-    title: '2. 직원 살펴보기',
-    body: '팀장이 칠판에서 업무를 받아 가고, 서류가 날아가며 다음 직원에게 넘어가요. 조사 담당은 책장에 다녀오고, 검토에서 반려·통과 도장이 찍혀요. 직원을 누르면 지금 하는 일이, 우클릭(길게 누르기)하면 규칙 편집·잠시 멈춤 메뉴가 나와요. "도와주세요" 말풍선이 뜨면 눌러서 답해 주세요.',
+    title: t('2. 직원 살펴보기'),
+    body: t('팀장이 칠판에서 업무를 받아 가고, 서류가 날아가며 다음 직원에게 넘어가요. 조사 담당은 책장에 다녀오고, 검토에서 반려·통과 도장이 찍혀요. 직원을 누르면 지금 하는 일이, 우클릭(길게 누르기)하면 규칙 편집·잠시 멈춤 메뉴가 나와요. "도와주세요" 말풍선이 뜨면 눌러서 답해 주세요.'),
   },
   {
     targets: ['.new-task-btn'],
-    title: '3. 업무 맡기기',
-    body: '이 버튼이나 칠판을 눌러 업무를 등록해요. 무엇을 원하는지 적으면 팀장이 단계를 나누고 직원들이 차례로 처리해요.',
+    title: t('3. 업무 맡기기'),
+    body: t('이 버튼이나 칠판을 눌러 업무를 등록해요. 무엇을 원하는지 적으면 팀장이 단계를 나누고 직원들이 차례로 처리해요.'),
   },
   {
     targets: ['.workflow', '.drawer-bottom .drawer-handle'],
-    title: '4. 업무 여정',
-    body: '업무가 어느 단계에 있는지, 누가 맡고 있는지 흐름으로 보여요. 대기 중인 업무는 시작 전에 단계를 고칠 수 있어요.',
+    title: t('4. 업무 여정'),
+    body: t('업무가 어느 단계에 있는지, 누가 맡고 있는지 흐름으로 보여요. 대기 중인 업무는 시작 전에 단계를 고칠 수 있어요.'),
   },
   {
     targets: ['.report', '.drawer-right .drawer-handle'],
-    title: '5. 승인과 결과물',
-    body: '도움 요청과 승인 대기가 여기 모여요. 결과를 확인해 승인하거나 수정 요청을 보내고, 완성된 결과물은 Word·Excel·PPT로 내려받아요.',
+    title: t('5. 승인과 결과물'),
+    body: t('도움 요청과 승인 대기가 여기 모여요. 결과를 확인해 승인하거나 수정 요청을 보내고, 완성된 결과물은 Word·Excel·PPT로 내려받아요.'),
   },
   {
     targets: ['.main-tabs'],
-    title: '6. 관리 메뉴',
-    body: '직원 관리에서 채용·교체, 모델 관리에서 AI 모델과 API 키, MCP 관리에서 외부 도구(슬랙·Gmail 등), 손익·결산에서 비용과 가치를 봐요.',
+    title: t('6. 관리 메뉴'),
+    body: t('직원 관리에서 채용·교체, 모델 관리에서 AI 모델과 API 키, MCP 관리에서 외부 도구(슬랙·Gmail 등), 손익·결산에서 비용과 가치를 봐요.'),
   },
   {
     targets: ['.provider'],
-    title: '7. 시뮬레이션과 실제 AI',
-    body: '"시뮬레이션"이면 AI를 부르지 않고 흉내만 내서 비용이 들지 않아요. 실제 AI는 모델 관리에서 연결해요. 이 배지를 길게 누르면 언제든 이 데모를 다시 볼 수 있어요.',
+    title: t('7. 시뮬레이션과 실제 AI'),
+    body: t('"시뮬레이션"이면 AI를 부르지 않고 흉내만 내서 비용이 들지 않아요. 실제 AI는 모델 관리에서 연결해요. 이 배지를 길게 누르면 언제든 이 데모를 다시 볼 수 있어요.'),
   },
   {
     targets: ['.help-btn'],
-    title: '8. 궁금하면 도움말',
-    body: '막히면 도움말에 물어보세요. 사용 설명서를 찾아 답하고, 실제 AI가 연결돼 있으면 AI가 정리해서 알려 줘요.',
+    title: t('8. 궁금하면 도움말'),
+    body: t('막히면 도움말에 물어보세요. 사용 설명서를 찾아 답하고, 실제 AI가 연결돼 있으면 AI가 정리해서 알려 줘요.'),
   },
 ];
 
@@ -118,7 +119,7 @@ export function DemoTour({ onClose }: { onClose: () => void }) {
   }, [last, onClose]);
 
   return (
-    <div className="demo-tour" role="dialog" aria-label="사용법 데모">
+    <div className="demo-tour" role="dialog" aria-label={t('사용법 데모')}>
       {box ? (
         <>
           <div className="demo-dim" style={{ bottom: `calc(100% - ${box.top - PAD}px)` }} />
@@ -146,15 +147,15 @@ export function DemoTour({ onClose }: { onClose: () => void }) {
             {index + 1} / {STEPS.length}
           </span>
           <button className="pixel-btn small" onClick={onClose}>
-            그만 보기
+            {t('그만 보기')}
           </button>
           {index > 0 && (
             <button className="pixel-btn small" onClick={() => setIndex(index - 1)}>
-              이전
+              {t('이전')}
             </button>
           )}
           <button className="pixel-btn small primary" onClick={() => (last ? onClose() : setIndex(index + 1))}>
-            {last ? '끝' : '다음'}
+            {last ? t('끝') : t('다음')}
           </button>
         </div>
       </div>

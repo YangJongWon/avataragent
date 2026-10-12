@@ -84,6 +84,8 @@ export interface PersistedState {
   themeBookings: ThemeBooking[];
   /** The theme for the page around the offices (top bar, tabs, panels); null follows the office being viewed. */
   siteTheme: string | null;
+  /** The company's own logo as a data URL, for the top bar on the business plan. */
+  companyLogo: string | null;
   flows: SavedFlow[];
 }
 
@@ -170,6 +172,7 @@ function fresh(): PersistedState {
     theme: DEFAULT_THEME,
     themeBookings: [],
     siteTheme: null,
+    companyLogo: null,
     flows: [],
   };
 }
@@ -238,6 +241,7 @@ function normalize(saved: PersistedState) {
   if (typeof saved.theme !== 'string') saved.theme = adoptCompanyTheme(saved.offices);
   saved.themeBookings ??= [];
   saved.siteTheme ??= null;
+  saved.companyLogo ??= null;
   saved.flows ??= [];
   saved.performance ??= [];
   saved.improvements ??= [];
@@ -307,6 +311,7 @@ class Store {
       theme: s.theme,
       themeBookings: s.themeBookings,
       siteTheme: s.siteTheme,
+      companyLogo: s.companyLogo,
       flows: s.flows,
       provider,
       model: provider === 'mock' || provider === 'agents' ? '직원별 모델' : config.model,

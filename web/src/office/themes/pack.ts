@@ -1,17 +1,19 @@
 import { Assets, Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
-import { companyOf, modelOf } from '../../../../shared/models.ts';
+import { companyOf, modelOf, tierLook } from '../../../../shared/models.ts';
 import {
   accessoriesFor,
   activeVariant,
   applyVariant,
   characterFor,
   characterLayers,
+  formFor,
   isThemeState,
   outfitFor,
   parseThemeManifest,
   resolveState,
   manifestFiles,
   type AccessoryLayer,
+  type CharacterForm,
   type ThemeCharacter,
   type ThemeManifest,
   type ThemeState,
@@ -55,6 +57,9 @@ class PackCharacter implements CharacterArt {
   /** The outfit the staff picked, and the one shown (undefined until the first frame dresses them). */
   private picked: string | undefined;
   private outfit: string | null | undefined;
+  /** The look the character takes for the agent's model (a tier's or the model's own), and its key. */
+  private form: CharacterForm | null = null;
+  private formKey = '';
   private state: ThemeState | null = null;
   private stateStart = 0;
   private headY = 0;
@@ -88,23 +93,33 @@ class PackCharacter implements CharacterArt {
       this.hat.x = this.glow.x = this.headX;
       this.hit = { halfW: (idle.w * scale) / 2, h: anchor.y * idle.h * scale };
       this.wornKey = '';
+      // A new character has its own looks; pick one again below.
+      this.formKey = '-';
     }
     const model = modelOf(agent.model);
     const company = companyOf(model.vendor);
-    const own = accessoriesFor(this.theme.accessories, company.id, model.tier);
+    const form = formFor(character, model);
+    if ((form?.key ?? '') !== this.formKey) {
+      this.form = form?.form ?? null;
+      this.formKey = form?.key ?? '';
+      // Dressed again on the next frame with the new look.
+      this.outfit = undefined;
+    }
+    const own = this.form?.accessories ?? accessoriesFor(this.theme, { id: model.id, vendor: company.id, tier: model.tier });
     const seasonal = this.theme.wear ?? [];
     const layers = own || seasonal.length ? [...(own ?? []), ...seasonal] : null;
     this.hat.visible = this.glow.visible = !layers;
-    if (layers) return this.wear(layers, `${company.id}:${model.tier}`);
+    if (layers) return this.wear(layers, `${this.formKey}:${model.id}`);
     this.worn.removeChildren();
     this.wornKey = '';
     // Themes without accessories for this company show the model's pixel hat on the character's head.
-    drawHat(this.hat, company.hat, company.color, model.tier);
-    if (model.tier === 3) drawHatGlow(this.glow, company.hat);
+    const look = tierLook(model.tier);
+    drawHat(this.hat, company.hat, company.color, look);
+    if (look === 3) drawHatGlow(this.glow, company.hat);
     else this.glow.clear();
     // Pixel hats are drawn for a head whose top is at y = -22·S; their brim covers the top 1·S of it.
     this.hat.y = this.glow.y = this.headY + 23 * S;
-    this.tagY = this.hat.y + (HAT_TOP[company.hat] - (model.tier === 3 ? 9 : 6)) * S;
+    this.tagY = this.hat.y + (HAT_TOP[company.hat] - (look === 3 ? 9 : 6)) * S;
   }
 
   update(phase: number, look: CharacterLook) {
@@ -128,7 +143,7 @@ class PackCharacter implements CharacterArt {
   private dress(character: ThemeCharacter, outfit: string | null) {
     this.outfit = outfit;
     this.body.removeChildren().forEach((child) => child.destroy());
-    this.layers = characterLayers(character, outfit).map((sheet) => {
+    this.layers = characterLayers(character, outfit, this.form).map((sheet) => {
       const sprite = new Sprite();
       sprite.anchor.set(character.anchor.x, character.anchor.y);
       sprite.scale.set(character.scale);
@@ -167,7 +182,12 @@ export async function loadPackTheme(id: string, base: string): Promise<OfficeThe
   return createPackTheme(theme, (path) => Assets.load<Texture>(url(path)));
 }
 
-const isPortrait = (theme: ThemeManifest, path: string) => theme.characters.some((c) => Object.values(c.portraits).includes(path));
+const isPortrait = (theme: ThemeManifest, path: string) =>
+  theme.characters.some((c) =>
+    [c.portraits, ...Object.values(c.forms?.tiers ?? {}).map((f) => f.portraits), ...Object.values(c.forms?.models ?? {}).map((f) => f.portraits)].some((p) =>
+      Object.values(p).includes(path),
+    ),
+  );
 
 /** Gets the texture for a package file; installed themes load by URL, the theme studio from images in memory. */
 export type TextureLoader = (path: string) => Promise<Texture>;

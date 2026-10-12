@@ -117,6 +117,19 @@ textarea {
   font-weight: 800;
   white-space: nowrap;
 }
+.brand-logo {
+  height: 28px;
+  max-width: 120px;
+  object-fit: contain;
+  vertical-align: middle;
+}
+.company-logo-preview {
+  height: 48px;
+  max-width: 200px;
+  object-fit: contain;
+  padding: 4px;
+  background: var(--panel, #fff);
+}
 .main-tabs {
   display: flex;
   gap: 4px;
@@ -528,6 +541,7 @@ p.plan-note {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
 }
 .report-empty {
   padding: 16px;
@@ -660,6 +674,19 @@ p.plan-note {
   padding: 8px 10px 0;
   border-bottom: 3px solid var(--line);
 }
+.report > .tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  padding-bottom: 8px;
+}
+.report > .tabs .tab {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 2px solid var(--line);
+  border-radius: var(--radius);
+}
 .tab {
   border: 2px solid var(--line);
   border-bottom: none;
@@ -676,6 +703,7 @@ p.plan-note {
 }
 .report-body {
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
   padding: 10px;
 }
@@ -683,6 +711,7 @@ p.plan-note {
 .markdown {
   font-size: 14px;
   line-height: 1.65;
+  overflow-wrap: anywhere;
 }
 .markdown h1 {
   font-size: 19px;
@@ -1008,6 +1037,18 @@ p.plan-note {
 .skin-option-art .char-preview {
   margin: 0;
 }
+/* Same box as the character previews (96×150), so every card in a row is the same size. */
+.theme-pick-preview,
+.skin-option-art .skin-preview {
+  width: 96px;
+  height: 150px;
+}
+.theme-pick-preview {
+  object-fit: contain;
+}
+.skin-option-art .skin-preview {
+  font-size: 40px;
+}
 .model-pick-group {
   margin-top: 8px;
 }
@@ -1032,6 +1073,12 @@ p.plan-note {
   background: var(--surface);
   cursor: pointer;
   font: inherit;
+}
+/* The picked look wearing each model, at two thirds of the look cards' size. */
+.model-pick .char-preview {
+  width: 64px;
+  height: 100px;
+  margin: 0;
 }
 .model-pick:hover {
   background: var(--hover);
@@ -1783,6 +1830,32 @@ p.plan-note {
   padding-top: 8px;
   border-top: 2px dashed var(--line);
 }
+/* 플레이북 공유: 좁은 화면에서 입력창은 한 줄을 다 쓰고 버튼은 다음 줄로 */
+.playbook-export {
+  flex-wrap: wrap;
+}
+.playbook-export input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+/* 버튼 글에 띄어쓰기가 없어 찌그러들기만 하고 줄이 안 바뀌므로, 입력창을 한 줄로 강제 */
+@media (max-width: 700px) {
+  .playbook-export input {
+    flex: 1 1 100%;
+  }
+}
+/* Wide tables: keep data columns readable and scroll sideways on narrow screens.
+   The first column (row label) may still wrap. */
+.scroll-table {
+  min-width: 560px;
+}
+.scroll-table th,
+.scroll-table td {
+  white-space: nowrap;
+}
+.scroll-table td:first-child {
+  white-space: normal;
+}
 .playbook-warn {
   padding: 4px 6px;
   background: #fff1e6;
@@ -2344,6 +2417,12 @@ p.plan-note {
   body {
     min-width: 0;
   }
+  /* The app fits the viewport tab by tab; the document itself must never scroll. */
+  html,
+  body {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
   .app {
     height: 100dvh;
     display: flex;
@@ -2496,7 +2575,7 @@ p.plan-note {
     padding: 0 10px;
   }
   .drawer-bottom .drawer-body {
-    height: min(52dvh, 300px);
+    height: min(58dvh, 430px);
     border-left: none;
     border-right: none;
   }
@@ -2646,6 +2725,34 @@ p.plan-note {
   }
 }
 
+/* Tall narrow screens: the avatar stage and the workflow fit stacked, so no flow drawer. */
+@media (max-width: 900px) and (min-height: 720px) {
+  /* Never scrolls: the stage below absorbs any slack, the flow always keeps its height. */
+  .compact-main.stacked {
+    flex-direction: column;
+    overflow: hidden;
+    padding-bottom: 6px;
+  }
+  .compact-main.stacked .compact-stage {
+    min-height: 0;
+    display: block;
+    container-type: inline-size;
+  }
+  .compact-main.stacked .office-scroll {
+    padding-top: 8px;
+  }
+  /* Fits its content; only absurdly tall journeys scroll inside this box. */
+  .stacked-flow {
+    flex: none;
+    margin-top: 6px;
+    max-height: 70dvh;
+    overflow-y: auto;
+  }
+  .stacked-flow .workflow {
+    min-height: 0;
+  }
+}
+
 @media (orientation: landscape) and (max-height: 520px) {
   .topbar {
     flex-wrap: nowrap;
@@ -2692,7 +2799,7 @@ p.plan-note {
     height: 34px;
   }
   .drawer-bottom .drawer-body {
-    height: min(60dvh, 240px);
+    height: min(62dvh, 430px);
   }
 }
 
@@ -2878,10 +2985,122 @@ p.plan-note {
 .work-card-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
 .work-card-head strong, .work-card-head span { display: block; }
 .work-card-head span, .work-usage { color: var(--muted); font-size: .84rem; }
-.work-days { display: flex; gap: 5px; }
-.work-days button { width: 34px; height: 32px; padding: 0; }
+.work-days { display: flex; gap: 5px; flex-wrap: wrap; }
+.work-days button { flex: 1 1 0; height: 32px; padding: 0 2px; font-size: 12px; white-space: nowrap; }
 .work-days button.selected { background: #6750a4; color: white; }
 .work-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
 .work-fields label { display: grid; gap: 4px; font-size: .82rem; }
 .work-fields label:nth-child(3) { grid-column: 1 / -1; }
 @media (max-width: 620px) { .work-grid, .work-fields { grid-template-columns: 1fr; } .work-fields label:nth-child(3) { grid-column: auto; } }
+
+.work-policy-editor { margin-top:16px; padding-top:14px; border-top:2px dashed var(--line); }
+.work-policy-editor h3 { margin:0 0 10px; }
+.work-report-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; }
+.work-report-card { padding:14px; }
+.work-report-card dl { margin:12px 0; }
+.work-report-card dl div { display:flex; justify-content:space-between; gap:12px; padding:5px 0; border-bottom:1px solid rgba(61,52,73,.14); }
+.work-report-card dt { color:var(--muted); }
+.work-report-card dd { margin:0; text-align:right; font-weight:700; }
+.work-status { font-size:12px; font-weight:700; }
+
+/* 근무·효율 대시보드 */
+.work-dashboard { display: grid; gap: 14px; }
+.dash-section { padding: 14px; display: grid; gap: 10px; align-content: start; }
+.dash-section h3 { margin: 0; }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.kpi { display: grid; gap: 2px; padding: 8px 10px; background: var(--surface); border: 2px solid var(--line); }
+.kpi-label, .kpi-sub { color: var(--muted); font-size: .8rem; }
+.kpi-value { font-size: 1.45rem; line-height: 1.2; }
+.kpi-good .kpi-value { color: var(--green); }
+.kpi-warn .kpi-value { color: #b9770e; }
+.kpi-bad .kpi-value { color: var(--red); }
+.insights { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.insight { display: flex; gap: 10px; align-items: baseline; padding: 8px 10px; border-left: 5px solid var(--muted); background: var(--surface); }
+.insight-bad { border-left-color: var(--red); }
+.insight-warn { border-left-color: var(--yellow); }
+.insight-good { border-left-color: var(--green); }
+.insight-area { flex: none; font-size: .75rem; font-weight: 700; padding: 1px 6px; border: 1px solid var(--line); background: var(--note); white-space: nowrap; }
+.chart-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; }
+.chart { margin: 0; }
+.chart svg { width: 100%; height: auto; display: block; }
+.chart-grid { stroke: var(--line); stroke-opacity: .15; }
+.chart-axis { fill: var(--muted); font-size: 10px; }
+.chart-bar { fill: var(--primary); }
+.chart-line { fill: none; stroke: var(--accent); stroke-width: 2; }
+.chart-dot { fill: var(--accent); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: .8rem; color: var(--muted); margin-top: 6px; }
+.swatch { display: inline-block; width: 10px; height: 10px; vertical-align: middle; border: 1px solid var(--line); }
+.swatch-bar { background: var(--primary); }
+.swatch-line { background: var(--accent); }
+.stack-bar { display: flex; height: 18px; border: 2px solid var(--line); overflow: hidden; }
+.stack-bar > span { min-width: 4px; }
+.hbars { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.hbars li { display: grid; grid-template-columns: minmax(90px, 30%) 1fr auto; gap: 8px; align-items: center; font-size: .85rem; }
+.hbar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar-track { height: 12px; background: var(--tab); border: 1px solid var(--line); }
+.hbar-fill { display: block; height: 100%; background: var(--primary); }
+.hbar-fill.warn { background: var(--red); }
+.hbar-value { color: var(--muted); white-space: nowrap; }
+.table-scroll { overflow-x: auto; }
+.dash-table th { text-align: left; white-space: nowrap; font-size: .8rem; color: var(--muted); }
+.dash-table td { white-space: nowrap; }
+.mini-meter { display: inline-block; width: 54px; height: 8px; vertical-align: middle; background: var(--tab); border: 1px solid var(--line); }
+.mini-meter > span { display: block; height: 100%; background: var(--green); }
+.mini-meter.warn > span { background: var(--red); }
+
+/* 업무 흐름 편집 */
+.workflow-canvas.clickable .flow-node { cursor: pointer; }
+.flow-node.selected { outline: 3px solid var(--primary); outline-offset: 2px; }
+.flow-node.changed { box-shadow: 0 0 0 3px var(--yellow); }
+.step-inspector { margin-top: 10px; padding: 12px; display: grid; gap: 8px; }
+.step-inspector .field { display: grid; gap: 4px; }
+.step-inspector textarea, .step-inspector input:not([type='checkbox']), .step-inspector select { width: 100%; box-sizing: border-box; }
+.step-inspector input[type='checkbox'] { width: 18px; height: 18px; flex-shrink: 0; }
+.step-inspector-actions { flex-wrap: wrap; gap: 6px; }
+.pixel-btn.danger { color: var(--red); }
+.flow-picker { margin-top: 10px; display: grid; gap: 10px; }
+.flow-picker-bar { flex-wrap: wrap; gap: 6px; }
+.flow-picker-bar input[type='search'] { flex: 1 1 200px; min-width: 0; }
+.flow-picker-group h4 { margin: 4px 0; }
+.flow-picker-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 260px; overflow-y: auto; }
+.flow-picker-list li { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 6px 8px; background: var(--surface); border: 1px solid var(--line); }
+.flow-picker-text { display: grid; gap: 2px; min-width: 0; }
+.flow-chain { color: var(--primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 업무 여정 영역 내부 스크롤(등록 다이얼로그): 다이얼로그 전체가 아니라 이 안에서만 스크롤 */
+.plan-scroll { max-height: min(44vh, 400px); overflow-y: auto; padding-right: 2px; }
+/* 흐름 고르기 별도 다이얼로그 */
+.flow-picker-modal { width: 560px; }
+.flow-picker-modal .flow-picker { margin-top: 0; }
+/* 단계 편집 별도 다이얼로그: 모바일 하단 Drawer에 갇히지 않도록 body에 포털 */
+.step-inspector-modal { width: 520px; }
+.step-inspector-modal .step-inspector { margin-top: 0; padding: 0; }
+/* 단계 편집 헤더: 삭제는 위(왼쪽), 제목은 그 오른쪽 */
+.step-head-title { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.step-head-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon-btn.danger { color: var(--red); }
+/* 반복 라벨이 옆 칸에 눌려 세로로 쌓이지 않도록 한 줄을 다 쓰게 */
+.plan-step-loop .check { flex: 1 1 100%; }
+
+/* 업무 흐름 편집 */
+.workflow-canvas.clickable .flow-node { cursor: pointer; }
+.flow-node.selected { outline: 3px solid var(--primary); outline-offset: 2px; }
+.flow-node.changed { box-shadow: 0 0 0 3px var(--yellow); }
+.step-inspector { margin-top: 10px; padding: 12px; display: grid; gap: 8px; }
+.step-inspector .field { display: grid; gap: 4px; }
+.step-inspector textarea, .step-inspector input:not([type='checkbox']), .step-inspector select { width: 100%; box-sizing: border-box; }
+.step-inspector input[type='checkbox'] { width: 18px; height: 18px; flex-shrink: 0; }
+.step-inspector-actions { flex-wrap: wrap; gap: 6px; }
+.step-inspector-foot { margin-top: 2px; flex-wrap: wrap; gap: 6px; }
+/* 좁은 노드(모바일) 안 글자가 잘리지 않도록 여백 축소 */
+.workflow-canvas.dense .flow-node { padding: 4px 6px; }
+.pixel-btn.danger { color: var(--red); }
+.flow-picker { margin-top: 10px; display: grid; gap: 10px; }
+.flow-picker-bar { flex-wrap: wrap; gap: 6px; }
+.flow-picker-bar input[type='search'] { flex: 1 1 200px; min-width: 0; }
+.flow-picker-group h4 { margin: 4px 0; }
+.flow-picker-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 260px; overflow-y: auto; }
+.flow-picker-list li { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 6px 8px; background: var(--surface); border: 1px solid var(--line); }
+.flow-picker-text { display: grid; gap: 2px; min-width: 0; }
+.flow-chain { color: var(--primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

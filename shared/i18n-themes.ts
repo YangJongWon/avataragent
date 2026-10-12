@@ -276,6 +276,13 @@ export const THEME_TEMPLATES: Entries = {
     ja: 'サイト画面は「{theme}」テーマに固定されています。',
     en: 'The site screens are fixed to the "{theme}" theme.',
   },
+  '{theme} 테마 · AI 회사': { zh: '{theme} 主题 · AI 公司', ja: '{theme} テーマ・AI会社', en: '{theme} theme · AI company' },
+  '{theme} 테마 · 모델 등급': { zh: '{theme} 主题 · 模型等级', ja: '{theme} テーマ・モデル等級', en: '{theme} theme · model tier' },
+  '{theme} 테마에서 보이는 모습이에요.': {
+    zh: '这是在{theme}主题中的样子。',
+    ja: '{theme}テーマでの見た目です。',
+    en: 'This is how it looks in the {theme} theme.',
+  },
   '{theme} 테마의 캐릭터는 이 테마를 쓰는 사무실에서 보여요. 다른 사무실에서는 기본 픽셀로 보여요.': {
     zh: '{theme} 主题的角色会在使用该主题的办公室中显示。其他办公室显示为默认像素。',
     ja: '{theme} テーマのキャラクターは、このテーマを使うオフィスで表示されます。他のオフィスでは基本ピクセルで表示されます。',

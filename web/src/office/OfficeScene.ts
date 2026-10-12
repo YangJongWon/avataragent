@@ -1,5 +1,5 @@
 import { Application, Container, Graphics, Sprite, Text, type FederatedPointerEvent, type Texture } from 'pixi.js';
-import { currentLanguage } from '../../../shared/i18n.ts';
+import { currentLanguage, t, tpl } from '../../../shared/i18n.ts';
 import { TEAMS, type TeamMeta } from '../../../shared/teams.ts';
 import { DEFAULT_EMOTES, DEFAULT_INTERACTIONS } from '../../../shared/theme-defaults.ts';
 import {
@@ -642,7 +642,7 @@ export class OfficeScene {
     this.extraDesks.forEach((g, i) => (g.visible = i < extra));
     this.updateBoard(snapshot);
     const profit = office ? office.valueKrw - office.spentKrw : 0;
-    this.safeText.text = `이익 ${profit >= 0 ? '+' : ''}${krw(profit)}`;
+    this.safeText.text = tpl('이익 {v}{v2}', { v: profit >= 0 ? '+' : '', v2: krw(profit) });
     this.safeText.style.fill = profit >= 0 ? '#1e8449' : '#c0392b';
   }
 
@@ -686,7 +686,7 @@ export class OfficeScene {
         agentChar?.play('budget.exceeded');
         break;
       case 'task.created':
-        if (p.queued) this.floatText(`대기열 +1: ${String(p.title ?? '')}`, BOARD.x + BOARD.w / 2, BOARD.y + BOARD.h + 16, '#4b3f80', 13);
+        if (p.queued) this.floatText(tpl('대기열 +1: {v}', { v: String(p.title ?? '') }), BOARD.x + BOARD.w / 2, BOARD.y + BOARD.h + 16, '#4b3f80', 13);
         break;
       case 'queue.started': {
         const manager = [...this.chars.values()].find((c) => c.agent.role === 'manager');
@@ -717,14 +717,14 @@ export class OfficeScene {
         break;
       case 'review.rejected': {
         const at = deskOf(event.agentId);
-        if (at) this.stamp('반려', at, '#c0392b');
+        if (at) this.stamp(t('반려'), at, '#c0392b');
         if (p.returnTo) this.chars.get(String(p.returnTo))?.play('review.rejected');
         if (p.returnTo) setTimeout(() => void this.handOver(event.agentId, p.returnTo, '#ffd6d6'), 700);
         break;
       }
       case 'review.approved': {
         const at = deskOf(event.agentId);
-        if (at) this.stamp('통과', at, '#1e8449');
+        if (at) this.stamp(t('통과'), at, '#1e8449');
         break;
       }
       case 'approval.requested': {
@@ -734,12 +734,12 @@ export class OfficeScene {
       }
       case 'approval.denied': {
         const at = deskOf(event.agentId);
-        if (at) this.stamp('수정 요청', at, '#d35400');
+        if (at) this.stamp(t('수정 요청'), at, '#d35400');
         agentChar?.play('troubled');
         break;
       }
       case 'agent.help_received':
-        if (agentChar) this.floatText('고마워요!', agentChar.pos.x, agentChar.pos.y - 120, '#e75480', 14);
+        if (agentChar) this.floatText(t('고마워요!'), agentChar.pos.x, agentChar.pos.y - 120, '#e75480', 14);
         agentChar?.play('thanks');
         break;
       case 'value.recognized': {
@@ -755,7 +755,7 @@ export class OfficeScene {
       case 'mail.received':
       case 'inquiry.received': {
         if (agentChar?.present) void this.fetch(agentChar, this.layout.door, event.type === 'mail.received' ? '#fff3c4' : '#d5f5e3');
-        if (agentChar) this.floatText(event.type === 'mail.received' ? '새 메일!' : '새 문의!', agentChar.pos.x, agentChar.pos.y - 120, '#2471a3', 13);
+        if (agentChar) this.floatText(event.type === 'mail.received' ? t('새 메일!') : t('새 문의!'), agentChar.pos.x, agentChar.pos.y - 120, '#2471a3', 13);
         break;
       }
       case 'team.applied':
@@ -782,23 +782,24 @@ export class OfficeScene {
     this.postIt.visible = Boolean(active);
 
     if (!task) {
-      this.boardTitle.text = `${this.team.emoji} ${this.team.name} 칠판`;
-      this.boardLines.text = '여기를 눌러 첫 업무를 등록하세요';
+      this.boardTitle.text = tpl('{emoji} {name} 칠판', { emoji: this.team.emoji, name: this.team.name });
+      this.boardLines.text = t('여기를 눌러 첫 업무를 등록하세요');
       return;
     }
     const { done, total } = planProgress(task);
     const statusLine =
       task.status === 'awaiting_help'
-        ? '도움 요청 1건 - 직원을 눌러 도와주세요'
+        ? t('도움 요청 1건 - 직원을 눌러 도와주세요')
         : task.status === 'awaiting_approval'
-          ? '승인 대기 1건 - 오른쪽에서 승인'
+          ? t('승인 대기 1건 - 오른쪽에서 승인')
           : task.status === 'completed'
-            ? '완료! 칠판을 눌러 새 업무 등록'
+            ? t('완료! 칠판을 눌러 새 업무 등록')
             : task.status === 'failed'
-              ? '중단됨 - 칠판을 눌러 다시 등록'
-              : `진행 중: ${currentStepLabel(task)}`;
-    this.boardTitle.text = `목표: ${clip(task.title, 16)}`;
-    this.boardLines.text = `진행률 ${done}/${total}${queued ? ` · 대기 ${queued}건` : ''}\n${task.status === 'queued' ? '곧 시작해요' : statusLine}`;
+              ? t('중단됨 - 칠판을 눌러 다시 등록')
+              : tpl('진행 중: {v}', { v: currentStepLabel(task) });
+    this.boardTitle.text = `${t('목표')}: ${clip(t(task.title), 16)}`;
+    this.boardLines.text = `${tpl('진행률 {done}/{total}', { done, total })}${queued ? ` · ${tpl('대기 {n}건', { n: queued })}` : ''}
+${task.status === 'queued' ? t('곧 시작해요') : statusLine}`;
   }
 
   /** Board text, its click area and the profit figure: shared by every theme, placed by its layout. */

@@ -1,3 +1,4 @@
+import { currentLanguage, localeOf, t, tpl } from '../../../shared/i18n.ts';
 import QRCode from 'qrcode';
 import { useEffect, useState } from 'react';
 import { SHARE_ROLES, shareRoleDescription, shareRoleLabel } from '../../../shared/access.ts';
@@ -20,7 +21,7 @@ const EXPIRY_OPTIONS: [number, string][] = [
   [0, '만료 없음'],
 ];
 
-const dateText = (iso: string) => new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const dateText = (iso: string) => new Date(iso).toLocaleString(localeOf(currentLanguage()), { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 function ShareQr({ url }: { url: string }) {
   const [src, setSrc] = useState('');
@@ -31,7 +32,7 @@ function ShareQr({ url }: { url: string }) {
       alive = false;
     };
   }, [url]);
-  return src ? <img className="share-qr" src={src} alt="공유 QR 코드" width={220} height={220} /> : <div className="share-qr" />;
+  return src ? <img className="share-qr" src={src} alt={t('공유 QR 코드')} width={220} height={220} /> : <div className="share-qr" />;
 }
 
 export function ShareModal({ snapshot, initialOfficeIds, onClose, onError, onNotice }: Props) {
@@ -57,8 +58,8 @@ export function ShareModal({ snapshot, initialOfficeIds, onClose, onError, onNot
   }, [onClose]);
 
   const linkOf = (share: ShareLink) => `${base.replace(/\/+$/, '')}/s/${share.token}`;
-  const officeName = (id: string) => snapshot.offices.find((o) => o.id === id)?.name ?? '(닫힌 사무실)';
-  const scopeText = (share: ShareLink) => (share.officeIds === 'all' ? '전체 사무실' : share.officeIds.map(officeName).join(', '));
+  const officeName = (id: string) => snapshot.offices.find((o) => o.id === id)?.name ?? t('(닫힌 사무실)');
+  const scopeText = (share: ShareLink) => (share.officeIds === 'all' ? t('전체 사무실') : share.officeIds.map(officeName).join(', '));
 
   const create = async () => {
     setBusy(true);
@@ -66,7 +67,7 @@ export function ShareModal({ snapshot, initialOfficeIds, onClose, onError, onNot
       const share = await api.createShare({ name, role, officeIds: scope === 'all' ? 'all' : picked, expiresInDays: days });
       setOpenId(share.id);
       setName('');
-      onNotice(`"${share.name}" 공유 링크를 만들었어요.`);
+      onNotice(tpl('"{name}" 공유 링크를 만들었어요.', { name: share.name }));
     } catch (e) {
       onError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -75,10 +76,10 @@ export function ShareModal({ snapshot, initialOfficeIds, onClose, onError, onNot
   };
 
   const remove = async (share: ShareLink) => {
-    if (!window.confirm(`"${share.name}" 링크를 취소할까요? 이 링크로 보고 있던 사람은 바로 접속이 끊겨요.`)) return;
+    if (!window.confirm(tpl('"{name}" 링크를 취소할까요? 이 링크로 보고 있던 사람은 바로 접속이 끊겨요.', { name: share.name }))) return;
     try {
       await api.deleteShare(share.id);
-      onNotice(`"${share.name}" 링크를 취소했어요.`);
+      onNotice(tpl('"{name}" 링크를 취소했어요.', { name: share.name }));
     } catch (e) {
       onError(e instanceof Error ? e.message : String(e));
     }
@@ -87,37 +88,37 @@ export function ShareModal({ snapshot, initialOfficeIds, onClose, onError, onNot
   const copy = async (share: ShareLink) => {
     try {
       await navigator.clipboard.writeText(linkOf(share));
-      onNotice('링크를 복사했어요.');
+      onNotice(t('링크를 복사했어요.'));
     } catch {
-      window.prompt('아래 링크를 복사해 주세요.', linkOf(share));
+      window.prompt(t('아래 링크를 복사해 주세요.'), linkOf(share));
     }
   };
 
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal pixel-box share-modal">
         <div className="modal-head">
-          <span>🔗 {focusOffice ? `${focusOffice.name} 공유` : '사무실 공유'}</span>
-          <button className="icon-btn" onClick={onClose} aria-label="닫기">
+          <span>🔗 {focusOffice ? tpl('{name} 공유', { name: focusOffice.name }) : t('사무실 공유')}</span>
+          <button className="icon-btn" onClick={onClose} aria-label={t('닫기')}>
             ✕
           </button>
         </div>
 
         <section className="share-section">
-          <h4>새 공유 링크</h4>
+          <h4>{t('새 공유 링크')}</h4>
           <label className="field">
-            받는 사람 (메모)
-            <input value={name} maxLength={30} onChange={(e) => setName(e.target.value)} placeholder="예: 김 대리 휴대폰" />
+            {t('받는 사람 (메모)')}
+            <input value={name} maxLength={30} onChange={(e) => setName(e.target.value)} placeholder={t('예: 김 대리 휴대폰')} />
           </label>
 
           <div className="field">
-            공유 범위
+            {t('공유 범위')}
             <div className="segmented">
               <button type="button" className={`segment ${scope === 'all' ? 'active' : ''}`} onClick={() => setScope('all')}>
-                전체 사무실
+                {t('전체 사무실')}
               </button>
               <button type="button" className={`segment ${scope === 'some' ? 'active' : ''}`} onClick={() => setScope('some')}>
-                일부 사무실
+                {t('일부 사무실')}
               </button>
             </div>
           </div>
@@ -137,7 +138,7 @@ export function ShareModal({ snapshot, initialOfficeIds, onClose, onError, onNot
           )}
 
           <div className="field">
-            권한
+            {t('권한')}
             <div className="share-roles">
               {(Object.keys(SHARE_ROLES) as ShareRole[]).map((id) => (
                 <label key={id} className={`share-role ${role === id ? 'selected' : ''}`}>
@@ -147,15 +148,15 @@ export function ShareModal({ snapshot, initialOfficeIds, onClose, onError, onNot
                 </label>
               ))}
             </div>
-            <span className="small muted">사무실 추가·삭제, 회사 예산, 공유 관리는 주인(비밀번호 로그인)만 할 수 있어요.</span>
+            <span className="small muted">{t('사무실 추가·삭제, 회사 예산, 공유 관리는 주인(비밀번호 로그인)만 할 수 있어요.')}</span>
           </div>
 
           <label className="field">
-            유효 기간
+            {t('유효 기간')}
             <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
               {EXPIRY_OPTIONS.map(([value, label]) => (
                 <option key={value} value={value}>
-                  {label}
+                  {t(label)}
                 </option>
               ))}
             </select>
@@ -163,30 +164,30 @@ export function ShareModal({ snapshot, initialOfficeIds, onClose, onError, onNot
 
           <div className="row end">
             <button className="pixel-btn primary" disabled={busy || (scope === 'some' && picked.length === 0)} onClick={create}>
-              링크 만들기
+              {t('링크 만들기')}
             </button>
           </div>
         </section>
 
         <section className="share-section">
           <h4>
-            {focusOffice && onlyFocus ? `${focusOffice.name}을(를) 볼 수 있는 링크` : '만든 링크'}{' '}
+            {focusOffice && onlyFocus ? tpl('{name}을(를) 볼 수 있는 링크', { name: focusOffice.name }) : t('만든 링크')}{' '}
             {listed.length > 0 && <span className="muted small">({listed.length})</span>}
           </h4>
           {focusOffice && (
             <label className="check small">
               <input type="checkbox" checked={!onlyFocus} onChange={(e) => setOnlyFocus(!e.target.checked)} />
-              다른 사무실 링크도 보기 (전체 {shares.length}개)
+              {tpl('다른 사무실 링크도 보기 (전체 {n}개)', { n: shares.length })}
             </label>
           )}
           <label className="field">
-            링크 주소 앞부분
+            {t('링크 주소 앞부분')}
             <input value={base} onChange={(e) => setBase(e.target.value)} />
             {!snapshot.publicUrl && (
-              <span className="small muted">외부에서 열 주소가 다르면 고쳐 주세요. .env의 PUBLIC_URL에 넣어 두면 기본값이 돼요.</span>
+              <span className="small muted">{t('외부에서 열 주소가 다르면 고쳐 주세요. .env의 PUBLIC_URL에 넣어 두면 기본값이 돼요.')}</span>
             )}
           </label>
-          {listed.length === 0 && <p className="muted small">아직 만든 링크가 없어요.</p>}
+          {listed.length === 0 && <p className="muted small">{t('아직 만든 링크가 없어요.')}</p>}
           <ul className="share-list">
             {listed.map((share) => {
               const expired = share.expiresAt !== null && Date.parse(share.expiresAt) <= Date.now();
@@ -197,18 +198,18 @@ export function ShareModal({ snapshot, initialOfficeIds, onClose, onError, onNot
                     <span className={`badge share-badge role-${share.role}`}>{shareRoleLabel(share.role)}</span>
                   </div>
                   <div className="small muted">
-                    {scopeText(share)} · {expired ? '만료됨' : share.expiresAt ? `${dateText(share.expiresAt)}까지` : '만료 없음'}
-                    {share.lastUsedAt ? ` · 마지막 접속 ${dateText(share.lastUsedAt)}` : ' · 아직 접속 없음'}
+                    {scopeText(share)} · {expired ? t('만료됨') : share.expiresAt ? tpl('{v}까지', { v: dateText(share.expiresAt) }) : t('만료 없음')}
+                    {share.lastUsedAt ? tpl(' · 마지막 접속 {v}', { v: dateText(share.lastUsedAt) }) : t(' · 아직 접속 없음')}
                   </div>
                   <div className="row">
                     <button className="pixel-btn small" disabled={expired} onClick={() => setOpenId(openId === share.id ? null : share.id)}>
-                      {openId === share.id ? 'QR 접기' : 'QR 보기'}
+                      {openId === share.id ? t('QR 접기') : t('QR 보기')}
                     </button>
                     <button className="pixel-btn small" disabled={expired} onClick={() => copy(share)}>
-                      링크 복사
+                      {t('링크 복사')}
                     </button>
                     <button className="pixel-btn small danger" onClick={() => remove(share)}>
-                      {expired ? '지우기' : '링크 취소'}
+                      {expired ? t('지우기') : t('링크 취소')}
                     </button>
                   </div>
                   {openId === share.id && !expired && (

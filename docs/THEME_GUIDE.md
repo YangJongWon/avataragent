@@ -163,6 +163,33 @@ LICENSE.txt       라이선스 전문 (선택)
 
 시즌 변형에 `dress`를 넣으면(예: 할로윈에 `pumpkin`) 그 기간에는 그 규칙을 먼저 읽습니다. 초상화는 의상과 상관없이 같은 그림을 씁니다.
 
+### 모델별 모습 (`forms`, 선택)
+
+캐릭터가 직원의 모델에 따라 모습 자체를 바꾸게 할 수 있습니다(초사이언 1·2·3·4처럼). 캐릭터마다 등급별(`tiers`)과 모델 id별(`models`)로 정합니다.
+
+```json
+"characters": [{
+  "id": "goku",
+  "sheet": "assets/goku.png",
+  "forms": {
+    "tiers": {
+      "1": { "name": "초사이언 1", "sheet": "assets/goku-ssj1.png" },
+      "2": { "name": "초사이언 2", "sheet": "assets/goku-ssj2.png", "accessories": [{ "image": "assets/spark.png", "at": "head" }] },
+      "3": { "name": "초사이언 3", "parts": { "head": "assets/goku-ssj3-hair.png" } }
+    },
+    "models": {
+      "claude-opus": { "name": "초사이언 4", "sheet": "assets/goku-ssj4.png", "portraits": { "normal": "assets/goku-ssj4-face.png" } }
+    }
+  }
+}]
+```
+
+- 모델별 모습이 있으면 그 모델은 등급별 모습 대신 그걸 씁니다. 둘 다 없으면 평소 모습입니다.
+- `sheet`는 스프라이트 전체를 바꾸고(의상보다 우선), `parts`는 의상 위에서 한 부위만 바꿉니다. 둘 다 캐릭터의 `sheet`와 같은 프레임 배치여야 합니다.
+- `accessories`가 있으면 그 모습에서는 테마의 소품(`accessories`, `modelAccessories`) 대신 이 목록을 씁니다. 없으면 테마 소품을 그대로 씁니다.
+- `portraits`가 있으면 대화 창 초상화도 바뀝니다. `name`은 직원 관리의 모델 고르기 카드에 보입니다.
+- `sheet`, `parts`, `accessories`, `portraits` 중 하나는 있어야 하고, 모델별 모습은 캐릭터마다 64개까지입니다.
+
 ### 모델사 소품 (`accessories`, 선택)
 
 직원의 AI 모델사와 등급은 기본적으로 픽셀 모자로 보입니다. 테마가 소품을 정하면 모자 대신 소품을 겹칩니다.
@@ -180,9 +207,43 @@ LICENSE.txt       라이선스 전문 (선택)
 
 - 키는 모델사 id(`claude`, `gpt`, `grok`, `gemini`, 직접 추가한 회사의 id)이고, `*`는 나머지 모든 회사입니다.
 - 등급은 쌓입니다. 3등급 모델은 1·2·3등급 레이어를 모두 겹칩니다.
+- 등급 수는 정해져 있지 않습니다. 키는 1~99 사이의 등급 숫자이고, 모델·API 키 화면에서 4등급 이상을 만들면 그 숫자를 그대로 쓸 수 있습니다. 테마에 없는 등급은 아래에서 가장 가까운 등급을 따릅니다(`forms.tiers`, `accessoryLabels.tiers`도 같습니다). 예를 들어 1·2·3만 정한 테마에서 5등급 모델은 3등급 모습을 씁니다.
 - `at`은 `head`(머리 꼭대기) 또는 `hand`(손), `x`·`y`는 그 점에서 옮길 픽셀(±512), `scale`은 배율입니다. 이미지는 가운데를 기준으로 붙습니다.
 - 회사·등급마다 레이어 8개, 회사 16곳까지 정할 수 있습니다. 소품 세트가 없는 회사는 픽셀 모자를 쓰고, 세트가 있지만 그 등급에 레이어가 없으면 아무것도 쓰지 않습니다.
 - 테마 스튜디오에는 아직 소품 편집 화면이 없습니다. 스튜디오에서 내려받은 zip의 `theme.json`에 직접 추가해 주세요.
+
+#### 모델별 소품 (`modelAccessories`, 선택)
+
+특정 모델만 다른 소품을 쓰게 하려면 모델 id로 지정합니다.
+
+```json
+"modelAccessories": {
+  "claude-opus": [{ "image": "assets/gold-crown.png", "at": "head", "y": -6 }],
+  "gpt-pro": [{ "image": "assets/star-wand.png", "at": "hand", "x": 6, "y": -12 }]
+}
+```
+
+- 키는 모델 id(`claude-opus`, `gpt-pro` 등, 모델·API 키 화면에서 추가한 모델의 id도 됩니다)입니다.
+- 모델별 소품이 있으면 그 모델은 회사·등급 소품 대신 이 목록만 씁니다(등급별로 쌓이지 않습니다).
+- 레이어 형식은 `accessories`와 같고, 모델마다 8개, 모델 64개까지 정할 수 있습니다. 시즌 변형에도 넣을 수 있습니다.
+
+#### 소품 설명 (`accessoryLabels`, 선택)
+
+직원 관리의 "모델 고르기"에서 이 테마를 고르면, 픽셀 모자 설명 대신 테마가 쓴 설명이 보입니다.
+
+```json
+"accessoryLabels": {
+  "summary": { "ko": "최상위 모델은 별 마법 지팡이를 들어요.", "en": "Top-tier models hold a star magic wand." },
+  "companies": { "claude": "주황 리본", "*": "머리핀" },
+  "tiers": { "1": "리본", "2": "리본 + 망토", "3": "리본 + 망토 + 지팡이" },
+  "models": { "claude-opus": "황금 지팡이" }
+}
+```
+
+- `summary`는 모델 고르기 위의 한 줄 설명(200자)입니다.
+- `companies`는 회사 이름 옆에 붙는 설명(60자)이고, `*`는 나머지 회사입니다.
+- `tiers`는 등급별, `models`는 모델 id별 설명(60자)으로 모델 카드에 보입니다. 모델 설명이 있으면 등급 설명보다 먼저 씁니다.
+- 각 문구는 한 문자열이나 언어별(`ko`, `en`, `ja`, `zh`) 객체로 쓸 수 있습니다.
 
 ## 사이트 화면 (`tokens`, `site`, 선택)
 
@@ -373,6 +434,7 @@ LICENSE.txt       라이선스 전문 (선택)
 | `addLayers` | 배경 레이어 뒤에 더함 |
 | `props`, `characters`, `interactions` | 같은 id는 바꾸고, 새 id는 더함 |
 | `accessories` | 모델사별로 바꿈 |
+| `modelAccessories` | 모델별로 바꿈 |
 | `wear` | 모든 직원이 모델사 소품 위에 겹쳐 씀(픽셀 모자 대신) |
 | `emotes`, `events`, `dress` | 테마 규칙보다 먼저 읽음 |
 | `tokens`, `site` | 적은 값만 바꿈(사이트 화면도 그 기간에 바뀜) |

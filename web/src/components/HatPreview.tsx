@@ -1,12 +1,12 @@
 import type { Graphics } from 'pixi.js';
 import { useEffect, useRef } from 'react';
-import type { HatShape, Tier } from '../../../shared/models.ts';
+import { tierLook, type HatShape, type Tier, type TierLook } from '../../../shared/models.ts';
 import { drawHat, drawHatGlow, S } from '../office/pixelArt.ts';
 
 type FillStyle = string | { color: string; alpha?: number };
 
 // The pixel-art helpers only call rect/ellipse + fill, so a tiny canvas adapter can reuse them.
-function canvasGraphics(ctx: CanvasRenderingContext2D) {
+export function canvasGraphics(ctx: CanvasRenderingContext2D) {
   let shape: (() => void) | null = null;
   const g = {
     clear: () => g,
@@ -36,7 +36,8 @@ function canvasGraphics(ctx: CanvasRenderingContext2D) {
 const W = 22 * S;
 const H = 26 * S;
 
-export function HatPreview({ hat, color, tier, title }: { hat: HatShape; color: string; tier: Tier; title?: string }) {
+/** The hat a model of `tier` wears; `look` instead shows one of the three decorations directly (a company's hat set). */
+export function HatPreview({ hat, color, tier, look: fixed, title }: { hat: HatShape; color: string; tier?: Tier; look?: TierLook; title?: string }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -46,14 +47,15 @@ export function HatPreview({ hat, color, tier, title }: { hat: HatShape; color: 
     ctx.clearRect(0, 0, W, H);
     ctx.translate(W / 2, H + 10 * S);
     const g = canvasGraphics(ctx);
-    if (tier === 3) drawHatGlow(g, hat);
+    const look = fixed ?? tierLook(tier ?? 1);
+    if (look === 3) drawHatGlow(g, hat);
     const px = (x: number, y: number, w: number, h: number, c: string) => g.rect(x * S, y * S, w * S, h * S).fill(c);
     px(-6, -21, 12, 9, '#f5d0a9');
     px(-6, -21, 12, 2, '#3b2a20');
     px(-3, -17, 1, 1, '#222222');
     px(2, -17, 1, 1, '#222222');
-    drawHat(g, hat, color, tier);
-  }, [hat, color, tier]);
+    drawHat(g, hat, color, look);
+  }, [hat, color, tier, fixed]);
 
   return <canvas ref={ref} className="hat-preview" width={W} height={H} title={title} />;
 }

@@ -3,6 +3,7 @@ import { TEAMS } from '../shared/teams.ts';
 import type { Proposal, Recommendation, Role, Task, TeamId } from '../shared/types.ts';
 import { parseJson } from './ai.ts';
 import { store } from './store.ts';
+import { L, LT } from './text.ts';
 
 export interface Inputs {
   text: string;
@@ -58,52 +59,49 @@ const dev: TeamSpec = {
   reviewAsk: '보고서를 평가해라. 근거와 출처가 부족하거나 형식이 어긋나면 반려한다.',
   mock: {
     brief: (t) =>
-      `목표: "${t.title}"에 대한 의사결정용 보고서 작성\n범위: 현황, 주요 선택지, 장단점, 위험 요소\n형식: Markdown 보고서 (요약 → 본문 → 결론 → 출처)\n요청 메모: ${t.description || '없음'}`,
+      LT('목표: "{title}"에 대한 의사결정용 보고서 작성\n범위: 현황, 주요 선택지, 장단점, 위험 요소\n형식: Markdown 보고서 (요약 → 본문 → 결론 → 출처)\n요청 메모: {note}', {
+        title: L(t.title),
+        note: t.description || L('없음'),
+      }),
     research: (t) =>
       [
-        `## ${t.title} 조사 메모`,
-        '- 현황: 관련 시장과 도구가 빠르게 늘고 있음 (확인 필요: 최신 통계)',
-        '- 주요 선택지: 상위 3개 접근 방식이 전체 사례의 절반 이상 (업계 기사 기준, 확인 필요)',
-        '- 비용: 초기 도입 비용보다 운영·유지 비용 비중이 큼 (추정)',
-        '- 위험 요소: 데이터 품질, 보안, 담당자 학습 비용',
-        '- 출처 후보: 공식 문서, 업계 협회 보고서, 주요 기술 블로그',
+        `## ${LT('{title} 조사 메모', { title: L(t.title) })}`,
+        L('- 현황: 관련 시장과 도구가 빠르게 늘고 있음 (확인 필요: 최신 통계)\n- 주요 선택지: 상위 3개 접근 방식이 전체 사례의 절반 이상 (업계 기사 기준, 확인 필요)\n- 비용: 초기 도입 비용보다 운영·유지 비용 비중이 큼 (추정)\n- 위험 요소: 데이터 품질, 보안, 담당자 학습 비용\n- 출처 후보: 공식 문서, 업계 협회 보고서, 주요 기술 블로그'),
       ].join('\n'),
     draft: (t) => {
-      const direction = t.clarifications.at(-1) ?? '종합 검토';
+      const direction = L(t.clarifications.at(-1) ?? '종합 검토');
       const revised = t.reviews.some((r) => !r.approved) || t.userChangeRequests.length > 0;
       return [
-        `# ${t.title}`,
+        `# ${L(t.title)}`,
         '',
-        '## 요약',
-        `- "${direction}" 관점으로 정리했습니다.`,
-        '- 단기에는 작은 범위로 시험 도입하고, 효과가 확인되면 확대하는 것을 권합니다.',
+        `## ${L('요약')}`,
+        `- ${LT('"{direction}" 관점으로 정리했습니다.', { direction })}`,
+        `- ${L('단기에는 작은 범위로 시험 도입하고, 효과가 확인되면 확대하는 것을 권합니다.')}`,
         '',
-        '## 본문',
-        '### 1. 현황',
-        '관련 도구와 사례가 빠르게 늘고 있으며, 운영 비용이 총비용의 큰 부분을 차지합니다.',
-        '### 2. 선택지 비교',
-        '| 선택지 | 장점 | 단점 |',
-        '| --- | --- | --- |',
-        '| A. 직접 구축 | 자유도 높음 | 초기 비용·시간 큼 |',
-        '| B. 기성 도구 | 빠른 도입 | 맞춤화 한계 |',
-        '| C. 혼합 | 균형 | 관리 복잡도 |',
-        '### 3. 위험 요소',
-        '- 데이터 품질과 보안 정책 정비가 선행되어야 합니다.',
+        `## ${L('본문')}`,
+        `### ${L('1. 현황')}`,
+        L('관련 도구와 사례가 빠르게 늘고 있으며, 운영 비용이 총비용의 큰 부분을 차지합니다.'),
+        `### ${L('2. 선택지 비교')}`,
+        L('| 선택지 | 장점 | 단점 |\n| --- | --- | --- |\n| A. 직접 구축 | 자유도 높음 | 초기 비용·시간 큼 |\n| B. 기성 도구 | 빠른 도입 | 맞춤화 한계 |\n| C. 혼합 | 균형 | 관리 복잡도 |'),
+        `### ${L('3. 위험 요소')}`,
+        L('- 데이터 품질과 보안 정책 정비가 선행되어야 합니다.'),
         '',
-        '## 결론',
-        'B안으로 2주 시험 운영 후 지표(처리 시간, 오류율)를 보고 C안 확대 여부를 결정합니다.',
+        `## ${L('결론')}`,
+        L('B안으로 2주 시험 운영 후 지표(처리 시간, 오류율)를 보고 C안 확대 여부를 결정합니다.'),
         '',
-        '## 출처',
-        revised ? '- 공식 문서 (2026년 기준)\n- 업계 협회 연간 보고서\n- 사내 유사 사례 회고' : '- (출처 정리 중)',
+        `## ${L('출처')}`,
+        revised ? L('- 공식 문서 (2026년 기준)\n- 업계 협회 연간 보고서\n- 사내 유사 사례 회고') : L('- (출처 정리 중)'),
       ].join('\n');
     },
-    rejectReason: '출처 항목이 비어 있고, 결론의 근거가 본문 수치와 연결되지 않습니다',
+    get rejectReason() {
+      return L('출처 항목이 비어 있고, 결론의 근거가 본문 수치와 연결되지 않습니다');
+    },
   },
   buildProposal: (_json, task) => ({
-    headline: '승인하면 보고서가 보고서함에 보관됩니다.',
-    lines: [`📄 ${task.title}`],
+    headline: L('승인하면 보고서가 보고서함에 보관됩니다.'),
+    lines: [`📄 ${L(task.title)}`],
   }),
-  onApprove: (_json, task) => `보고서 "${task.title}"를 보고서함에 보관했어요.`,
+  onApprove: (_json, task) => LT('보고서 "{title}"를 보고서함에 보관했어요.', { title: L(task.title) }),
 };
 
 // ───────────────────────────── 인사팀 ─────────────────────────────
@@ -149,12 +147,12 @@ const hr: TeamSpec = {
   ].join('\n'),
   reviewAsk: '날짜·시간 오류, 광고의 일정 등록, 누락된 메일, JSON 형식 오류가 있으면 반려한다.',
   mock: {
-    brief: (t) => `새 메일 ${t.inputIds.length}통을 확인했습니다.\n일정이 담긴 메일은 캘린더 후보로, 요청 메일은 할 일로, 광고는 보관 처리합니다.`,
+    brief: (t) => LT('새 메일 {n}통을 확인했습니다.\n일정이 담긴 메일은 캘린더 후보로, 요청 메일은 할 일로, 광고는 보관 처리합니다.', { n: t.inputIds.length }),
     research: (t) => {
       const rows = store.data.mailbox
         .filter((m) => t.inputIds.includes(m.id))
-        .map((m) => `| ${m.subject} | ${hrCategory(m.subject, Boolean(m.mockEvent))} | ${m.from.split('<')[0].trim()} |`);
-      return ['| 제목 | 분류 | 보낸 사람 |', '| --- | --- | --- |', ...rows].join('\n');
+        .map((m) => `| ${m.subject} | ${L(hrCategory(m.subject, Boolean(m.mockEvent)))} | ${m.from.split('<')[0].trim()} |`);
+      return [L('| 제목 | 분류 | 보낸 사람 |'), '| --- | --- | --- |', ...rows].join('\n');
     },
     draft: (t) => {
       const mails = store.data.mailbox.filter((m) => t.inputIds.includes(m.id));
@@ -162,35 +160,38 @@ const hr: TeamSpec = {
         const category = hrCategory(m.subject, Boolean(m.mockEvent));
         return {
           mailId: m.id,
-          category,
+          category: L(category),
           summary: m.subject,
-          action: category === '일정' ? '캘린더 등록' : category === '요청' ? '직접 회신 필요' : category === '광고' ? '보관' : '읽고 보관',
+          action: L(category === '일정' ? '캘린더 등록' : category === '요청' ? '직접 회신 필요' : category === '광고' ? '보관' : '읽고 보관'),
+          request: category === '요청',
         };
       });
       const events = mails.filter((m) => m.mockEvent).map((m) => ({ mailId: m.id, ...m.mockEvent! }));
-      const todo = summaries.filter((s) => s.category === '요청');
+      const todo = summaries.filter((s) => s.request);
       return [
-        '# 메일함 정리 보고서',
+        `# ${L('메일함 정리 보고서')}`,
         '',
-        '## 요약',
-        `- 새 메일 ${mails.length}통 중 일정 ${events.length}건, 회신이 필요한 요청 ${todo.length}건이 있습니다.`,
+        `## ${L('요약')}`,
+        LT('- 새 메일 {total}통 중 일정 {events}건, 회신이 필요한 요청 {todo}건이 있습니다.', { total: mails.length, events: events.length, todo: todo.length }),
         '',
-        '## 메일별 정리',
+        `## ${L('메일별 정리')}`,
         ...summaries.map((s) => `- **[${s.category}]** ${s.summary} → ${s.action}`),
         '',
-        '## 등록할 일정',
-        ...(events.length ? events.map((e) => `- ${e.date} ${e.start}~${e.end} ${e.title} (${e.location})`) : ['- 없음']),
+        `## ${L('등록할 일정')}`,
+        ...(events.length ? events.map((e) => `- ${e.date} ${e.start}~${e.end} ${e.title} (${e.location})`) : [`- ${L('없음')}`]),
         '',
-        '## 직접 하실 일',
-        ...(todo.length ? todo.map((s) => `- ${s.summary}`) : ['- 없음']),
-      ].join('\n') + jsonBlock({ summaries, events });
+        `## ${L('직접 하실 일')}`,
+        ...(todo.length ? todo.map((s) => `- ${s.summary}`) : [`- ${L('없음')}`]),
+      ].join('\n') + jsonBlock({ summaries: summaries.map(({ request: _request, ...s }) => s), events });
     },
-    rejectReason: '일정 시간 표기가 일부 누락되었습니다',
+    get rejectReason() {
+      return L('일정 시간 표기가 일부 누락되었습니다');
+    },
   },
   buildProposal(json) {
     const { summaries, events } = parseHr(json);
     return {
-      headline: `승인하면 일정 ${events.length}건을 캘린더에 등록하고 메일 ${summaries.length}통을 처리 완료로 표시합니다.`,
+      headline: LT('승인하면 일정 {events}건을 캘린더에 등록하고 메일 {mails}통을 처리 완료로 표시합니다.', { events: events.length, mails: summaries.length }),
       lines: [
         ...events.map((e) => `📅 ${e.date} ${e.start}~${e.end} ${e.title}${e.location ? ` (${e.location})` : ''}`),
         ...summaries.map((s) => `✉️ [${s.category}] ${s.summary} → ${s.action}`),
@@ -218,7 +219,7 @@ const hr: TeamSpec = {
       s.calendar.sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
       for (const m of s.mailbox) if (task.inputIds.includes(m.id)) m.processed = true;
     });
-    return `일정 ${added}건을 캘린더에 등록하고 메일 ${task.inputIds.length}통을 정리했어요.`;
+    return LT('일정 {added}건을 캘린더에 등록하고 메일 {mails}통을 정리했어요.', { added, mails: task.inputIds.length });
   },
 };
 
@@ -271,8 +272,8 @@ const mgmt: TeamSpec = {
   ].join('\n'),
   reviewAsk: '배분 총합 초과, 누락된 팀, 실적과 맞지 않는 근거, JSON 형식 오류가 있으면 반려한다.',
   mock: {
-    brief: () => '이번 달 팀별 AI 비용과 인정 가치를 비교해 예산 상한을 다시 정합니다.\n원칙: 모든 팀 최소 운영 예산 보장, 남는 예산은 이익 비중대로 배분.',
-    research: (t) => `## 팀별 실적\n${t.inputText}\n\n- 이익이 큰 팀부터 우선 배분 후보로 봅니다.`,
+    brief: () => L('이번 달 팀별 AI 비용과 인정 가치를 비교해 예산 상한을 다시 정합니다.\n원칙: 모든 팀 최소 운영 예산 보장, 남는 예산은 이익 비중대로 배분.'),
+    research: (t) => `## ${L('팀별 실적')}\n${t.inputText}\n\n${L('- 이익이 큰 팀부터 우선 배분 후보로 봅니다.')}`,
     draft: () => {
       const { offices, budget } = store.data;
       const total = budget.monthlyKrw;
@@ -285,40 +286,40 @@ const mgmt: TeamSpec = {
         const amount = floor + Math.floor(extra / 1000) * 1000;
         const reason =
           profits[i] > 0
-            ? `가상 이익 ${krw(profits[i])}으로 성과가 좋아 추가 배분`
-            : o.spentKrw > o.valueKrw
-              ? '비용 대비 성과가 낮아 최소 운영 예산 위주'
-              : '실적이 아직 없어 기본 배분';
+            ? LT('가상 이익 {profit}으로 성과가 좋아 추가 배분', { profit: krw(profits[i]) })
+            : L(o.spentKrw > o.valueKrw ? '비용 대비 성과가 낮아 최소 운영 예산 위주' : '실적이 아직 없어 기본 배분');
         return { officeId: o.id, budgetKrw: amount, reason };
       });
       const allocated = allocations.reduce((a, b) => a + b.budgetKrw, 0);
       return [
-        '# 이번 달 AI 예산 배분안',
+        `# ${L('이번 달 AI 예산 배분안')}`,
         '',
-        '## 요약',
-        `- 회사 월 예산 ${krw(total)} 중 ${krw(allocated)}을 팀별 상한으로 배분합니다.`,
-        `- 모든 팀에 최소 ${krw(floor)}을 보장하고, 나머지는 가상 이익 비중대로 나눴습니다.`,
+        `## ${L('요약')}`,
+        LT('- 회사 월 예산 {total} 중 {allocated}을 팀별 상한으로 배분합니다.', { total: krw(total), allocated: krw(allocated) }),
+        LT('- 모든 팀에 최소 {floor}을 보장하고, 나머지는 가상 이익 비중대로 나눴습니다.', { floor: krw(floor) }),
         '',
-        '## 배분안',
-        '| 팀 | 배분액 | 근거 |',
+        `## ${L('배분안')}`,
+        L('| 팀 | 배분액 | 근거 |'),
         '| --- | --- | --- |',
-        ...allocations.map((a) => `| ${offices.find((o) => o.id === a.officeId)?.name} | ${krw(a.budgetKrw)} | ${a.reason} |`),
+        ...allocations.map((a) => `| ${L(offices.find((o) => o.id === a.officeId)?.name ?? '')} | ${krw(a.budgetKrw)} | ${a.reason} |`),
         '',
-        '## 주의점',
-        '- 상한에 도달한 팀은 이번 달 남은 기간 동안 업무가 멈춥니다. 필요하면 경영팀 자료 탭에서 직접 조정하세요.',
+        `## ${L('주의점')}`,
+        L('- 상한에 도달한 팀은 이번 달 남은 기간 동안 업무가 멈춥니다. 필요하면 경영팀 자료 탭에서 직접 조정하세요.'),
       ].join('\n') + jsonBlock({ allocations });
     },
-    rejectReason: '배분 근거가 실적 수치와 연결되지 않습니다',
+    get rejectReason() {
+      return L('배분 근거가 실적 수치와 연결되지 않습니다');
+    },
   },
   buildProposal(json) {
     const allocations = parseMgmt(json);
     const offices = store.data.offices;
     return {
-      headline: `승인하면 ${allocations.length}개 팀의 월 예산 상한을 아래처럼 바꿉니다.`,
+      headline: LT('승인하면 {n}개 팀의 월 예산 상한을 아래처럼 바꿉니다.', { n: allocations.length }),
       lines: allocations.map((a) => {
         const o = offices.find((x) => x.id === a.officeId)!;
-        const before = o.budgetKrw === null ? '상한 없음' : krw(o.budgetKrw);
-        return `💰 ${o.name}: ${before} → ${krw(Number(a.budgetKrw))} · ${a.reason}`;
+        const before = o.budgetKrw === null ? L('상한 없음') : krw(o.budgetKrw);
+        return `💰 ${L(o.name)}: ${before} → ${krw(Number(a.budgetKrw))} · ${a.reason}`;
       }),
     };
   },
@@ -330,7 +331,7 @@ const mgmt: TeamSpec = {
         if (o) o.budgetKrw = Math.round(Number(a.budgetKrw));
       }
     });
-    return `${allocations.length}개 팀의 예산 상한을 반영했어요.`;
+    return LT('{n}개 팀의 예산 상한을 반영했어요.', { n: allocations.length });
   },
 };
 
@@ -381,12 +382,12 @@ const support: TeamSpec = {
   ].join('\n'),
   reviewAsk: '지키지 못할 약속, 사실과 다른 안내, 무례한 말투, 개인정보 노출, JSON 형식 오류가 있으면 반려한다.',
   mock: {
-    brief: (t) => `새 문의 ${t.inputIds.length}건을 접수했습니다.\n오류 문의를 가장 먼저, 칭찬 문의는 마지막에 처리합니다.`,
+    brief: (t) => LT('새 문의 {n}건을 접수했습니다.\n오류 문의를 가장 먼저, 칭찬 문의는 마지막에 처리합니다.', { n: t.inputIds.length }),
     research: (t) => {
       const rows = store.data.inquiries
         .filter((q) => t.inputIds.includes(q.id))
-        .map((q) => `| ${q.customer} | ${q.subject} | ${q.mockCategory ?? '기타'} | ${URGENCY[q.mockCategory ?? ''] ?? '보통'} |`);
-      return ['| 고객 | 제목 | 유형 | 긴급도 |', '| --- | --- | --- | --- |', ...rows].join('\n');
+        .map((q) => `| ${q.customer} | ${q.subject} | ${L(q.mockCategory ?? '기타')} | ${L(URGENCY[q.mockCategory ?? ''] ?? '보통')} |`);
+      return [L('| 고객 | 제목 | 유형 | 긴급도 |'), '| --- | --- | --- | --- |', ...rows].join('\n');
     },
     draft: (t) => {
       const revised = t.reviews.some((r) => !r.approved) || t.userChangeRequests.length > 0;
@@ -394,31 +395,35 @@ const support: TeamSpec = {
         .filter((q) => t.inputIds.includes(q.id))
         .map((q) => {
           const category = q.mockCategory ?? '기타';
-          let body = REPLY_TEMPLATE[category] ?? '문의 주셔서 감사합니다. 확인 후 빠르게 안내드리겠습니다.';
-          if (!revised && category === '배송') body += ' 내일까지는 꼭 받아보실 수 있습니다.';
+          let body = L(REPLY_TEMPLATE[category] ?? '문의 주셔서 감사합니다. 확인 후 빠르게 안내드리겠습니다.');
+          if (!revised && category === '배송') body += L(' 내일까지는 꼭 받아보실 수 있습니다.');
+          const urgency = URGENCY[category] ?? '보통';
           return {
             inquiryId: q.id,
-            category,
-            urgency: URGENCY[category] ?? '보통',
+            category: L(category),
+            urgency: L(urgency),
+            urgent: urgency === '높음',
             subject: `Re: ${q.subject}`,
-            body: `${q.customer} 고객님, 안녕하세요.\n${body}\n감사합니다.`,
+            body: LT('{customer} 고객님, 안녕하세요.\n{body}\n감사합니다.', { customer: q.customer, body }),
           };
         });
       return [
-        '# 고객 문의 답변 초안',
+        `# ${L('고객 문의 답변 초안')}`,
         '',
-        '## 요약',
-        `- 문의 ${replies.length}건 (긴급 ${replies.filter((r) => r.urgency === '높음').length}건)`,
+        `## ${L('요약')}`,
+        LT('- 문의 {n}건 (긴급 {urgent}건)', { n: replies.length, urgent: replies.filter((r) => r.urgent).length }),
         '',
         ...replies.flatMap((r) => [`## [${r.urgency}] ${r.category} · ${r.subject}`, '', r.body.replace(/\n/g, '  \n'), '']),
-      ].join('\n') + jsonBlock({ replies });
+      ].join('\n') + jsonBlock({ replies: replies.map(({ urgent: _urgent, ...r }) => r) });
     },
-    rejectReason: '배송 문의 답변에 "내일까지는 꼭 받아보실 수 있습니다"라는 확인되지 않은 약속이 있습니다',
+    get rejectReason() {
+      return L('배송 문의 답변에 "내일까지는 꼭 받아보실 수 있습니다"라는 확인되지 않은 약속이 있습니다');
+    },
   },
   buildProposal(json) {
     const replies = parseSupport(json);
     return {
-      headline: `승인하면 답변 ${replies.length}건이 발송 대기함에 들어갑니다. 실제 발송은 하지 않아요.`,
+      headline: LT('승인하면 답변 {n}건이 발송 대기함에 들어갑니다. 실제 발송은 하지 않아요.', { n: replies.length }),
       lines: replies.map((r) => `✉️ [${r.urgency}·${r.category}] ${r.subject}`),
     };
   },
@@ -443,7 +448,7 @@ const support: TeamSpec = {
       }
       s.outbox = s.outbox.slice(0, 100);
     });
-    return `답변 ${replies.length}건을 발송 대기함에 넣었어요.`;
+    return LT('답변 {n}건을 발송 대기함에 넣었어요.', { n: replies.length });
   },
 };
 
@@ -517,45 +522,57 @@ const welfare: TeamSpec = {
   mock: {
     brief: () => {
       const busy = upcomingDays().filter((d) => d.events.length >= 2);
-      return `관심사: ${store.data.interests.keywords.join(', ')}\n${busy.length ? `일정이 몰린 날 ${busy.length}일 → 휴식 추천 우선` : '이번 주는 여유가 있어 문화생활 위주로 추천'}`;
+      return `${LT('관심사: {keywords}', { keywords: store.data.interests.keywords.join(', ') })}\n${busy.length ? LT('일정이 몰린 날 {n}일 → 휴식 추천 우선', { n: busy.length }) : L('이번 주는 여유가 있어 문화생활 위주로 추천')}`;
     },
     research: () =>
       store.data.interests.keywords
-        .map((k) => `- ${k}: 관련 공연·전시 (날짜 확인 필요), 입문 영상, 주말 활동 후보`)
+        .map((k) => LT('- {keyword}: 관련 공연·전시 (날짜 확인 필요), 입문 영상, 주말 활동 후보', { keyword: k }))
         .join('\n'),
     draft: () => {
       const { interests } = store.data;
-      const region = interests.region || '서울';
+      const region = interests.region || L('서울');
       const busy = upcomingDays().filter((d) => d.events.length >= 2);
       const recs: WelfareJson['recommendations'] = [];
       for (const d of busy.slice(0, 1)) {
         recs.push({
           kind: 'rest',
-          title: `${d.date} 저녁은 일찍 쉬기`,
-          reason: `이날 일정이 ${d.events.length}개 몰려 있어요. 마지막 일정 후에는 휴식을 잡아두세요.`,
+          title: LT('{date} 저녁은 일찍 쉬기', { date: d.date }),
+          reason: LT('이날 일정이 {n}개 몰려 있어요. 마지막 일정 후에는 휴식을 잡아두세요.', { n: d.events.length }),
           query: '',
         });
       }
       for (const k of interests.keywords.slice(0, 3)) {
-        recs.push({ kind: 'youtube', title: `${k} 입문 영상 한 편`, reason: `관심사 "${k}"를 가볍게 즐기기 좋아요.`, query: `${k} 입문` });
-        recs.push({ kind: 'event', title: `${region} ${k} 관련 행사 찾아보기`, reason: '이번 주말 일정이 비어 있다면 들러볼 만해요. 날짜는 확인이 필요해요.', query: `${region} ${k} 공연 전시` });
+        recs.push({
+          kind: 'youtube',
+          title: LT('{keyword} 입문 영상 한 편', { keyword: k }),
+          reason: LT('관심사 "{keyword}"를 가볍게 즐기기 좋아요.', { keyword: k }),
+          query: LT('{keyword} 입문', { keyword: k }),
+        });
+        recs.push({
+          kind: 'event',
+          title: LT('{region} {keyword} 관련 행사 찾아보기', { region, keyword: k }),
+          reason: L('이번 주말 일정이 비어 있다면 들러볼 만해요. 날짜는 확인이 필요해요.'),
+          query: LT('{region} {keyword} 공연 전시', { region, keyword: k }),
+        });
       }
-      recs.push({ kind: 'activity', title: '점심 후 15분 산책', reason: '앉아 있는 시간이 길 때 집중력 회복에 좋아요.', query: `${region} 산책하기 좋은 곳` });
+      recs.push({ kind: 'activity', title: L('점심 후 15분 산책'), reason: L('앉아 있는 시간이 길 때 집중력 회복에 좋아요.'), query: LT('{region} 산책하기 좋은 곳', { region }) });
       const top = recs.slice(0, 8);
       return [
-        '# 이번 주 휴식·문화생활 추천',
+        `# ${L('이번 주 휴식·문화생활 추천')}`,
         '',
-        busy.length ? `일정이 몰린 날이 ${busy.length}일 있어요. 쉬는 시간부터 챙겨요. 🌿` : '이번 주는 비교적 여유가 있어요. 하고 싶던 걸 해봐요. 🌿',
+        busy.length ? LT('일정이 몰린 날이 {n}일 있어요. 쉬는 시간부터 챙겨요. 🌿', { n: busy.length }) : L('이번 주는 비교적 여유가 있어요. 하고 싶던 걸 해봐요. 🌿'),
         '',
         ...top.map((r) => `- ${KIND_EMOJI[r.kind]} **${r.title}** — ${r.reason}`),
       ].join('\n') + jsonBlock({ recommendations: top });
     },
-    rejectReason: '관심사와 동떨어진 추천이 섞여 있습니다',
+    get rejectReason() {
+      return L('관심사와 동떨어진 추천이 섞여 있습니다');
+    },
   },
   buildProposal(json) {
     const recs = parseWelfare(json);
     return {
-      headline: `승인하면 추천 ${recs.length}개가 추천 보관함에 저장됩니다.`,
+      headline: LT('승인하면 추천 {n}개가 추천 보관함에 저장됩니다.', { n: recs.length }),
       lines: recs.map((r) => `${KIND_EMOJI[r.kind]} ${r.title} — ${r.reason}`),
     };
   },
@@ -573,7 +590,7 @@ const welfare: TeamSpec = {
       }));
       s.recommendations = [...items, ...s.recommendations].slice(0, 60);
     });
-    return `추천 ${recs.length}개를 추천 보관함에 저장했어요.`;
+    return LT('추천 {n}개를 추천 보관함에 저장했어요.', { n: recs.length });
   },
 };
 

@@ -1,8 +1,9 @@
+import { t } from '../../../../shared/i18n.ts';
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import type { TeamMeta } from '../../../../shared/teams.ts';
 import { builtinSkin } from '../../../../shared/skins.ts';
 import type { Agent, AgentSkin, Skin } from '../../../../shared/types.ts';
-import { companyOf, modelOf, type HatShape, type Tier } from '../../../../shared/models.ts';
+import { companyOf, modelOf, tierLook, type HatShape, type TierLook } from '../../../../shared/models.ts';
 import { drawBody, drawFace, drawHat, drawHatGlow, HAT_TOP, S } from '../pixelArt.ts';
 import { loadPinkGirl, type SpriteSkin } from '../skinSprites.ts';
 import { DEFAULT_LAYOUT, type CharacterArt, type CharacterLook, type OfficeTheme, type RoomArt } from '../theme.ts';
@@ -71,15 +72,15 @@ function buildRoom(team: TeamMeta): RoomArt {
   back.addChild(g);
 
   const labels: [string, number, number][] = [
-    ['금고', SAFE.x + SAFE.w / 2, SAFE.y + SAFE.h + 4],
-    [team.stepLabels.done, ARCHIVE.x + ARCHIVE.w / 2, ARCHIVE.y + ARCHIVE.h + 4],
-    ['자료실', SHELF.x + SHELF.w / 2, SHELF.y + SHELF.h + 2],
+    [t('금고'), SAFE.x + SAFE.w / 2, SAFE.y + SAFE.h + 4],
+    [t(team.stepLabels.done), ARCHIVE.x + ARCHIVE.w / 2, ARCHIVE.y + ARCHIVE.h + 4],
+    [t('자료실'), SHELF.x + SHELF.w / 2, SHELF.y + SHELF.h + 2],
   ];
   for (const [text, x, y] of labels) {
-    const t = new Text({ text, style: { fontFamily: FONT, fontSize: 11, fontWeight: 'bold', fill: '#5d4037' } });
-    t.anchor.set(0.5, 0);
-    t.position.set(x, y);
-    back.addChild(t);
+    const label = new Text({ text, style: { fontFamily: FONT, fontSize: 11, fontWeight: 'bold', fill: '#5d4037' } });
+    label.anchor.set(0.5, 0);
+    label.position.set(x, y);
+    back.addChild(label);
   }
   const sign = new Graphics();
   sign.roundRect(14, 10, 70, 18, 3).fill('#5d4037');
@@ -95,7 +96,7 @@ function buildRoom(team: TeamMeta): RoomArt {
   const loungeSign = new Graphics();
   loungeSign.roundRect(LOUNGE_X + 10, 10, 84, 20, 4).fill('#6d4c41');
   back.addChild(loungeSign);
-  const loungeText = new Text({ text: '☕ 휴게실', style: { fontFamily: FONT, fontSize: 12, fontWeight: 'bold', fill: '#fff3e0' } });
+  const loungeText = new Text({ text: t('☕ 휴게실'), style: { fontFamily: FONT, fontSize: 12, fontWeight: 'bold', fill: '#fff3e0' } });
   loungeText.anchor.set(0.5);
   loungeText.position.set(LOUNGE_X + 52, 20);
   back.addChild(loungeText);
@@ -206,7 +207,7 @@ class PixelCharacter implements CharacterArt {
   private expression: Agent['expression'] | null = null;
   private hatKey: string | null = null;
   private hatShape: HatShape = 'beanie';
-  private tier: Tier = 1;
+  private tier: TierLook = 1;
   private hatOffset = 0;
 
   constructor(private pinkGirl: SpriteSkin | null) {
@@ -240,16 +241,17 @@ class PixelCharacter implements CharacterArt {
     }
     const model = modelOf(agent.model);
     const company = companyOf(model.vendor);
-    const hatKey = `${company.hat}:${company.color}:${model.tier}`;
+    const look = tierLook(model.tier);
+    const hatKey = `${company.hat}:${company.color}:${look}`;
     if (hatKey !== this.hatKey || skinChanged) {
       this.hatKey = hatKey;
-      this.tier = model.tier;
+      this.tier = look;
       this.hatShape = company.hat;
-      drawHat(this.hat, company.hat, company.color, model.tier);
-      if (model.tier === 3) drawHatGlow(this.glow, company.hat);
+      drawHat(this.hat, company.hat, company.color, look);
+      if (look === 3) drawHatGlow(this.glow, company.hat);
       else this.glow.clear();
       this.sparkles.clear();
-      this.tagY = (HAT_TOP[company.hat] - (model.tier === 3 ? 9 : 6)) * S + this.hatOffset;
+      this.tagY = (HAT_TOP[company.hat] - (look === 3 ? 9 : 6)) * S + this.hatOffset;
     }
   }
 

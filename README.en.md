@@ -1,10 +1,21 @@
-# 🏢 AvatarCast Office
+# AvatarCast Office
 
-**AI Agent Office** — your AI staff, at work where you can see it
+**AvatarCast** — a project office where you can watch your AI character team work
 
 [한국어](README.md) | English | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-A web app where you assign work to AI employees, watch them work in a pixel office, and approve their results. Managers, researchers, writers, and reviewers follow a visible workflow. Once you approve the final result, its value is reflected in the profit dashboard.
+[avatarcast.app](https://avatarcast.app)
+
+A web app where you cast AI agents as role-based characters, assign work, watch the workflow unfold in project rooms, and approve the final results. Managers, researchers, writers, and reviewers move through a visible workflow, and approved results are reflected in reports and the profit dashboard.
+
+## GitHub Description
+
+| Language | Description |
+| --- | --- |
+| 한국어 | AI 캐릭터 팀이 일하는 모습, 업무 흐름, 결과 보고서를 게임처럼 보여 주는 프로젝트 오피스 |
+| English | A visual project office where AI character teams work, show their workflow, and report results like a game |
+| 日本語 | AIキャラクターチームの作業、ワークフロー、成果レポートをゲームのように見せるプロジェクトオフィス |
+| 简体中文 | 像游戏一样展示 AI 角色团队的工作过程、工作流和成果报告的项目办公室 |
 
 For durable execution and the PostgreSQL development environment, start Docker Desktop and run `npm.cmd run infra:up`. See `OPERATIONS.md` for SQLite migration and Temporal verification.
 

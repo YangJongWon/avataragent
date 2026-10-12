@@ -3,7 +3,7 @@ export type Plan = 'personal' | 'team' | 'business';
 /** How often a plan is billed; a year costs ten months. */
 export type BillingInterval = 'month' | 'year';
 
-export type PlanFeature = 'members' | 'chat' | 'projectLounge' | 'officeChannels' | 'assignees' | 'activityExport';
+export type PlanFeature = 'members' | 'chat' | 'projectLounge' | 'officeChannels' | 'assignees' | 'activityExport' | 'companyLogo';
 
 export interface PlanMeta {
   id: Plan;
@@ -47,7 +47,7 @@ export const PLANS: PlanMeta[] = [
     emoji: '🏢',
     label: '비즈니스',
     description: '팀 기능에 더해 사무실별 채널, 더 큰 조직과 활동 기록 내보내기를 써요.',
-    features: ['members', 'chat', 'projectLounge', 'officeChannels', 'assignees', 'activityExport'],
+    features: ['members', 'chat', 'projectLounge', 'officeChannels', 'assignees', 'activityExport', 'companyLogo'],
     maxMembers: 50,
     priceKrw: 29_000,
     priceYearly: 290_000,

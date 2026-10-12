@@ -1,8 +1,9 @@
 import type { ReactNode, SVGProps } from 'react';
 
-export type SiteIconName = 'spark' | 'pricing' | 'download' | 'community' | 'forum' | 'ranking' | 'docs' | 'theme' | 'flow' | 'playbook' | 'upload' | 'profit' | 'team' | 'model' | 'notice' | 'question' | 'tip' | 'idea' | 'office' | 'pin' | 'comment' | 'pen';
+export type SiteIconName = 'home' | 'spark' | 'pricing' | 'download' | 'community' | 'forum' | 'ranking' | 'docs' | 'theme' | 'flow' | 'playbook' | 'upload' | 'profit' | 'team' | 'model' | 'notice' | 'question' | 'tip' | 'idea' | 'office' | 'pin' | 'comment' | 'pen' | 'heart' | 'check' | 'flag' | 'medal' | 'user';
 
 const paths: Record<SiteIconName, ReactNode> = {
+  home: <><path d="m3 11 9-8 9 8"/><path d="M5 10v11h14V10M9 21v-7h6v7"/></>,
   spark: <><path d="m12 2 1.7 5.1L19 9l-5.3 1.9L12 16l-1.7-5.1L5 9l5.3-1.9L12 2Z"/><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z"/></>,
   pricing: <><path d="M4 7.5V5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3.5"/><path d="M14 3v6h6M8 13h8M8 17h5"/></>,
   download: <><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 19h14"/></>,
@@ -25,6 +26,11 @@ const paths: Record<SiteIconName, ReactNode> = {
   pin: <><path d="m9 3 6 6M7 8l5 5-4 4-5-5 4-4Zm5 5 5-5 3 3-5 5M8 17l-5 4"/></>,
   comment: <><path d="M4 4h16v12H9l-5 4V4Z"/><path d="M8 9h8M8 12h5"/></>,
   pen: <><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14 7 3 3M8.5 19 5 15.5"/></>,
+  heart: <path d="M20.8 5.8a5 5 0 0 0-7.1 0L12 7.5l-1.7-1.7a5 5 0 0 0-7.1 7.1L12 21l8.8-8.1a5 5 0 0 0 0-7.1Z"/>,
+  check: <><circle cx="12" cy="12" r="9"/><path d="m8 12 2.6 2.6L16.5 9"/></>,
+  flag: <><path d="M5 21V4"/><path d="M5 5h11l-2 4 2 4H5"/></>,
+  medal: <><circle cx="12" cy="14" r="5"/><path d="m9 9-3-6h4l2 4 2-4h4l-3 6M10 14l1.3 1.3L14 12.5"/></>,
+  user: <><circle cx="12" cy="8" r="4"/><path d="M4 21c.6-5 3.2-7 8-7s7.4 2 8 7"/></>,
 };
 
 export function SiteIcon({ name, ...props }: { name: SiteIconName } & SVGProps<SVGSVGElement>) {

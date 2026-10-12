@@ -1,0 +1,199 @@
+import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { TEAMS } from '../../../shared/teams.ts';
+import type { Agent, StepLoop, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
+import { LOOP_PLACEHOLDER, LOOPABLE, loopTargets, MAX_LOOP, MAX_PLAN_STEPS, STEP_KIND, stepKindHint, stepKindTitle } from '../../../shared/workflow.ts';
+import { useLanguage } from '../LanguageProvider.tsx';
+import { canMove, canRemove, changeKind, defaultLoop, insertIndex, insertStep, moveStep, removeStep, REMOVABLE } from '../planOps.ts';
+
+interface Props {
+  team: TeamId;
+  agents: Agent[];
+  steps: WorkflowStepInput[];
+  index: number;
+  /** Leading steps that already started and stay as they are. */
+  locked: number;
+  /** A finished task: edits never touch it, they are kept as a flow for the next task. */
+  template?: boolean;
+  /** Footer save: the dialog always keeps edits as a draft until this is pressed. */
+  saveLabel: string;
+  showSave: boolean;
+  saveDisabled: boolean;
+  saving: boolean;
+  onSave: () => void;
+  onDiscard: () => void;
+  onChange: (steps: WorkflowStepInput[], select?: number | null) => void;
+  onClose: () => void;
+}
+
+/** Edits one step of a task's journey in place: name, kind, who does it, instructions, loop, and its neighbours. */
+export function StepInspector({ team, agents, steps, index, locked, template, saveLabel, showSave, saveDisabled, saving, onSave, onDiscard, onChange, onClose }: Props) {
+  const { t, tpl } = useLanguage();
+  const step = steps[index];
+  // A dialog of its own (portaled to the body so the bottom drawer on mobile never traps it).
+  // Escape is caught in the capture phase so an outer dialog underneath stays open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      onClose();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [onClose]);
+  if (!step) return null;
+  const meta = STEP_KIND[step.kind];
+  const roleTitles = TEAMS[team].roleTitles;
+  const readOnly = index < locked;
+  const full = steps.length >= MAX_PLAN_STEPS;
+
+  const update = (patch: Partial<WorkflowStepInput>) => onChange(steps.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  const updateLoop = (patch: Partial<StepLoop>) => update({ loop: { ...step.loop!, ...patch } });
+  const add = (kind: 'research' | 'review') => {
+    const at = insertIndex(steps, kind, index, locked);
+    if (at !== null) onChange(insertStep(steps, kind, agents, at, kind === 'research' ? t('추가 조사') : t('추가 검토')), at);
+  };
+  const addable = (kind: 'research' | 'review') => !full && insertIndex(steps, kind, index, locked) !== null;
+  // Staff whose role matches the step come first, so the usual choice is at the top.
+  const ordered = [...agents].sort((a, b) => Number(b.role === meta.role) - Number(a.role === meta.role));
+
+  return createPortal(
+    <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal pixel-box step-inspector-modal" role="dialog" aria-modal="true">
+        <div className="modal-head">
+          <span className="step-head-title">
+            <span className="step-head-text">
+              {meta.icon} {tpl('{n}단계', { n: String(index + 1) })} · {stepKindTitle(step.kind)}
+            </span>
+            <button
+              type="button"
+              className="pixel-btn small danger"
+              disabled={!canRemove(steps, index, locked)}
+              title={canRemove(steps, index, locked) ? t('단계 빼기') : t('꼭 필요한 단계이거나 이미 시작한 단계예요')}
+              onClick={() => onChange(removeStep(steps, index), Math.min(index, steps.length - 2))}
+            >
+              🗑 {t('단계 빼기')}
+            </button>
+          </span>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label={t('닫기')}>
+            ✕
+          </button>
+        </div>
+        <div className="step-inspector">
+          <p className="small muted">{stepKindHint(step.kind)}</p>
+          {template && <p className="small callout">✅ {t('완료된 업무라 이번 여정은 바뀌지 않아요. 저장하면 다음 업무에서 쓸 흐름이 돼요.')}</p>}
+      {readOnly && <p className="small callout">{t('이미 시작한 단계라 바꿀 수 없어요. 뒤의 단계는 고칠 수 있어요.')}</p>}
+
+      <label className="field">
+        {t('단계 이름')}
+        <input value={step.label} maxLength={20} disabled={readOnly} onChange={(e) => update({ label: e.target.value })} />
+      </label>
+
+      {REMOVABLE.includes(step.kind) && (
+        <div className="field">
+          {t('단계 종류 (역할)')}
+          <div className="segmented" role="radiogroup">
+            {(['research', 'review'] as const).map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                role="radio"
+                aria-checked={step.kind === kind}
+                className={`segment ${step.kind === kind ? 'active' : ''}`}
+                disabled={readOnly}
+                title={stepKindHint(kind)}
+                onClick={() => {
+                  const changed = changeKind(steps, index, kind, agents, locked);
+                  onChange(changed.steps, changed.index);
+                }}
+              >
+                {STEP_KIND[kind].icon} {stepKindTitle(kind)}
+              </button>
+            ))}
+          </div>
+          <span className="small muted">{t('조사·분석은 결과물 작성 앞, 검토는 뒤에 자동으로 자리 잡아요.')}</span>
+        </div>
+      )}
+
+      {step.kind === 'approval' ? (
+        <p className="small muted">🙋 {t('사용자(나) · 수정 요청하면 결과물 작성으로 돌아가요')}</p>
+      ) : (
+        <label className="field">
+          {t('담당 직원')}
+          <select value={step.agentId ?? ''} disabled={readOnly} onChange={(e) => update({ agentId: e.target.value })}>
+            {ordered.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.role === meta.role ? '★ ' : ''}
+                {a.name} ({t(roleTitles[a.role])})
+              </option>
+            ))}
+          </select>
+          {meta.role && <span className="small muted">{tpl('★ 표시는 이 단계에 맞는 역할({role})이에요.', { role: t(roleTitles[meta.role]) })}</span>}
+        </label>
+      )}
+
+      {step.kind !== 'approval' && (
+        <label className="field">
+          {t('이 단계에만 줄 지시 (선택)')}
+          <textarea rows={2} value={step.instructions} maxLength={300} disabled={readOnly} onChange={(e) => update({ instructions: e.target.value })} />
+        </label>
+      )}
+
+      {LOOPABLE.includes(step.kind) && (
+        <div className={`plan-step-loop ${step.loop ? 'on' : ''}`}>
+          <label className="check small">
+            <input type="checkbox" checked={Boolean(step.loop)} disabled={readOnly} onChange={(e) => update({ loop: e.target.checked ? defaultLoop(steps, index) : null })} />
+            🔁 {step.kind === 'review' ? t('반려되면 되돌리기') : t('조건이 맞으면 되돌리기')}
+          </label>
+          {step.loop && (
+            <div className="plan-loop-fields">
+              <input value={step.loop.when} maxLength={60} disabled={readOnly} placeholder={t(LOOP_PLACEHOLDER[step.kind] ?? '')} onChange={(e) => updateLoop({ when: e.target.value })} aria-label={t('반복 조건')} />
+              <select value={step.loop.to} disabled={readOnly} onChange={(e) => updateLoop({ to: Number(e.target.value) })} aria-label={t('되돌아갈 단계')}>
+                {loopTargets(steps, index).map((to) => (
+                  <option key={to} value={to}>
+                    {to === index ? t('이 단계 다시') : tpl('{n}. {label}(으)로', { n: String(to + 1), label: t(steps[to].label) })}
+                  </option>
+                ))}
+              </select>
+              <select value={step.loop.max} disabled={readOnly} onChange={(e) => updateLoop({ max: Number(e.target.value) })} aria-label={t('최대 반복')}>
+                {Array.from({ length: MAX_LOOP }, (_, n) => n + 1).map((n) => (
+                  <option key={n} value={n}>
+                    {tpl('최대 {n}회', { n: String(n) })}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="row step-inspector-actions">
+        <button type="button" className="pixel-btn small" disabled={!canMove(steps, index, -1, locked)} onClick={() => onChange(moveStep(steps, index, -1), index - 1)}>
+          ◀ {t('앞으로')}
+        </button>
+        <button type="button" className="pixel-btn small" disabled={!canMove(steps, index, 1, locked)} onClick={() => onChange(moveStep(steps, index, 1), index + 1)}>
+          {t('뒤로')} ▶
+        </button>
+        <button type="button" className="pixel-btn small" disabled={!addable('research')} onClick={() => add('research')}>
+          + {t('조사·분석 단계')}
+        </button>
+        <button type="button" className="pixel-btn small" disabled={!addable('review')} onClick={() => add('review')}>
+          + {t('검토 단계')}
+        </button>
+      </div>
+      <div className="row step-inspector-foot">
+        {showSave && (
+          <button type="button" className="pixel-btn small primary" disabled={saveDisabled || saving} onClick={onSave}>
+            {saving ? t('저장 중…') : saveLabel}
+          </button>
+        )}
+        <button type="button" className="pixel-btn small" disabled={saving} onClick={onDiscard}>
+          {t('↺ 되돌리기')}
+        </button>
+      </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}

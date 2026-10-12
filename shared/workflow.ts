@@ -174,6 +174,21 @@ export function planProgress(task: Task) {
   return { done: task.plan.filter((s) => s.status === 'done').length, total: task.plan.length };
 }
 
+/**
+ * How many leading steps an edit must leave alone: everything already started, running or waiting.
+ * A queued task has none; a finished one has all. Later steps are read fresh by the runtime, so they may change.
+ */
+export function lockedStepCount(task: Task): number {
+  if (task.status === 'queued') return 0;
+  if (task.status === 'completed' || task.status === 'failed') return task.plan.length;
+  const current = task.plan.findIndex((s) => s.id === task.currentStepId);
+  const started = task.plan.reduce((n, s, i) => (s.status !== 'pending' ? i + 1 : n), 0);
+  return Math.max(current + 1, started);
+}
+
+/** Statuses whose remaining steps can still be edited (the local runtime only, for started tasks). */
+export const PLAN_EDITABLE_STATUSES: Task['status'][] = ['queued', 'running', 'awaiting_help'];
+
 export function currentStepOf(task: Task): WorkflowStep | undefined {
   return task.plan.find((s) => s.id === task.currentStepId);
 }

@@ -1,10 +1,11 @@
+import { t, tpl } from '../../shared/i18n.ts';
 import type { ThemeSummary } from '../../shared/theme-pack.ts';
 
 async function send<T>(method: string, url: string, body?: BodyInit, type?: string): Promise<T> {
   const res = await fetch(url, { method, body, headers: type ? { 'content-type': type } : undefined });
   if (res.status === 401) location.assign('/login');
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? `요청 실패 (${res.status})`);
+  if (!res.ok) throw new Error((data as { error?: string }).error ?? tpl('요청 실패 ({status})', { status: res.status }));
   return data as T;
 }
 

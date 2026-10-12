@@ -1,6 +1,6 @@
-import { isLanguage } from './i18n.ts';
+import { isLanguage, type Language } from './i18n.ts';
 import { TEAMS } from './teams.ts';
-import { inDates, isMonthDay, matches, type LocalText, type When } from './theme-rules.ts';
+import { inDates, isMonthDay, localText, matches, type LocalText, type When } from './theme-rules.ts';
 import type { AgentStatus, Expression, Role, TeamId } from './types.ts';
 
 /**
@@ -95,7 +95,9 @@ export interface StateClip {
 
 export interface ThemeCharacter {
   id: string;
+  /** The name to fall back on (Korean if given, else any); `names` holds one per language. */
   name: string;
+  names?: Partial<Record<Language, string>>;
   sheet: string;
   frames: Record<string, Rect>;
   /** Feet position inside a frame, as 0..1 of its size. */
@@ -114,6 +116,26 @@ export interface ThemeCharacter {
    */
   parts: Partial<Record<PartSlot, string>>;
   outfits: Outfit[];
+  /** How the character changes with the staff's model (Super Saiyan 1, 2, 3…): per tier, and per model id over that. */
+  forms?: CharacterForms;
+}
+
+/**
+ * One look of a character for a model tier or model. `sheet` replaces the whole sprite (over any outfit), `parts`
+ * single layers over the outfit; both are laid out exactly like the character's `sheet`. `accessories`, when given,
+ * are worn instead of the theme's accessories for that model, and `portraits` come before the character's own.
+ */
+export interface CharacterForm {
+  name?: LocalText;
+  sheet?: string;
+  parts: Partial<Record<PartSlot, string>>;
+  accessories?: AccessoryLayer[];
+  portraits: Partial<Record<Expression, string>>;
+}
+
+export interface CharacterForms {
+  tiers: Record<AccessoryTier, CharacterForm>;
+  models: Record<string, CharacterForm>;
 }
 
 /** Body parts a character can be layered from, in drawing order. */
@@ -146,12 +168,30 @@ export interface AccessoryLayer {
   scale: number;
 }
 
-export type AccessoryTier = '1' | '2' | '3';
+/**
+ * A tier number as a key ("1", "2", … "99"). Tiers are open-ended, so a theme names the tiers it has looks for, and a
+ * tier it leaves out takes the nearest one below it (stacked accessories take every one up to it).
+ */
+export type AccessoryTier = string;
 /**
  * What staff wear to show their AI company and model tier, replacing the pixel hat: company id (or `*` for any
  * company) → tier → layers. Tiers add up, so a tier 3 model wears the tier 1, 2 and 3 layers.
  */
-export type Accessories = Record<string, Partial<Record<AccessoryTier, AccessoryLayer[]>>>;
+export type Accessories = Record<string, Record<AccessoryTier, AccessoryLayer[]>>;
+
+/** What one model wears (model id → layers), in place of its company and tier set. Layers do not stack with tiers. */
+export type ModelAccessories = Record<string, AccessoryLayer[]>;
+
+/**
+ * How the theme explains its accessories in the model picker: one line for the whole picker, one per company
+ * (company id, or `*` for the rest), one per tier, and one per model id that overrides its tier's.
+ */
+export interface AccessoryLabels {
+  summary?: LocalText;
+  companies: Record<string, LocalText>;
+  tiers: Record<AccessoryTier, LocalText>;
+  models: Record<string, LocalText>;
+}
 
 /**
  * Colors of the whole site, as CSS variables of the same name. The first ones color everything;
@@ -261,6 +301,7 @@ export interface ThemeVariant {
   props?: ThemeProp[];
   characters?: ThemeCharacter[];
   accessories?: Accessories;
+  modelAccessories?: ModelAccessories;
   /** Worn by everyone on top of the model accessories (a pumpkin hat). */
   wear?: AccessoryLayer[];
   emotes?: EmoteRule[];
@@ -288,6 +329,8 @@ export interface ThemeManifest {
   site: SiteLook;
   css: string | null;
   accessories: Accessories;
+  modelAccessories: ModelAccessories;
+  accessoryLabels: AccessoryLabels;
   emotes: EmoteRule[];
   interactions: Interaction[];
   props: ThemeProp[];
@@ -520,13 +563,17 @@ function parseCharacter(input: unknown, index: number, files: ReadonlySet<string
   });
   const dupOutfit = outfits.find((o, i) => outfits.findIndex((x) => x.id === o.id) !== i);
   if (dupOutfit) fail(`${where}의 의상 id ${dupOutfit.id}가 겹쳐요.`);
+  const forms = raw.forms === undefined ? undefined : parseForms(raw.forms, where, files);
 
   const anchor = obj(raw.anchor);
   const head = obj(raw.head);
   const hand = obj(raw.hand);
+  // A theme may name a character once, or once per country: { "ko": "미나", "ja": "ミナ", "en": "Mina" }.
+  const names = raw.name !== null && typeof raw.name === 'object' ? (localTextOf(raw.name, `${where}의 이름`, 40) as Partial<Record<Language, string>>) : undefined;
   return {
     id,
-    name: str(raw.name, 40) || id,
+    name: (names ? localText(names, 'ko') : str(raw.name, 40)) || id,
+    ...(names ? { names } : {}),
     sheet: filePath(raw.sheet, `${where}의 스프라이트 시트`, files),
     frames,
     anchor: { x: num(anchor.x, 0, 1) ?? 0.5, y: num(anchor.y, 0, 1) ?? 1 },
@@ -537,7 +584,45 @@ function parseCharacter(input: unknown, index: number, files: ReadonlySet<string
     portraits,
     parts: parseParts(raw.parts, where, files),
     outfits,
+    ...(forms && { forms }),
   };
+}
+
+function parseForm(input: unknown, where: string, files: ReadonlySet<string> | null): CharacterForm {
+  const raw = obj(input);
+  const form: CharacterForm = { parts: parseParts(raw.parts, where, files), portraits: {} };
+  if (raw.name !== undefined) form.name = localTextOf(raw.name, `${where}의 이름`, 40);
+  if (raw.sheet !== undefined) form.sheet = filePath(raw.sheet, `${where}의 스프라이트 시트`, files);
+  if (raw.accessories !== undefined) form.accessories = limited(raw.accessories, 8, `${where}의 소품`).map((l, i) => accessoryLayer(l, `${where} 소품 ${i + 1}`, files));
+  const portraits = obj(raw.portraits);
+  for (const expression of EXPRESSIONS) {
+    if (portraits[expression] !== undefined) form.portraits[expression] = filePath(portraits[expression], `${where}의 ${expression} 초상화`, files);
+  }
+  if (!form.sheet && !Object.keys(form.parts).length && !form.accessories && !Object.keys(form.portraits).length) {
+    fail(`${where}에 sheet, parts, accessories, portraits 중 하나는 있어야 해요.`);
+  }
+  return form;
+}
+
+function parseForms(input: unknown, where: string, files: ReadonlySet<string> | null): CharacterForms {
+  const raw = obj(input);
+  const forms: CharacterForms = { tiers: {}, models: {} };
+  for (const [tier, value] of tierEntries(raw.tiers, `${where}의 등급별 모습`)) forms.tiers[tier] = parseForm(value, `${where}의 ${tier}등급 모습`, files);
+  const models = Object.entries(obj(raw.models));
+  if (models.length > 64) fail(`${where}의 모델별 모습은 64개까지 정할 수 있어요.`);
+  for (const [model, value] of models) {
+    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(model)) fail(`${where}의 모델별 모습 id ${model.slice(0, 64)}이(가) 올바르지 않아요.`);
+    forms.models[model] = parseForm(value, `${where}의 ${model} 모습`, files);
+  }
+  return forms;
+}
+
+/** The look a character takes for a model: the model's own, else its tier's, else none. `key` tells looks apart. */
+export function formFor(character: ThemeCharacter, model: { id: string; tier: number }): { key: string; form: CharacterForm } | null {
+  const own = character.forms?.models[model.id];
+  if (own) return { key: `model:${model.id}`, form: own };
+  const tier = tierAtOrBelow(character.forms?.tiers ?? {}, model.tier);
+  return tier ? { key: `tier:${tier}`, form: character.forms!.tiers[tier]! } : null;
 }
 
 function parseParts(input: unknown, where: string, files: ReadonlySet<string> | null): Partial<Record<PartSlot, string>> {
@@ -565,10 +650,14 @@ function parseDress(input: unknown, label = '옷 규칙'): DressRule[] {
  * parts; otherwise the character's sheet comes first and each part slot is the outfit's or the character's.
  * Unknown outfits (another theme's, or none) show the usual clothes.
  */
-export function characterLayers(character: ThemeCharacter, outfitId?: string | null): string[] {
+export function characterLayers(character: ThemeCharacter, outfitId?: string | null, form?: CharacterForm | null): string[] {
   const outfit = outfitId ? character.outfits.find((o) => o.id === outfitId) : undefined;
-  const parts = outfit?.sheet ? outfit.parts : { ...character.parts, ...outfit?.parts };
-  return [outfit?.sheet ?? character.sheet, ...PART_SLOTS.flatMap((slot) => parts[slot] ?? [])];
+  let sheet = outfit?.sheet ?? character.sheet;
+  let parts = outfit?.sheet ? outfit.parts : { ...character.parts, ...outfit?.parts };
+  // A model's look comes over the clothes: a whole sprite replaces them, parts swap single layers.
+  if (form?.sheet) [sheet, parts] = [form.sheet, form.parts];
+  else if (form) parts = { ...parts, ...form.parts };
+  return [sheet, ...PART_SLOTS.flatMap((slot) => parts[slot] ?? [])];
 }
 
 /** What a character wears now: the first dress rule naming an outfit it has, else the staff's own pick if it has that. */
@@ -578,7 +667,22 @@ export function outfitFor(character: ThemeCharacter, ruled: readonly string[], p
 }
 
 const COMPANY_KEY = /^([a-z0-9][a-z0-9_-]{0,39}|\*)$/;
-const ACCESSORY_TIERS: AccessoryTier[] = ['1', '2', '3'];
+/** Tier keys a theme may use: 1 to 99, the same range a model's tier can take. */
+const TIER_KEY = /^[1-9][0-9]?$/;
+
+/** The tier-keyed entries of an object, lowest first; anything but a tier number is an error. */
+function tierEntries(input: unknown, where: string): [AccessoryTier, unknown][] {
+  const entries = Object.entries(obj(input));
+  const bad = entries.find(([key]) => !TIER_KEY.test(key));
+  if (bad) fail(`${where}의 등급 ${bad[0].slice(0, 10)}은(는) 1~99 사이의 숫자여야 해요.`);
+  return entries.sort(([a], [b]) => Number(a) - Number(b));
+}
+
+/** The highest tier key at or below `tier`: a tier the theme leaves out looks like the nearest one under it. */
+function tierAtOrBelow(set: Partial<Record<AccessoryTier, unknown>>, tier: number): AccessoryTier | null {
+  const keys = Object.keys(set).filter((k) => set[k] !== undefined && Number(k) <= tier);
+  return keys.length ? keys.reduce((a, b) => (Number(b) > Number(a) ? b : a)) : null;
+}
 
 function parseAccessories(input: unknown, files: ReadonlySet<string> | null): Accessories {
   const entries = Object.entries(obj(input));
@@ -586,11 +690,8 @@ function parseAccessories(input: unknown, files: ReadonlySet<string> | null): Ac
   const out: Accessories = {};
   for (const [company, value] of entries) {
     if (!COMPANY_KEY.test(company)) fail(`소품의 모델사 이름 ${company.slice(0, 40)}이(가) 올바르지 않아요.`);
-    const tiers = obj(value);
     const set: Accessories[string] = {};
-    for (const tier of ACCESSORY_TIERS) {
-      if (tiers[tier] === undefined) continue;
-      const list = tiers[tier];
+    for (const [tier, list] of tierEntries(value, `${company} 소품`)) {
       if (!Array.isArray(list) || list.length > 8) fail(`${company} 소품 ${tier}등급은 레이어 8개까지의 목록이어야 해요.`);
       set[tier] = (list as unknown[]).map((item, i) => accessoryLayer(item, `${company} 소품 ${tier}등급 ${i + 1}`, files));
     }
@@ -598,6 +699,51 @@ function parseAccessories(input: unknown, files: ReadonlySet<string> | null): Ac
   }
   return out;
 }
+
+const MODEL_KEY = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+
+function parseModelAccessories(input: unknown, files: ReadonlySet<string> | null): ModelAccessories {
+  const entries = Object.entries(obj(input));
+  if (entries.length > 64) fail('모델별 소품은 모델 64개까지 정할 수 있어요.');
+  const out: ModelAccessories = {};
+  for (const [model, list] of entries) {
+    if (!MODEL_KEY.test(model)) fail(`모델별 소품의 모델 id ${model.slice(0, 64)}이(가) 올바르지 않아요.`);
+    if (!Array.isArray(list) || list.length > 8) fail(`${model} 소품은 레이어 8개까지의 목록이어야 해요.`);
+    out[model] = (list as unknown[]).map((item, i) => accessoryLayer(item, `${model} 소품 ${i + 1}`, files));
+  }
+  return out;
+}
+
+function parseAccessoryLabels(input: unknown): AccessoryLabels {
+  const raw = obj(input);
+  const out: AccessoryLabels = { companies: {}, tiers: {}, models: {} };
+  if (raw.summary !== undefined) out.summary = localTextOf(raw.summary, '소품 설명의 summary', 200);
+  const companies = Object.entries(obj(raw.companies));
+  if (companies.length > 17) fail('소품 설명은 모델사 16곳과 *까지 쓸 수 있어요.');
+  for (const [company, text] of companies) {
+    if (!COMPANY_KEY.test(company)) fail(`소품 설명의 모델사 이름 ${company.slice(0, 40)}이(가) 올바르지 않아요.`);
+    out.companies[company] = localTextOf(text, `${company} 소품 설명`, 60);
+  }
+  for (const [tier, text] of tierEntries(raw.tiers, '소품 설명')) out.tiers[tier] = localTextOf(text, `${tier}등급 소품 설명`, 60);
+  const models = Object.entries(obj(raw.models));
+  if (models.length > 64) fail('소품 설명은 모델 64개까지 쓸 수 있어요.');
+  for (const [model, text] of models) {
+    if (!MODEL_KEY.test(model)) fail(`소품 설명의 모델 id ${model.slice(0, 64)}이(가) 올바르지 않아요.`);
+    out.models[model] = localTextOf(text, `${model} 소품 설명`, 60);
+  }
+  return out;
+}
+
+/** The theme's words for a model's accessories: its own line, else its tier's (or the nearest tier below). */
+export function accessoryLabelFor(labels: AccessoryLabels, modelId: string, tier: number): LocalText | undefined {
+  const own = labels.models[modelId];
+  if (own) return own;
+  const key = tierAtOrBelow(labels.tiers, tier);
+  return key ? labels.tiers[key] : undefined;
+}
+
+/** The theme's words for a company's accessories, else those for every other company. */
+export const companyLabelFor = (labels: AccessoryLabels, companyId: string): LocalText | undefined => labels.companies[companyId] ?? labels.companies['*'];
 
 function accessoryLayer(item: unknown, where: string, files: ReadonlySet<string> | null): AccessoryLayer {
   const layer = obj(item);
@@ -813,6 +959,7 @@ function parseVariants(input: unknown, files: ReadonlySet<string> | null): Theme
       variant.characters = limited(raw.characters, THEME_LIMITS.characters, `${where} 캐릭터`).map((c, j) => parseCharacter(c, j, files));
     }
     if (raw.accessories !== undefined) variant.accessories = parseAccessories(raw.accessories, files);
+    if (raw.modelAccessories !== undefined) variant.modelAccessories = parseModelAccessories(raw.modelAccessories, files);
     if (raw.wear !== undefined) variant.wear = limited(raw.wear, 8, `${where}의 wear`).map((l, j) => accessoryLayer(l, `${where} wear ${j + 1}`, files));
     if (raw.emotes !== undefined) variant.emotes = parseEmotes(raw.emotes, files, `${where} 머리 위 표시`);
     if (raw.interactions !== undefined) variant.interactions = parseInteractions(raw.interactions, `${where} 교감 메뉴`);
@@ -870,6 +1017,7 @@ export function applyVariant(theme: ThemeManifest, variant: ThemeVariant | undef
     props: byId(theme.props, variant.props),
     characters: byId(theme.characters, variant.characters),
     accessories: { ...theme.accessories, ...variant.accessories },
+    modelAccessories: { ...theme.modelAccessories, ...variant.modelAccessories },
     emotes: [...(variant.emotes ?? []), ...theme.emotes],
     interactions: byId(theme.interactions, variant.interactions),
     events: [...(variant.events ?? []), ...theme.events],
@@ -881,13 +1029,22 @@ export function applyVariant(theme: ThemeManifest, variant: ThemeVariant | undef
 }
 
 /**
- * The layers a model of `tier` from `companyId` wears, or null when the theme leaves that company to the pixel hat.
- * Once a theme has a set for the company (or `*`), lower tiers without layers wear nothing rather than a pixel hat.
+ * The layers a model wears: its own set when the theme has one, else the set of its company (or `*`) up to its tier,
+ * or null when the theme leaves it to the pixel hat. Once a company has a set, lower tiers without layers wear nothing.
  */
-export function accessoriesFor(accessories: Accessories, companyId: string, tier: number): AccessoryLayer[] | null {
-  const set = accessories[companyId] ?? accessories['*'];
+export function accessoriesFor(
+  theme: Pick<ThemeManifest, 'accessories' | 'modelAccessories'>,
+  model: { id: string; vendor: string; tier: number },
+): AccessoryLayer[] | null {
+  const own = theme.modelAccessories[model.id];
+  if (own) return own;
+  const { tier } = model;
+  const set = theme.accessories[model.vendor] ?? theme.accessories['*'];
   if (!set) return null;
-  return ACCESSORY_TIERS.filter((t) => Number(t) <= tier).flatMap((t) => set[t] ?? []);
+  return Object.keys(set)
+    .filter((t) => Number(t) <= tier)
+    .sort((a, b) => Number(a) - Number(b))
+    .flatMap((t) => set[t] ?? []);
 }
 
 /** The dated variant showing at `now`: the first whose time conditions hold. */
@@ -903,6 +1060,12 @@ export function manifestFiles(theme: ThemeManifest): string[] {
       ...Object.values(c.parts),
       ...c.outfits.flatMap((o) => [...(o.sheet ? [o.sheet] : []), ...Object.values(o.parts)]),
       ...Object.values(c.portraits),
+      ...[...Object.values(c.forms?.tiers ?? {}), ...Object.values(c.forms?.models ?? {})].flatMap((f) => [
+        ...(f.sheet ? [f.sheet] : []),
+        ...Object.values(f.parts),
+        ...(f.accessories ?? []).map((l) => l.image),
+        ...Object.values(f.portraits),
+      ]),
     ]);
   const accessories = (set: Accessories = {}) => Object.values(set).flatMap((tiers) => Object.values(tiers).flatMap((list) => list.map((l) => l.image)));
   const props = (list: ThemeProp[] = []) => list.flatMap((p) => [p.image, ...Object.values(p.states)]);
@@ -917,6 +1080,7 @@ export function manifestFiles(theme: ThemeManifest): string[] {
     ...layers(theme.scene.layers),
     ...characters(theme.characters),
     ...accessories(theme.accessories),
+    ...Object.values(theme.modelAccessories).flatMap((list) => list.map((l) => l.image)),
     ...props(theme.props),
     ...icons(theme.emotes),
     ...theme.variants.flatMap((v) => [
@@ -925,6 +1089,7 @@ export function manifestFiles(theme: ThemeManifest): string[] {
       ...props(v.props),
       ...characters(v.characters),
       ...accessories(v.accessories),
+      ...Object.values(v.modelAccessories ?? {}).flatMap((list) => list.map((l) => l.image)),
       ...(v.wear ?? []).map((l) => l.image),
       ...icons(v.emotes),
       ...site(v.site),
@@ -978,6 +1143,8 @@ export function parseThemeManifest(input: unknown, files: ReadonlySet<string> | 
     site: parseSite(raw.site, files),
     css,
     accessories: parseAccessories(raw.accessories, files),
+    modelAccessories: parseModelAccessories(raw.modelAccessories, files),
+    accessoryLabels: parseAccessoryLabels(raw.accessoryLabels),
     emotes: parseEmotes(raw.emotes, files),
     interactions: parseInteractions(raw.interactions),
     props: parseProps(raw.props, files),
@@ -997,7 +1164,7 @@ export interface ThemeSummary {
   description: string;
   preview: string;
   hasCss: boolean;
-  characters: { id: string; name: string }[];
+  characters: { id: string; name: string; names?: Partial<Record<Language, string>> }[];
 }
 
 export const themeSummary = (theme: ThemeManifest): ThemeSummary => ({
@@ -1009,7 +1176,7 @@ export const themeSummary = (theme: ThemeManifest): ThemeSummary => ({
   description: theme.description,
   preview: theme.preview,
   hasCss: theme.css !== null,
-  characters: theme.characters.map((c) => ({ id: c.id, name: c.name })),
+  characters: theme.characters.map((c) => ({ id: c.id, name: c.name, ...(c.names ? { names: c.names } : {}) })),
 });
 
 /** A company theme booked for a season, as an inclusive `MM-DD` range that may wrap past new year. */
@@ -1065,14 +1232,17 @@ export function characterFor(theme: ThemeManifest, skin: string, role: Role): Th
 }
 
 /** The portrait for an expression, falling back along the same chain as states (thanks → smile → …), then `normal`. */
-export function portraitFor(character: ThemeCharacter, expression: Expression): string | null {
-  let state: string | null = expression;
-  while (state) {
-    const path = character.portraits[state as Expression];
-    if (path) return path;
-    state = isThemeState(state) ? STATE_FALLBACK[state] : null;
+export function portraitFor(character: ThemeCharacter, expression: Expression, form?: CharacterForm | null): string | null {
+  for (const portraits of form ? [form.portraits, character.portraits] : [character.portraits]) {
+    let state: string | null = expression;
+    while (state) {
+      const path = portraits[state as Expression];
+      if (path) return path;
+      state = isThemeState(state) ? STATE_FALLBACK[state] : null;
+    }
+    if (portraits.normal) return portraits.normal;
   }
-  return character.portraits.normal ?? null;
+  return null;
 }
 
 /** How agents point at a theme character: `<themeId>:<characterId>`. Built-in skins have no colon. */
@@ -1082,3 +1252,6 @@ export function splitPackSkin(skin: string): { themeId: string; characterId: str
   const [themeId, characterId, ...rest] = skin.split(':');
   return rest.length || !characterId || !SLUG.test(themeId) || !SLUG.test(characterId) ? null : { themeId, characterId };
 }
+
+/** A theme character's name in the viewer's language. */
+export const characterName = (c: { name: string; names?: Partial<Record<Language, string>> }, language: Language) => c.names?.[language] ?? c.name;

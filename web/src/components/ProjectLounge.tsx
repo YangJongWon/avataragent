@@ -1,15 +1,17 @@
+import { t, tpl } from '../../../shared/i18n.ts';
 import { planHas } from '../../../shared/plans.ts';
 import { projectProgress } from '../../../shared/project.ts';
 import type { Office, Person, Snapshot, Task } from '../../../shared/types.ts';
 import { planProgress } from '../../../shared/workflow.ts';
 import { api } from '../api.ts';
+import { useLanguage } from '../LanguageProvider.tsx';
 
 const THEMES: Record<Office['team'], { icon: string; name: string; scene: string }> = {
-  dev: { icon: '🚀', name: '우주선', scene: '발사 준비' },
-  hr: { icon: '🏠', name: '팀 하우스', scene: '입주 준비' },
-  mgmt: { icon: '🏙️', name: '본부 빌딩', scene: '준공 준비' },
-  support: { icon: '🚢', name: '지원선', scene: '출항 준비' },
-  welfare: { icon: '🌳', name: '회복 정원', scene: '개장 준비' },
+  dev: { icon: '🚀', name: t('우주선'), scene: t('발사 준비') },
+  hr: { icon: '🏠', name: t('팀 하우스'), scene: t('입주 준비') },
+  mgmt: { icon: '🏙️', name: t('본부 빌딩'), scene: t('준공 준비') },
+  support: { icon: '🚢', name: t('지원선'), scene: t('출항 준비') },
+  welfare: { icon: '🌳', name: t('회복 정원'), scene: t('개장 준비') },
 };
 
 const ACTIVE = new Set<Task['status']>(['running', 'awaiting_help', 'awaiting_approval']);
@@ -34,15 +36,16 @@ function contribution(person: Person, tasks: Task[]) {
 }
 
 export function ProjectLounge({ snapshot, onOpenOffice, onError }: { snapshot: Snapshot; onOpenOffice: (officeId: string) => void; onError: (message: string) => void }) {
+  const { t } = useLanguage();
   if (!planHas(snapshot.plan, 'projectLounge')) {
     return (
       <main className="lounge-page lounge-locked">
         <div className="lounge-lock-card">
           <div className="lounge-lock-model">🏗️</div>
-          <h2>공용 프로젝트 라운지</h2>
-          <p>팀이 맡은 일이 하나의 모형으로 완성되는 공간이에요.</p>
-          <p className="muted">팀 플랜부터 프로젝트 진행 모형, 구성원 담당 업무와 기여 현황을 함께 볼 수 있어요.</p>
-          <button onClick={() => onOpenOffice('plan')}>팀 플랜 살펴보기</button>
+          <h2>{t('공용 프로젝트 라운지')}</h2>
+          <p>{t('팀이 맡은 일이 하나의 모형으로 완성되는 공간이에요.')}</p>
+          <p className="muted">{t('팀 플랜부터 프로젝트 진행 모형, 구성원 담당 업무와 기여 현황을 함께 볼 수 있어요.')}</p>
+          <button onClick={() => onOpenOffice('plan')}>{t('팀 플랜 살펴보기')}</button>
         </div>
       </main>
     );
@@ -58,13 +61,13 @@ export function ProjectLounge({ snapshot, onOpenOffice, onError }: { snapshot: S
     <main className="lounge-page">
       <section className="lounge-hero">
         <div>
-          <span className="eyebrow">공용 세미나실</span>
-          <h1>우리 프로젝트가 {overall}% 완성됐어요</h1>
-          <p>사무실에서 끝낸 업무가 이곳의 모형과 설계도를 조금씩 완성합니다.</p>
+          <span className="eyebrow">{t('공용 세미나실')}</span>
+          <h1>{tpl('우리 프로젝트가 {n}% 완성됐어요', { n: overall })}</h1>
+          <p>{t('사무실에서 끝낸 업무가 이곳의 모형과 설계도를 조금씩 완성합니다.')}</p>
         </div>
-        <div className="lounge-overall" aria-label={`전체 진행률 ${overall}%`}>
+        <div className="lounge-overall" aria-label={tpl('전체 진행률 {overall}%', { overall })}>
           <strong>{overall}%</strong>
-          <span>전체 진행</span>
+          <span>{t('전체 진행')}</span>
         </div>
       </section>
 
@@ -92,7 +95,7 @@ export function ProjectLounge({ snapshot, onOpenOffice, onError }: { snapshot: S
                 </div>
                 <div className="model-parts">
                   {calculated.milestones.map((milestone) => (
-                    <span key={milestone.id} className={milestone.progress >= 1 ? 'built' : milestone.progress > 0 ? 'building' : ''} title={`${milestone.label}: ${Math.round(milestone.progress * 100)}% · 가중치 ${milestone.weight}%`}>
+                    <span key={milestone.id} className={milestone.progress >= 1 ? 'built' : milestone.progress > 0 ? 'building' : ''} title={tpl('{label}: {v}% · 가중치 {weight}%', { label: milestone.label, v: Math.round(milestone.progress * 100), weight: milestone.weight })}>
                       {milestone.progress >= 1 ? '◆' : milestone.progress > 0 ? '◈' : '◇'} {milestone.label} {Math.round(milestone.progress * 100)}%
                     </span>
                   ))}
@@ -100,13 +103,13 @@ export function ProjectLounge({ snapshot, onOpenOffice, onError }: { snapshot: S
               </div>
               <div className="model-progress"><span style={{ width: `${progress}%` }} /></div>
               <footer>
-                <span>{tasks.filter((task) => task.status === 'completed').length}개 완료</span>
-                <span>{active ? `${active}개 작업 중` : waiting ? `${waiting}개 대기` : theme.scene}</span>
-                <button onClick={() => onOpenOffice(office.id)}>작업실 가기</button>
+                <span>{tpl('{n}개 완료', { n: tasks.filter((task) => task.status === 'completed').length })}</span>
+                <span>{active ? tpl('{active}개 작업 중', { active }) : waiting ? tpl('{waiting}개 대기', { waiting }) : theme.scene}</span>
+                <button onClick={() => onOpenOffice(office.id)}>{t('작업실 가기')}</button>
               </footer>
               {calculated.unclassified.length > 0 && (
                 <details className="unclassified-tasks">
-                  <summary>⚠ 진행률 미분류 업무 {calculated.unclassified.length}개</summary>
+                  <summary>⚠ {tpl('진행률 미분류 업무 {n}개', { n: calculated.unclassified.length })}</summary>
                   {calculated.unclassified.map((task) => (
                     <label key={task.id}>
                       <span>{task.title}</span>
@@ -118,7 +121,7 @@ export function ProjectLounge({ snapshot, onOpenOffice, onError }: { snapshot: S
                           void api.setTaskMilestone(task.id, milestoneId).catch((error) => onError(error instanceof Error ? error.message : String(error)));
                         }}
                       >
-                        <option value="">마일스톤 지정…</option>
+                        <option value="">{t('마일스톤 지정…')}</option>
                         {calculated.milestones.map((milestone) => <option key={milestone.id} value={milestone.id}>{milestone.label} ({milestone.weight}%)</option>)}
                       </select>
                     </label>
@@ -133,10 +136,10 @@ export function ProjectLounge({ snapshot, onOpenOffice, onError }: { snapshot: S
       <section className="contribution-board">
         <header>
           <div>
-            <span className="eyebrow">역할과 기여</span>
-            <h2>누가 어느 부분을 만들고 있나요?</h2>
+            <span className="eyebrow">{t('역할과 기여')}</span>
+            <h2>{t('누가 어느 부분을 만들고 있나요?')}</h2>
           </div>
-          <span className="muted">완료 단계 기준 · 순위가 아닌 협업 현황</span>
+          <span className="muted">{t('완료 단계 기준 · 순위가 아닌 협업 현황')}</span>
         </header>
         <div className="contribution-list">
           {visiblePeople.map((person) => {
@@ -147,12 +150,12 @@ export function ProjectLounge({ snapshot, onOpenOffice, onError }: { snapshot: S
               <div className={`contribution-row ${person.id === me ? 'mine' : ''}`} key={person.id}>
                 <span className="person-avatar">{person.id === 'owner' ? '👑' : '🙂'}</span>
                 <div className="person-work">
-                  <strong>{person.name}{person.id === me ? ' · 나' : ''}</strong>
-                  <span>{current ? `${current.title} 담당 중` : c.assigned ? `담당 업무 ${c.assigned}개` : '새 역할을 기다리는 중'}</span>
+                  <strong>{person.name}{person.id === me ? t(' · 나') : ''}</strong>
+                  <span>{current ? tpl('{title} 담당 중', { title: current.title }) : c.assigned ? tpl('담당 업무 {assigned}개', { assigned: c.assigned }) : t('새 역할을 기다리는 중')}</span>
                 </div>
                 <div className="person-meter"><span style={{ width: `${Math.min(100, share)}%` }} /></div>
                 <strong className="person-share">{share}%</strong>
-                <span className="person-done">완료 {c.completed}/{c.assigned}</span>
+                <span className="person-done">{t('완료')} {c.completed}/{c.assigned}</span>
               </div>
             );
           })}

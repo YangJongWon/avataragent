@@ -1,4 +1,4 @@
-import type { ModelEntry, Tier } from './models.ts';
+import { isTier, tierLook, type ModelEntry, type Tier, type TierLook } from './models.ts';
 import { officePerf, type PerfRecord } from './performance.ts';
 import { isPersonality, personalityOf, type Personality } from './personality.ts';
 import { TEAMS } from './teams.ts';
@@ -18,7 +18,11 @@ export interface Playbook {
   name: string;
   team: TeamId;
   exportedAt: string;
-  staff: { role: Role; personality: Personality; rules: string; modelTier: Tier; modelVendor: string; modelLabel: string }[];
+  /**
+   * `modelTier` is the tier number where the playbook was made; `modelTierLook` is where it sat there (1 the lowest,
+   * 3 the highest in use), so an office with other tier numbers can still pick a model of the same standing.
+   */
+  staff: { role: Role; personality: Personality; rules: string; modelTier: Tier; modelTierLook: TierLook; modelVendor: string; modelLabel: string }[];
   stats: PlaybookStats;
 }
 
@@ -69,7 +73,7 @@ export function buildPlaybook(office: Office, agents: Agent[], records: PerfReco
       const agent = staff.find((a) => a.role === role);
       if (!agent) return [];
       const model = models.find((m) => m.id === agent.model);
-      return [{ role, personality: agent.personality, rules: agent.rules, modelTier: model?.tier ?? 2, modelVendor: model?.vendor ?? '', modelLabel: model?.label ?? '' }];
+      return [{ role, personality: agent.personality, rules: agent.rules, modelTier: model?.tier ?? 2, modelTierLook: model ? tierLook(model.tier) : 2, modelVendor: model?.vendor ?? '', modelLabel: model?.label ?? '' }];
     }),
     stats: playbookStats(office, agents, records, tasks),
   };
@@ -90,12 +94,15 @@ export function parsePlaybook(input: unknown): Playbook {
     const s = (item ?? {}) as Record<string, unknown>;
     const role = s.role as Role;
     if (!ROLES.includes(role) || staff.some((x) => x.role === role)) continue;
-    const tier = num(s.modelTier);
+    const tier = isTier(s.modelTier) ? s.modelTier : 2;
+    const look = num(s.modelTierLook);
     staff.push({
       role,
       personality: isPersonality(s.personality) ? s.personality : 'balanced',
       rules: str(s.rules, MAX_RULES_CHARS),
-      modelTier: tier === 1 || tier === 3 ? tier : 2,
+      modelTier: tier,
+      // Files from before tiers were open-ended only had 1 to 3, which is the look itself.
+      modelTierLook: look === 1 || look === 2 || look === 3 ? look : tier <= 1 ? 1 : tier >= 3 ? 3 : 2,
       modelVendor: str(s.modelVendor, 40),
       modelLabel: str(s.modelLabel, 60),
     });
@@ -149,11 +156,17 @@ export interface PlaybookChange {
   warnings: string[];
 }
 
-/** Same vendor and tier first, then the cheapest model of that tier. */
-function matchModel(models: ModelEntry[], vendor: string, tier: Tier) {
+/**
+ * The same model when this office has it (same company and name), else one of the same standing (lowest, between,
+ * highest): at the same company first, then the cheapest anywhere. Tier numbers differ between offices, standing does not.
+ */
+function matchModel(models: ModelEntry[], setup: Playbook['staff'][number]) {
+  const cheapest = (list: ModelEntry[]) => [...list].sort((a, b) => a.priceOutPerMTokUsd - b.priceOutPerMTokUsd)[0];
+  const sameStanding = models.filter((m) => tierLook(m.tier) === setup.modelTierLook);
   return (
-    models.find((m) => m.vendor === vendor && m.tier === tier) ??
-    models.filter((m) => m.tier === tier).sort((a, b) => a.priceOutPerMTokUsd - b.priceOutPerMTokUsd)[0]
+    models.find((m) => m.vendor === setup.modelVendor && m.label === setup.modelLabel) ??
+    cheapest(sameStanding.filter((m) => m.vendor === setup.modelVendor)) ??
+    cheapest(sameStanding)
   );
 }
 
@@ -170,7 +183,7 @@ export function playbookChanges(playbook: Playbook, office: Office, agents: Agen
     add('personality', agent.personality, setup.personality);
     add('rules', agent.rules, setup.rules, rulesWarnings(setup.rules));
     if (includeModel) {
-      const model = matchModel(models, setup.modelVendor, setup.modelTier);
+      const model = matchModel(models, setup);
       if (model) add('model', agent.model, model.id);
     }
   }

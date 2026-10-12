@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   DEFAULT_LANGUAGE,
@@ -103,24 +103,20 @@ test('전역 활성 언어가 t/tpl 과 currentLanguage 에 반영된다', () =>
 });
 
 /** 번역한 탭은 화면에 그대로 나가는 한국어 문자열이.catalog 안에 있어야 한다. */
-const LOCALIZED_SOURCES = [
-  'web/src/components/HireTab.tsx',
-  'web/src/components/ModelsTab.tsx',
-  'web/src/components/PerformanceTab.tsx',
-  'web/src/components/ThemesTab.tsx',
-  'web/src/studio/ThemeStudio.tsx',
-  'web/src/studio/SheetEditor.tsx',
-  'web/src/studio/StudioPreview.tsx',
-];
+// Every screen file: a Korean string passed to t()/tpl() anywhere must have zh/ja/en.
+const SCREEN_DIRS = ['web/src', 'web/src/components', 'web/src/office', 'web/src/office/themes', 'web/src/studio'];
+const LOCALIZED_SOURCES = SCREEN_DIRS.flatMap((dir) =>
+  readdirSync(new URL(`../${dir}`, import.meta.url))
+    .filter((f) => /\.tsx?$/.test(f) && !f.startsWith('__'))
+    .map((f) => `${dir}/${f}`),
+);
 
-const SENTINELS = [
-  'name', 'n', 'role', 'msg', 'env', 'who', 'in', 'out', 'names', 'provider', 'summary',
-  'title', 'steps', 'from', 'to', 'count', 'max', 'reason', 'score', 'label', 'value',
-  'attempt', 'tool', 'question', 'answer', 'assumption', 'kind', 'version', 'rounds', 'result',
-  'comment', 'amount', 'inputTokens', 'outputTokens', 'profit', 'icon', 'server', 'chars',
-  'subject', 'plan', 'changes', 'by', 'author', 'text',
-  'theme', 'spot', 'state', 'cols', 'rows',
-].reduce<Record<string, string>>((acc, key) => ({ ...acc, [key]: `<${key}>` }), {});
+const EXTRA_HOLES = ['web/src/format.ts'];
+const unescape = (raw: string) => raw.replace(/\\n/g, '\n').replace(/\\'/g, "'").replace(/\\\\/g, '\\');
+
+/** Fills a template with markers for exactly the holes the Korean source has, so a translation using another hole shows up. */
+const holesOf = (key: string) =>
+  Object.fromEntries([...key.matchAll(/\{(\w+)\}/g)].map((m) => [m[1], `<${m[1]}>`])) as Record<string, string>;
 
 test('번역한 탭의 t/tpl 키가 네 개 언어 모두에 등록돼 있다', () => {
   const problems: string[] = [];
@@ -133,17 +129,19 @@ test('번역한 탭의 t/tpl 키가 네 개 언어 모두에 등록돼 있다', 
     // 이 호출은 {placeholder} 가 있는 문장이므로 템플릿 카탈로그에서 찾아야 한다.
     // 잘못된 카탈로그에 넣어도 컴파일은 통과하지만 화면에서는 한국어로 남는다.
     for (const m of src.matchAll(/\btpl\(\s*'((?:[^'\\]|\\.)*)'/g)) {
-      const key = m[1];
-      const ko = translateTemplate(key, 'ko', SENTINELS);
+      const key = unescape(m[1]);
+      const holes = holesOf(key);
+      const ko = translateTemplate(key, 'ko', holes);
       for (const l of LANGUAGES) {
-        const out = translateTemplate(key, l.id, SENTINELS);
+        const out = translateTemplate(key, l.id, holes);
         if (l.id !== 'ko' && needsTranslation(key) && out === ko) problems.push(`${file} [${l.id}] 템플릿 미등록: ${key}`);
-        if (/[{}]/.test(out)) problems.push(`${file} [${l.id}] 치환되지 않은 중괄값: ${out}`);
+        // Event labels in format.ts pass more values than their Korean source names (score, reason…), by design.
+        if (!EXTRA_HOLES.includes(file) && /[{}]/.test(out)) problems.push(`${file} [${l.id}] 치환되지 않은 중괄값: ${out}`);
       }
     }
 
     for (const m of src.matchAll(/(?<![a-zA-Z.])t\(\s*'((?:[^'\\]|\\.)*)'/g)) {
-      const key = m[1];
+      const key = unescape(m[1]);
       if (!needsTranslation(key)) continue;
       for (const l of LANGUAGES) {
         if (l.id !== 'ko' && translate(key, l.id) === key) problems.push(`${file} [${l.id}] 문장 미등록: ${key}`);

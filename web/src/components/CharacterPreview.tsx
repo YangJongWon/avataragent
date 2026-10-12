@@ -1,6 +1,6 @@
 import type { Graphics } from 'pixi.js';
 import { useEffect, useRef } from 'react';
-import { companyOf, modelOf } from '../../../shared/models.ts';
+import { companyOf, modelOf, tierLook } from '../../../shared/models.ts';
 import type { Expression, Role, Skin } from '../../../shared/types.ts';
 import { drawBody, drawFace, drawHat, drawHatGlow, S } from '../office/pixelArt.ts';
 
@@ -72,11 +72,12 @@ export function CharacterPreview({
     const g = canvasGraphics(ctx);
     const model = modelOf(modelId);
     const company = companyOf(model.vendor);
-    if (model.tier === 3) drawHatGlow(g, company.hat);
+    const look = tierLook(model.tier);
+    if (look === 3) drawHatGlow(g, company.hat);
     const drawn = skin === 'pinkgirl' ? 'bishoujo' : skin;
     drawBody(g, role, drawn);
     drawFace(g, role, expression, drawn);
-    drawHat(g, company.hat, company.color, model.tier);
+    drawHat(g, company.hat, company.color, look);
   }, [role, skin, modelId, expression]);
 
   return <canvas ref={ref} className="char-preview" width={W} height={H} title={title} />;

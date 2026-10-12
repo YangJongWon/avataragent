@@ -3,8 +3,9 @@ import { siteApi, type AdminUser, type AuditEntry, type Me, type QueueEntry } fr
 import { ago, errorText } from '../parts.tsx';
 import { Link } from '../router.tsx';
 import { formatProductUsd, productUnitsFromUsd, productUsdFromUnits } from '../../../shared/product-currency.ts';
+import { SiteIcon, type SiteIconName } from '../components/SiteIcon.tsx';
 
-const TYPE_LABEL: Record<QueueEntry['type'], string> = { item: '🎨 항목', post: '📝 글', comment: '💬 댓글' };
+const TYPE_LABEL: Record<QueueEntry['type'], { icon: SiteIconName; label: string }> = { item: { icon: 'theme', label: '항목' }, post: { icon: 'pen', label: '글' }, comment: { icon: 'comment', label: '댓글' } };
 const linkOf = (q: QueueEntry) => (q.type === 'item' ? `/community/items/${q.id}` : `/forum/${q.type === 'post' ? q.id : q.postId}`);
 
 function Queue({ onError }: { onError: (m: string) => void }) {
@@ -18,14 +19,14 @@ function Queue({ onError }: { onError: (m: string) => void }) {
   };
 
   if (queue === null) return <p className="muted">불러오는 중…</p>;
-  if (queue.length === 0) return <p className="muted">확인할 신고가 없어요. 🎉</p>;
+  if (queue.length === 0) return <p className="muted icon-line"><SiteIcon name="check" /> 확인할 신고가 없어요.</p>;
   return (
     <ul className="queue">
       {queue.map((q) => (
         <li key={`${q.type}:${q.id}`} className="card">
           <div className="row between">
             <span>
-              <span className="muted small">{TYPE_LABEL[q.type]}</span> <Link href={linkOf(q)}>{q.title}</Link>
+              <span className="muted small icon-line"><SiteIcon name={TYPE_LABEL[q.type].icon} /> {TYPE_LABEL[q.type].label}</span> <Link href={linkOf(q)}>{q.title}</Link>
               {q.status !== 'published' && <span className="badge warn">{q.status === 'hidden' ? '가려짐' : q.status}</span>}
             </span>
             <span className="muted small">
@@ -255,16 +256,16 @@ export function AdminPage({ me }: { me: Me | null }) {
       <h1>운영</h1>
       <div className="tabs">
         <button className={tab === 'queue' ? 'active' : ''} onClick={() => setTab('queue')}>
-          🚩 신고·검수
+          <SiteIcon name="flag" /> 신고·검수
         </button>
         <button className={tab === 'users' ? 'active' : ''} onClick={() => setTab('users')}>
-          👥 사용자
+          <SiteIcon name="team" /> 사용자
         </button>
         <button className={tab === 'money' ? 'active' : ''} onClick={() => setTab('money')}>
-          💰 판매·정산
+          <SiteIcon name="profit" /> 판매·정산
         </button>
         <button className={tab === 'log' ? 'active' : ''} onClick={() => setTab('log')}>
-          📜 기록
+          <SiteIcon name="docs" /> 기록
         </button>
       </div>
       {error && <p className="error">{error}</p>}

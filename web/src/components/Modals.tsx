@@ -2,28 +2,28 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { TEAM_ORDER, TEAMS } from '../../../shared/teams.ts';
 import type { Agent, Office, PlanMode, SavedFlow, Task, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
 import { loopTargetLabel, STEP_KIND, templatePlan, validatePlan } from '../../../shared/workflow.ts';
-import { api, type FlowPick } from '../api.ts';
-import { flowToSteps } from '../../../shared/flow-pack.ts';
+import { api } from '../api.ts';
+import { FlowPicker, type PickedFlow } from './FlowPicker.tsx';
 import { krw, modelLabel, roi } from '../format.ts';
 import { themeApi } from '../themeApi.ts';
 import { DEFAULT_THEME, type ThemeSummary } from '../../../shared/theme-pack.ts';
-import { t } from '../../../shared/i18n.ts';
+import { t, tpl } from '../../../shared/i18n.ts';
 import { FlowTools } from './FlowTools.tsx';
 import { PlanEditor } from './PlanEditor.tsx';
 import { AgentPortrait } from './AgentPortrait.tsx';
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal pixel-box">
         <div className="modal-head">
           <span>{title}</span>
-          <button className="icon-btn" onClick={onClose} aria-label="닫기">
+          <button className="icon-btn" onClick={onClose} aria-label={t('닫기')}>
             ✕
           </button>
         </div>
@@ -38,19 +38,19 @@ interface ErrorProp {
 }
 
 const TITLE_PLACEHOLDER: Record<TeamId, string> = {
-  dev: '예: 사내 AI 코딩 도구 도입 검토',
-  hr: '비워 두면 "메일함 정리와 일정 등록"',
-  mgmt: '비워 두면 "이번 달 AI 예산 배분안"',
-  support: '비워 두면 "고객 문의 답변 초안"',
-  welfare: '비워 두면 "이번 주 휴식·문화생활 추천"',
+  dev: t('예: 사내 AI 코딩 도구 도입 검토'),
+  hr: t('비워 두면 "메일함 정리와 일정 등록"'),
+  mgmt: t('비워 두면 "이번 달 AI 예산 배분안"'),
+  support: t('비워 두면 "고객 문의 답변 초안"'),
+  welfare: t('비워 두면 "이번 주 휴식·문화생활 추천"'),
 };
 
 const DESCRIPTION_PLACEHOLDER: Record<TeamId, string> = {
-  dev: '수집할 자료, 분석 관점, 꼭 들어가야 할 내용을 적으면 직원이 덜 곤란해해요.',
-  hr: '예: 면접 관련 메일은 우선 처리해 줘',
-  mgmt: '예: 이번 달은 서포터팀에 여유를 더 줘',
-  support: '예: 환불 문의는 정책 안내만 하고 확정하지 마',
-  welfare: '예: 이번 주말은 집에서 쉬고 싶어',
+  dev: t('수집할 자료, 분석 관점, 꼭 들어가야 할 내용을 적으면 직원이 덜 곤란해해요.'),
+  hr: t('예: 면접 관련 메일은 우선 처리해 줘'),
+  mgmt: t('예: 이번 달은 서포터팀에 여유를 더 줘'),
+  support: t('예: 환불 문의는 정책 안내만 하고 확정하지 마'),
+  welfare: t('예: 이번 주말은 집에서 쉬고 싶어'),
 };
 
 export function NewOfficeModal({
@@ -82,8 +82,8 @@ export function NewOfficeModal({
   };
 
   return (
-    <Modal title="🏗️ 사무실 추가" onClose={onClose}>
-      <p className="muted small">새 사무실에는 직원 4명과 휴게실이 함께 생겨요. 같은 종류의 팀을 여러 개 만들 수도 있어요.</p>
+    <Modal title={t('🏗️ 사무실 추가')} onClose={onClose}>
+      <p className="muted small">{t('새 사무실에는 직원 4명과 휴게실이 함께 생겨요. 같은 종류의 팀을 여러 개 만들 수도 있어요.')}</p>
       <div className="team-pick">
         {TEAM_ORDER.map((id) => (
           <button key={id} type="button" className={`team-pick-option ${team === id ? 'selected' : ''}`} style={{ background: team === id ? TEAMS[id].wall : undefined }} onClick={() => setTeam(id)}>
@@ -96,12 +96,12 @@ export function NewOfficeModal({
       </div>
       {(team === 'hr' || team === 'support') && (
         <p className="small muted">
-          {team === 'hr' ? '메일함' : '문의함'}은 같은 팀끼리 함께 써요. 동시에는 한 사무실만 처리할 수 있어요.
+          {tpl('{box}은 같은 팀끼리 함께 써요. 동시에는 한 사무실만 처리할 수 있어요.', { box: team === 'hr' ? t('메일함') : t('문의함') })}
         </p>
       )}
       <label className="field">
-        사무실 이름 (선택)
-        <input value={name} maxLength={20} onChange={(e) => setName(e.target.value)} placeholder={`비워 두면 "${TEAMS[team].name} 2" 같은 이름`} />
+        {t('사무실 이름 (선택)')}
+        <input value={name} maxLength={20} onChange={(e) => setName(e.target.value)} placeholder={tpl('비워 두면 "{v} 2" 같은 이름', { v: TEAMS[team].name })} />
       </label>
       {themes.length > 0 && (
         <label className="field">
@@ -119,10 +119,10 @@ export function NewOfficeModal({
       )}
       <div className="row end">
         <button className="pixel-btn" onClick={onClose}>
-          취소
+          {t('취소')}
         </button>
         <button className="pixel-btn primary" disabled={busy} onClick={submit}>
-          사무실 열기
+          {t('사무실 열기')}
         </button>
       </div>
     </Modal>
@@ -135,10 +135,10 @@ function PlanChain({ steps, agents }: { steps: WorkflowStepInput[]; agents: Agen
       {steps.map((s, i) => (
         <li key={i}>
           {STEP_KIND[s.kind].icon} {s.label}
-          <span className="muted"> · {s.kind === 'approval' ? '나' : (agents.find((a) => a.id === s.agentId)?.name ?? '?')}</span>
+          <span className="muted"> · {s.kind === 'approval' ? t('나') : (agents.find((a) => a.id === s.agentId)?.name ?? '?')}</span>
           {s.loop && (
             <span className="plan-chain-loop">
-              🔁 {s.loop.when} → {loopTargetLabel(steps, i, s.loop)} (최대 {s.loop.max}회)
+              🔁 {t(s.loop.when)} → {t(loopTargetLabel(steps, i, s.loop))} ({tpl('최대 {n}회', { n: s.loop.max })})
             </span>
           )}
         </li>
@@ -186,12 +186,12 @@ export function NewTaskModal({
   const [planNote, setPlanNote] = useState('');
   const [designing, setDesigning] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [helping, setHelping] = useState<'prompt' | 'flows' | 'steps' | null>(null);
+  const [helping, setHelping] = useState<'prompt' | 'steps' | null>(null);
   const [promptIdea, setPromptIdea] = useState<{ title: string; description: string; tips: string[] } | null>(null);
-  const [picks, setPicks] = useState<{ picks: FlowPick[]; note: string } | null>(null);
+  const [picking, setPicking] = useState(false);
   const titleRequired = office.team === 'dev';
   const request = { title, description, taskType };
-  const help = async (kind: 'prompt' | 'flows' | 'steps', work: () => Promise<void>) => {
+  const help = async (kind: 'prompt' | 'steps', work: () => Promise<void>) => {
     setHelping(kind);
     try {
       await work();
@@ -201,19 +201,17 @@ export function NewTaskModal({
       setHelping(null);
     }
   };
-  const usePick = (pick: FlowPick) =>
-    help('flows', async () => {
-      if (pick.source === 'template') {
-        changeMode('template');
-      } else {
-        const flow = pick.source === 'saved' ? flows.find((f) => f.id === pick.id)?.flow : await api.communityFlow(pick.id, office.id);
-        if (!flow) throw new Error('흐름을 찾을 수 없어요.');
-        setSteps(flowToSteps(flow, agents));
-        setPlanMode('custom');
-      }
-      setPlanNote(`추천 흐름 "${pick.name}": ${pick.reason}`);
-      setPicks(null);
-    });
+  const usePicked = (flow: PickedFlow) => {
+    if (flow.taskType) {
+      setTaskType(flow.taskType);
+      setPlanMode('template');
+    } else {
+      setPlanMode('custom');
+    }
+    setSteps(flow.steps);
+    setPlanNote(flow.note);
+    setPicking(false);
+  };
   const noInput = team.inputLabel !== null && pendingCount === 0;
   const planError = planMode === 'custom' ? validatePlan(steps, agents) : null;
 
@@ -263,24 +261,24 @@ export function NewTaskModal({
   };
 
   return (
-    <Modal title={`📌 ${team.emoji} ${team.name} 칠판에 업무 등록`} onClose={onClose}>
+    <Modal title={tpl('📌 {emoji} {name} 칠판에 업무 등록', { emoji: team.emoji, name: team.name })} onClose={onClose}>
       <p className="muted small">{team.description}</p>
       {willQueue && (
         <p className="small">
-          지금 진행 중인 업무가 있어서 대기열 {queuedCount + 1}번째로 들어가요. 앞 업무가 끝나면 자동으로 시작해요.
+          {tpl('지금 진행 중인 업무가 있어서 대기열 {v}번째로 들어가요. 앞 업무가 끝나면 자동으로 시작해요.', { v: queuedCount + 1 })}
         </p>
       )}
       {team.inputLabel && (
         <p className={`small ${noInput ? 'neg' : ''}`}>
-          {team.inputLabel}: {pendingCount}건{noInput ? ' — 팀 자료 탭에서 새 항목을 받아 오세요.' : ''}
+          {tpl('{label}: {n}건', { label: t(team.inputLabel ?? ''), n: pendingCount })}{noInput ? t(' — 팀 자료 탭에서 새 항목을 받아 오세요.') : ''}
         </p>
       )}
       <label className="field">
-        업무 제목{titleRequired ? '' : ' (선택)'}
+        {t('업무 제목')}{titleRequired ? '' : t(' (선택)')}
         <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={TITLE_PLACEHOLDER[office.team]} />
       </label>
       <label className="field">
-        요청 내용 (선택)
+        {t('요청 내용 (선택)')}
         <textarea
           rows={3}
           value={description}
@@ -330,30 +328,30 @@ export function NewTaskModal({
         </div>
       )}
       <label className="field">
-        프로젝트 마일스톤
+        {t('프로젝트 마일스톤')}
         <select value={milestoneId} onChange={(e) => setMilestoneId(e.target.value)}>
-          <option value="">진행률에 포함하지 않음</option>
+          <option value="">{t('진행률에 포함하지 않음')}</option>
           {(office.milestones ?? []).map((milestone) => (
-            <option key={milestone.id} value={milestone.id}>{milestone.label} · 전체의 {milestone.weight}%</option>
+            <option key={milestone.id} value={milestone.id}>{milestone.label} · {tpl('전체의 {n}%', { n: milestone.weight })}</option>
           ))}
         </select>
       </label>
       <label className="field">
-        업무 유형 (여정 바로가기)
+        {t('업무 유형 (여정 바로가기)')}
         <select value={taskType} onChange={(e) => changeType(e.target.value)}>
           {team.taskTypes.map((entry) => {
             const hours = entry.standardHours + (entry.hoursPerItem ?? 0) * Math.max(1, pendingCount);
             return (
               <option key={entry.id} value={entry.id}>
-                {entry.label} (사람 기준 {Math.round(hours * 10) / 10}시간 = {krw(hours * hourlyRateKrw)})
+                {t(entry.label)} ({tpl('사람 기준 {hours}시간 = {money}', { hours: Math.round(hours * 10) / 10, money: krw(hours * hourlyRateKrw) })})
               </option>
             );
           })}
         </select>
       </label>
       <div className="field">
-        업무 여정
-        <div className="segmented" role="radiogroup" aria-label="업무 여정 정하는 방법">
+        {t('업무 여정')}
+        <div className="segmented" role="radiogroup" aria-label={t('업무 여정 정하는 방법')}>
           {PLAN_MODES.map((m) => (
             <button
               key={m.id}
@@ -363,7 +361,7 @@ export function NewTaskModal({
               className={`segment ${planMode === m.id ? 'active' : ''}`}
               onClick={() => changeMode(m.id)}
             >
-              {m.label}
+              {t(m.label)}
             </button>
           ))}
         </div>
@@ -371,53 +369,39 @@ export function NewTaskModal({
       <div className="row assist-row">
         <button
           type="button"
-          className="pixel-btn small"
-          disabled={helping !== null}
-          title={t('저장한 흐름과 커뮤니티 인기 흐름 중에서 이 요청에 맞는 것을 골라 줘요. AI 비용이 조금 들어요.')}
-          onClick={() => void help('flows', async () => setPicks(await api.recommendFlows(office.id, request)))}
+          className={`pixel-btn small ${picking ? 'primary' : ''}`}
+          title={t('저장한 흐름·유형 기본·커뮤니티 흐름을 찾아서 바꿔요')}
+          onClick={() => setPicking((v) => !v)}
         >
-          {helping === 'flows' ? t('고르는 중…') : t('🧭 어울리는 흐름 추천')}
+          📚 {t('흐름 고르기 (검색·추천)')}
         </button>
       </div>
-      {picks && (
-        <div className="callout assist-box">
-          {picks.picks.length === 0 ? (
-            <p className="small">{picks.note}</p>
-          ) : (
-            <ul className="flow-picks">
-              {picks.picks.map((p) => (
-                <li key={`${p.source}:${p.id}`} className="row">
-                  <span className="flow-pick-text small">
-                    <b>{p.name}</b> <span className="theme-badge">{p.source === 'saved' ? t('저장한 흐름') : p.source === 'community' ? t('커뮤니티') : t('유형 기본')}</span>
-                    <br />
-                    <span className="muted">{p.reason}</span>
-                  </span>
-                  <button type="button" className="pixel-btn small primary" disabled={helping !== null} onClick={() => void usePick(p)}>
-                    {t('이 흐름 쓰기')}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="row end">
-            <button type="button" className="pixel-btn small" onClick={() => setPicks(null)}>
-              {t('닫기')}
-            </button>
-          </div>
-        </div>
+      {picking && (
+        <FlowPicker
+          officeId={office.id}
+          team={office.team}
+          agents={agents}
+          flows={flows}
+          request={request}
+          canManage={canSaveFlows}
+          onPick={usePicked}
+          onClose={() => setPicking(false)}
+          onError={onError}
+        />
       )}
+      <div className="plan-scroll">
       {planMode === 'template' && <PlanChain steps={steps} agents={agents} />}
       {planMode === 'ai' && (
         <div className="callout plan-ai">
-          <span>업무가 시작되면 팀장이 요청 내용을 보고 단계와 담당자를 정해요. 설계에도 AI 비용이 조금 들어요.</span>
+          <span>{t('업무가 시작되면 팀장이 요청 내용을 보고 단계와 담당자를 정해요. 설계에도 AI 비용이 조금 들어요.')}</span>
           <button type="button" className="pixel-btn small" disabled={designing} onClick={preview}>
-            {designing ? '설계 중…' : '지금 미리 설계 받기'}
+            {designing ? t('설계 중…') : t('지금 미리 설계 받기')}
           </button>
         </div>
       )}
       {planMode === 'custom' && (
         <>
-          {planNote && <p className="plan-note small">🧭 팀장 의견: {planNote}</p>}
+          {planNote && <p className="plan-note small">🧭 {t('팀장 의견')}: {planNote}</p>}
           <FlowTools officeId={office.id} team={office.team} agents={agents} steps={steps} flows={flows} canSave={canSaveFlows} onLoad={setSteps} onError={onError} />
           <PlanEditor team={office.team} agents={agents} steps={steps} onChange={setSteps} />
           <button
@@ -430,51 +414,17 @@ export function NewTaskModal({
             {helping === 'steps' ? t('채우는 중…') : t('✨ 단계별 지시 추천')}
           </button>
           <button type="button" className="pixel-btn small" disabled={designing} onClick={preview}>
-            {designing ? '설계 중…' : '🧭 AI 추천으로 다시 채우기'}
+            {designing ? t('설계 중…') : t('🧭 AI 추천으로 다시 채우기')}
           </button>
         </>
       )}
+      </div>
       <div className="row end">
         <button className="pixel-btn" onClick={onClose}>
-          취소
+          {t('취소')}
         </button>
         <button className="pixel-btn primary" disabled={busy || noInput || Boolean(planError) || (titleRequired && !title.trim())} onClick={submit}>
-          {willQueue ? '대기열에 추가' : '칠판에 붙이기'}
-        </button>
-      </div>
-    </Modal>
-  );
-}
-
-export function PlanEditModal({ task, team, agents, onClose, onError }: { task: Task; team: TeamId; agents: Agent[]; onClose: () => void } & ErrorProp) {
-  const [steps, setSteps] = useState<WorkflowStepInput[]>(() =>
-    task.plan.map(({ kind, label, agentId, instructions }) => ({ kind, label, agentId, instructions })),
-  );
-  const [busy, setBusy] = useState(false);
-  const error = validatePlan(steps, agents);
-
-  const save = async () => {
-    setBusy(true);
-    try {
-      await api.updatePlan(task.id, steps);
-      onClose();
-    } catch (e) {
-      onError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Modal title={`✏️ 업무 여정 편집 · ${task.title}`} onClose={onClose}>
-      <p className="muted small">대기 중인 업무라 시작 전에 단계와 담당자를 바꿀 수 있어요.</p>
-      <PlanEditor team={team} agents={agents} steps={steps} onChange={setSteps} />
-      <div className="row end">
-        <button className="pixel-btn" onClick={onClose}>
-          취소
-        </button>
-        <button className="pixel-btn primary" disabled={busy || Boolean(error)} onClick={save}>
-          여정 저장
+          {willQueue ? t('대기열에 추가') : t('칠판에 붙이기')}
         </button>
       </div>
     </Modal>
@@ -511,7 +461,7 @@ export function HelpDialog({
   };
 
   return (
-    <Modal title={`🤝 ${agent.name}(${roleTitle}) 도와주기`} onClose={onClose}>
+    <Modal title={tpl('🤝 {name}({roleTitle}) 도와주기', { name: agent.name, roleTitle })} onClose={onClose}>
       <div className="help-question">
         <span className="help-portrait">
           <AgentPortrait agent={agent} themeId={themeId} expression="troubled" />
@@ -526,19 +476,19 @@ export function HelpDialog({
         ))}
       </div>
       <label className="field">
-        직접 답하기
-        <input value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="원하는 방향을 짧게 적어 주세요" />
+        {t('직접 답하기')}
+        <input value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder={t('원하는 방향을 짧게 적어 주세요')} />
       </label>
       <div className="row between">
         <button className="pixel-btn" onClick={() => send(null)}>
-          알아서 진행 ("{help.assumption}")
+          {tpl('알아서 진행 ("{assumption}")', { assumption: help.assumption })}
         </button>
         <button className="pixel-btn primary" disabled={!answer.trim()} onClick={() => send(answer)}>
-          이렇게 해줘
+          {t('이렇게 해줘')}
         </button>
       </div>
       <p className="muted small">
-        {remaining}초 안에 답이 없으면 "{help.assumption}"(으)로 진행해요. 곤란 표정은 감정이 아니라 지시가 모호하다는 신호예요.
+        {tpl('{n}초 안에 답이 없으면 "{assumption}"(으)로 진행해요. 곤란 표정은 감정이 아니라 지시가 모호하다는 신호예요.', { n: remaining, assumption: help.assumption })}
       </p>
     </Modal>
   );
@@ -563,9 +513,9 @@ export function RulesModal({
   };
 
   return (
-    <Modal title={`📜 ${agent.name}의 규칙`} onClose={onClose}>
+    <Modal title={tpl('📜 {name}의 규칙', { name: agent.name })} onClose={onClose}>
       <div className="rule-block">
-        <div className="rule-label">조직 안전 규칙 (덮어쓸 수 없음)</div>
+        <div className="rule-label">{t('조직 안전 규칙 (덮어쓸 수 없음)')}</div>
         <ul className="plain-list small">
           {safetyRules.map((r) => (
             <li key={r}>🔒 {r}</li>
@@ -573,35 +523,35 @@ export function RulesModal({
         </ul>
       </div>
       <label className="field">
-        개인 규칙
+        {t('개인 규칙')}
         <textarea rows={5} value={rules} onChange={(e) => setRules(e.target.value)} />
       </label>
       {confirming ? (
         <div className="diff">
           <div>
-            <b>변경 전</b>
-            <pre>{agent.rules || '(없음)'}</pre>
+            <b>{t('변경 전')}</b>
+            <pre>{agent.rules || t('(없음)')}</pre>
           </div>
           <div>
-            <b>변경 후</b>
-            <pre>{rules || '(없음)'}</pre>
+            <b>{t('변경 후')}</b>
+            <pre>{rules || t('(없음)')}</pre>
           </div>
           <div className="row end">
             <button className="pixel-btn" onClick={() => setConfirming(false)}>
-              다시 고치기
+              {t('다시 고치기')}
             </button>
             <button className="pixel-btn primary" onClick={save}>
-              승인하고 반영
+              {t('승인하고 반영')}
             </button>
           </div>
         </div>
       ) : (
         <div className="row end">
           <button className="pixel-btn" onClick={onClose}>
-            닫기
+            {t('닫기')}
           </button>
           <button className="pixel-btn primary" disabled={rules === agent.rules} onClick={() => setConfirming(true)}>
-            변경 내용 확인
+            {t('변경 내용 확인')}
           </button>
         </div>
       )}
@@ -612,30 +562,30 @@ export function RulesModal({
 export function AgentCardModal({ agent, roleTitle, themeId, onClose }: { agent: Agent; roleTitle: string; themeId?: string; onClose: () => void }) {
   const profit = agent.valueKrw - agent.costKrw;
   return (
-    <Modal title={`💼 ${agent.name} 손익 카드`} onClose={onClose}>
+    <Modal title={tpl('💼 {name} 손익 카드', { name: agent.name })} onClose={onClose}>
       <div className="agent-card-portrait">
         <AgentPortrait agent={agent} themeId={themeId} expression={profit < 0 ? 'sweat' : 'smile'} />
       </div>
       <table className="table">
         <tbody>
           <tr>
-            <td>역할</td>
+            <td>{t('역할')}</td>
             <td className="num">{roleTitle}</td>
           </tr>
           <tr>
-            <td>모델 (모자)</td>
+            <td>{t('모델 (모자)')}</td>
             <td className="num">{modelLabel(agent.model)}</td>
           </tr>
           <tr>
-            <td>이번 달 비용 (인건비)</td>
+            <td>{t('이번 달 비용 (인건비)')}</td>
             <td className="num">{krw(agent.costKrw)}</td>
           </tr>
           <tr>
-            <td>벌어 온 가치 (비용 비율로 배분)</td>
+            <td>{t('벌어 온 가치 (비용 비율로 배분)')}</td>
             <td className="num">{krw(agent.valueKrw)}</td>
           </tr>
           <tr className="total">
-            <td>이익</td>
+            <td>{t('이익')}</td>
             <td className={`num ${profit < 0 ? 'neg' : 'pos'}`}>{krw(profit)}</td>
           </tr>
           <tr>
@@ -643,8 +593,8 @@ export function AgentCardModal({ agent, roleTitle, themeId, onClose }: { agent: 
             <td className="num">{roi(agent.valueKrw, agent.costKrw)}</td>
           </tr>
           <tr>
-            <td>완료 업무</td>
-            <td className="num">{agent.tasksDone}건</td>
+            <td>{t('완료 업무')}</td>
+            <td className="num">{tpl('{n}건', { n: agent.tasksDone })}</td>
           </tr>
         </tbody>
       </table>

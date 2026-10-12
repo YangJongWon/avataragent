@@ -1,17 +1,20 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { currentLanguage, t, tpl } from '../../../shared/i18n.ts';
 import { localText } from '../../../shared/theme-rules.ts';
-import { allCompanies, allModels, companyOf, hatName, HATS, modelOf, tierHat, tierLabel, type Tier } from '../../../shared/models.ts';
+import { allCompanies, allModels, companyOf, hatName, HATS, type HatShape, modelOf, tierHat, tierLabel, tiersInUse, type Tier } from '../../../shared/models.ts';
 import { PERSONALITIES, personalityDescription, personalityLabel } from '../../../shared/personality.ts';
 import { builtinSkin, SKINS, skinName, skinNote } from '../../../shared/skins.ts';
 import { MAX_STAFF_PER_OFFICE, TEAMS } from '../../../shared/teams.ts';
-import { packSkin, splitPackSkin, type ThemeManifest } from '../../../shared/theme-pack.ts';
+import { accessoryLabelFor, activeVariant, applyVariant, characterFor, companyLabelFor, formFor, characterName, DEFAULT_THEME, packSkin, splitPackSkin, type ThemeManifest, type ThemeSummary } from '../../../shared/theme-pack.ts';
 import type { Agent, AgentSkin, Office, Role, Skin } from '../../../shared/types.ts';
 import { api } from '../api.ts';
+import { themeApi } from '../themeApi.ts';
 import { useThemeManifest } from '../useThemePack.ts';
 import { CharacterPreview } from './CharacterPreview.tsx';
 import { HatPreview } from './HatPreview.tsx';
+import { Modal } from './Modals.tsx';
 import { PackCharacterPreview } from './PackCharacterPreview.tsx';
+import { WorkPolicyEditor } from './WorkTab.tsx';
 
 /** The theme character a skin points at, when it belongs to the office's theme. */
 const packCharacterOf = (skin: AgentSkin, theme: ThemeManifest | null) => {
@@ -19,33 +22,71 @@ const packCharacterOf = (skin: AgentSkin, theme: ThemeManifest | null) => {
   return pack && theme?.id === pack.themeId ? (theme.characters.find((c) => c.id === pack.characterId) ?? null) : null;
 };
 
-const TIERS: Tier[] = [1, 2, 3];
 const ROLE_ORDER: Role[] = ['manager', 'researcher', 'writer', 'reviewer'];
 
-/** 후보 캐릭터를 하나씩 직접 고를 수 있게, 조합을 후보 목록으로 돌려준다. */
-function buildCandidates(seed: string, salt: number) {
-  const models = allModels();
-  const skins = SKINS.map((s) => s.id);
-  const pool: { skin: Skin; model: string }[] = [];
-  for (const skinId of skins) {
-    for (const entry of models) pool.push({ skin: skinId, model: entry.id });
-  }
+/** 후보를 하나씩 직접 고를 수 있게, 목록에서 seed마다 다른 6개를 뽑아 돌려준다. */
+function pickCandidates<T>(pool: T[], seed: string, salt: number) {
   const key = `${seed}#${salt}`;
   let h = 2166136261;
   for (let i = 0; i < key.length; i++) h = (h ^ key.charCodeAt(i)) * 16777619 >>> 0;
-  const picked: { skin: Skin; model: string }[] = [];
-  const seen = new Set<string>();
-  let i = 0;
-  while (picked.length < 6 && i < pool.length) {
-    const item = pool[(h + i * 7) % pool.length];
-    const id = `${item.skin}:${item.model}`;
-    if (!seen.has(id)) {
-      seen.add(id);
-      picked.push(item);
-    }
-    i++;
+  const next = () => (h = (h * 1664525 + 1013904223) >>> 0) / 2 ** 32;
+  const shuffled = [...pool];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(next() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
-  return picked;
+  return shuffled.slice(0, 6);
+}
+
+interface Candidate {
+  key: string;
+  title: string;
+  selected: boolean;
+  preview: ReactNode;
+  apply: () => void;
+}
+
+function RandomPickModal(props: { candidates: Candidate[]; onReroll: () => void; onClose: () => void }) {
+  return (
+    <Modal title={t('🎲 랜덤 고르기')} onClose={props.onClose}>
+      <p className="muted small">{t('마음에 드는 캐릭터를 눌러 바로 적용하세요.')}</p>
+      <div className="cand-row">
+        {props.candidates.map((c) => (
+          <button
+            key={c.key}
+            type="button"
+            className={`cand ${c.selected ? 'selected' : ''}`}
+            title={c.title}
+            onClick={() => {
+              c.apply();
+              props.onClose();
+            }}
+          >
+            {c.preview}
+          </button>
+        ))}
+        <button type="button" className="pixel-btn small cand-reroll" onClick={props.onReroll}>
+          {t('후보 새로 뽑기')}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/** The theme's own words for what a company wears; a company the theme leaves bare wears the pixel hat. */
+function companyLook(theme: ThemeManifest | null, company: { id: string; hat: HatShape }): string | null {
+  if (!theme) return hatName(company.hat);
+  const label = companyLabelFor(theme.accessoryLabels, company.id);
+  if (label) return localText(label, currentLanguage());
+  const look = applyVariant(theme, activeVariant(theme, new Date()));
+  const dressed = look.accessories[company.id] || look.accessories['*'] || allModels().some((m) => m.vendor === company.id && look.modelAccessories[m.id]);
+  return dressed ? null : hatName(company.hat);
+}
+
+/** The theme's own words for what a model (else its tier) wears. */
+function modelLook(theme: ThemeManifest | null, modelId: string, tier: number): string | null {
+  const label = theme && accessoryLabelFor(theme.accessoryLabels, modelId, tier);
+  return label ? localText(label, currentLanguage()) : null;
 }
 
 function AgentEditor({
@@ -54,25 +95,75 @@ function AgentEditor({
   themeId,
   onError,
   onSaved,
-}: { agent: Agent; roleTitle: string; themeId?: string; onError: (m: string) => void; onSaved: (m: string) => void }) {
-  const theme = useThemeManifest(themeId);
+  onPickTheme,
+}: { agent: Agent; roleTitle: string; themeId?: string; onError: (m: string) => void; onSaved: (m: string) => void; onPickTheme: (id: string) => void }) {
+  const officeTheme = useThemeManifest(themeId);
+  const [themes, setThemes] = useState<ThemeSummary[]>([]);
   const [name, setName] = useState(agent.name);
   const [model, setModel] = useState(agent.model);
   const [rules, setRules] = useState(agent.rules);
   const [skin, setSkin] = useState(agent.skin);
   const [outfit, setOutfit] = useState<string | null>(agent.outfit ?? null);
   const [personality, setPersonality] = useState(agent.personality);
+  // Step 1 picks the theme, step 2 a look inside it; it starts on the theme the current look belongs to.
+  const [pickTheme, setPickTheme] = useState(splitPackSkin(agent.skin)?.themeId ?? DEFAULT_THEME);
+  const theme = useThemeManifest(pickTheme);
   const [roll, setRoll] = useState(0);
-  const candidates = useMemo(() => buildCandidates(agent.id, roll), [agent.id, roll]);
-  const ownCharacter = packCharacterOf(skin, theme);
+  const [showRandom, setShowRandom] = useState(false);
+  const ownCharacter = packCharacterOf(skin, theme) ?? packCharacterOf(skin, officeTheme);
+  const ownTheme = ownCharacter && theme?.characters.includes(ownCharacter) ? theme : officeTheme;
   // An outfit the newly picked character does not have is dropped, as the server does.
   const wearing = ownCharacter?.outfits.some((o) => o.id === outfit) ? outfit : null;
+  // The model cards show the theme picked in step 1: its character for this agent wearing that theme's accessories.
+  const modelTheme = pickTheme !== DEFAULT_THEME ? theme : null;
+  const modelCharacter = modelTheme && characterFor(modelTheme, skin, agent.role);
+
+  // The legend under the editor follows the theme picked here.
+  useEffect(() => onPickTheme(pickTheme), [pickTheme, onPickTheme]);
+  // 🎲 draws from the theme picked in step 1: look × model for the built-in one, character × outfit for an installed one.
+  const candidates = useMemo<Candidate[]>(() => {
+    if (pickTheme === DEFAULT_THEME) {
+      const pool = SKINS.flatMap((s) => allModels().map((m) => ({ skin: s.id as Skin, model: m.id })));
+      return pickCandidates(pool, agent.id, roll).map((c) => ({
+        key: `${c.skin}:${c.model}`,
+        title: `${skinName(c.skin)} · ${modelOf(c.model).label}`,
+        selected: skin === c.skin && model === c.model,
+        preview: <CharacterPreview role={agent.role} skin={c.skin} modelId={c.model} expression="smile" />,
+        apply: () => {
+          setSkin(c.skin);
+          setModel(c.model);
+        },
+      }));
+    }
+    if (!theme) return [];
+    const pool = theme.characters.flatMap((c) => [null, ...c.outfits.map((o) => o.id)].map((outfitId) => ({ character: c, outfitId })));
+    return pickCandidates(pool, agent.id, roll).map(({ character, outfitId }) => {
+      const id = packSkin(theme.id, character.id);
+      const outfitName = outfitId && character.outfits.find((o) => o.id === outfitId)?.name;
+      return {
+        key: `${id}:${outfitId ?? ''}`,
+        title: outfitName ? `${characterName(character, currentLanguage())} · ${localText(outfitName, currentLanguage())}` : characterName(character, currentLanguage()),
+        selected: skin === id && wearing === outfitId,
+        preview: <PackCharacterPreview themeId={theme.id} character={character} outfit={outfitId} />,
+        apply: () => {
+          setSkin(id);
+          setOutfit(outfitId);
+        },
+      };
+    });
+  }, [pickTheme, theme, agent.id, agent.role, roll, skin, model, wearing]);
+
+  useEffect(() => {
+    themeApi.list().then(setThemes, () => setThemes([]));
+  }, []);
   const dirty =
     name !== agent.name || model !== agent.model || rules !== agent.rules || skin !== agent.skin || personality !== agent.personality || wearing !== (agent.outfit ?? null);
 
   const save = async () => {
     try {
-      await api.updateAgent(agent.id, { name, model, rules, skin, personality, ...(ownCharacter && { outfit: wearing }) });
+      // An untouched translated default name is saved back as the stored one, so other languages keep theirs.
+      const savedName = agent.sourceName && name === agent.name ? agent.sourceName : name;
+      await api.updateAgent(agent.id, { name: savedName, model, rules, skin, personality, ...(ownCharacter && { outfit: wearing }) });
       onSaved(tpl('{name} 정보를 저장했어요.', { name }));
     } catch (e) {
       onError(e instanceof Error ? e.message : String(e));
@@ -87,8 +178,8 @@ function AgentEditor({
       </div>
 
       <div className="hire-stage">
-        {theme && ownCharacter ? (
-          <PackCharacterPreview themeId={theme.id} character={ownCharacter} outfit={wearing} />
+        {ownTheme && ownCharacter ? (
+          <PackCharacterPreview themeId={ownTheme.id} character={ownCharacter} outfit={wearing} />
         ) : (
           <CharacterPreview role={agent.role} skin={builtinSkin(skin)} modelId={model} expression="smile" />
         )}
@@ -97,7 +188,7 @@ function AgentEditor({
           <div className="muted small">
             {modelOf(model).label} · {tierLabel(modelOf(model).tier)} · {companyOf(modelOf(model).vendor).name}
           </div>
-          <div className="muted small">{ownCharacter ? `${ownCharacter.name} · ${theme?.name}` : skinName(skin)}</div>
+          <div className="muted small">{ownCharacter ? `${characterName(ownCharacter, currentLanguage())} · ${ownTheme?.name}` : skinName(skin)}</div>
           <div className="muted small">
             {PERSONALITIES.find((p) => p.id === personality)?.emoji} {personalityLabel(personality)}
           </div>
@@ -105,38 +196,82 @@ function AgentEditor({
       </div>
 
       <div className="field">
-        <b>{t('1. 외형 고르기')}</b>
+        <b>{t('1. 테마 고르기')}</b>
         <div className="skin-row">
-          {SKINS.map((s) => (
-            <button
-              key={s.id}
-              className={`skin-option skin-option-art ${skin === s.id ? 'selected' : ''}`}
-              type="button"
-              title={s.credit ? `${skinNote(s.id)}\n${t('출처')}: ${s.credit}` : skinNote(s.id)}
-              onClick={() => setSkin(s.id)}
-            >
-              <CharacterPreview role={agent.role} skin={s.id} modelId={model} expression="normal" />
-              {skinName(s.id)}
-            </button>
-          ))}
-          {theme?.characters.map((c) => {
-            const id = packSkin(theme.id, c.id);
-            return (
+          <button
+            className={`skin-option skin-option-art ${pickTheme === DEFAULT_THEME ? 'selected' : ''}`}
+            type="button"
+            onClick={() => setPickTheme(DEFAULT_THEME)}
+          >
+            <CharacterPreview role={agent.role} skin={builtinSkin(skin)} modelId={model} expression="normal" />
+            {t('기본 테마')}
+          </button>
+          {themes
+            .filter((th) => th.characters.length > 0)
+            .map((th) => (
               <button
-                key={id}
-                className={`skin-option skin-option-art ${skin === id ? 'selected' : ''}`}
+                key={th.id}
+                className={`skin-option skin-option-art ${pickTheme === th.id ? 'selected' : ''}`}
                 type="button"
-                title={`${theme.name} · ${theme.author} · ${theme.license}`}
-                onClick={() => setSkin(id)}
+                title={`${th.name} · ${th.author} · ${th.license}`}
+                onClick={() => setPickTheme(th.id)}
               >
-                <PackCharacterPreview themeId={theme.id} character={c} />
-                {c.name}
+                {th.preview ? <img className="theme-pick-preview" src={themeApi.previewUrl(th.id, th.preview)} alt="" /> : <span className="skin-preview">🎨</span>}
+                {th.name}
+                {th.id === themeId && <span className="muted small">{t('이 사무실 테마')}</span>}
               </button>
-            );
-          })}
+            ))}
         </div>
-        {theme && <div className="muted small">{tpl('{theme} 테마의 캐릭터는 이 테마를 쓰는 사무실에서 보여요. 다른 사무실에서는 기본 픽셀로 보여요.', { theme: theme.name })}</div>}
-        {theme && ownCharacter && ownCharacter.outfits.length > 0 && (
+      </div>
+
+      <div className="field">
+        <b>{t('2. 외형 고르기')}</b>
+        <div className="skin-row">
+          {pickTheme === DEFAULT_THEME &&
+            SKINS.map((s) => (
+              <button
+                key={s.id}
+                className={`skin-option skin-option-art ${skin === s.id ? 'selected' : ''}`}
+                type="button"
+                title={s.credit ? `${skinNote(s.id)}
+${t('출처')}: ${s.credit}` : skinNote(s.id)}
+                onClick={() => setSkin(s.id)}
+              >
+                <CharacterPreview role={agent.role} skin={s.id} modelId={model} expression="normal" />
+                {skinName(s.id)}
+              </button>
+            ))}
+          {pickTheme !== DEFAULT_THEME &&
+            theme?.characters.map((c) => {
+              const id = packSkin(theme.id, c.id);
+              return (
+                <button
+                  key={id}
+                  className={`skin-option skin-option-art ${skin === id ? 'selected' : ''}`}
+                  type="button"
+                  title={`${theme.name} · ${theme.author} · ${theme.license}`}
+                  onClick={() => setSkin(id)}
+                >
+                  <PackCharacterPreview themeId={theme.id} character={c} />
+                  {characterName(c, currentLanguage())}
+                </button>
+              );
+            })}
+          {(pickTheme === DEFAULT_THEME || theme) && (
+            <button
+              key="random"
+              className="skin-option skin-option-art"
+              type="button"
+              title={t('🎲 랜덤 고르기')}
+              onClick={() => setShowRandom(true)}
+            >
+              <span className="skin-preview">🎲</span>
+              {t('랜덤')}
+            </button>
+          )}
+        </div>
+        {pickTheme !== DEFAULT_THEME && theme && <div className="muted small">{tpl('{theme} 테마의 캐릭터는 이 테마를 쓰는 사무실에서 보여요. 다른 사무실에서는 기본 픽셀로 보여요.', { theme: theme.name })}</div>}
+        {ownTheme && ownCharacter && ownCharacter.outfits.length > 0 && (
           <>
             <b>{t('의상')}</b>
             <div className="skin-row">
@@ -147,26 +282,32 @@ function AgentEditor({
                   type="button"
                   onClick={() => setOutfit(o?.id ?? null)}
                 >
-                  <PackCharacterPreview themeId={theme.id} character={ownCharacter} outfit={o?.id ?? null} />
+                  <PackCharacterPreview themeId={ownTheme.id} character={ownCharacter} outfit={o?.id ?? null} />
                   {o ? localText(o.name, currentLanguage()) : t('기본 옷')}
                 </button>
               ))}
             </div>
-            {theme.dress.length > 0 && <div className="muted small">{t('테마의 옷 규칙(예: 휴게실에서는 편한 옷)이 맞을 때는 그 옷이 먼저 보여요.')}</div>}
+            {ownTheme.dress.length > 0 && <div className="muted small">{t('테마의 옷 규칙(예: 휴게실에서는 편한 옷)이 맞을 때는 그 옷이 먼저 보여요.')}</div>}
           </>
         )}
       </div>
 
       <div className="field">
-        <b>{t('2. 모델 고르기')}</b>
-        <div className="muted small">{t('모자 모양 = AI 회사, 장식 = 등급')}</div>
+        <b>{t('3. 모델 고르기')}</b>
+        <div className="muted small">
+          {modelTheme
+            ? modelTheme.accessoryLabels.summary
+              ? localText(modelTheme.accessoryLabels.summary, currentLanguage())
+              : tpl('{theme} 테마에서 보이는 모습이에요.', { theme: modelTheme.name })
+            : `${t('모자 모양 = AI 회사, 장식 = 등급')} · ${t('고른 외형에 씌워서 보여 줘요.')}`}
+        </div>
         {allCompanies().map((company) => {
           const list = allModels().filter((m) => m.vendor === company.id).sort((a, b) => a.tier - b.tier);
           if (!list.length) return null;
           return (
             <div key={company.id} className="model-pick-group">
               <div className="model-pick-title">
-                {company.name} · {hatName(company.hat)}
+                {[company.name, companyLook(modelTheme, company)].filter(Boolean).join(' · ')}
               </div>
               <div className="model-pick-row">
                 {list.map((m) => (
@@ -176,8 +317,18 @@ function AgentEditor({
                     className={`model-pick ${model === m.id ? 'selected' : ''}`}
                     onClick={() => setModel(m.id)}
                   >
-                    <HatPreview hat={company.hat} color={company.color} tier={m.tier} />
+                    {modelTheme && modelCharacter ? (
+                      <PackCharacterPreview themeId={modelTheme.id} character={modelCharacter} outfit={modelCharacter === ownCharacter ? wearing : null} wearing={{ theme: modelTheme, modelId: m.id }} />
+                    ) : (
+                      <CharacterPreview role={agent.role} skin={builtinSkin(skin)} modelId={m.id} expression="normal" />
+                    )}
                     <span className="model-pick-label">{m.label}</span>
+                    {(() => {
+                      // The character's own name for this look (Super Saiyan 2) comes before the theme's words for the tier.
+                      const formName = modelCharacter && formFor(modelCharacter, m)?.form.name;
+                      const look = formName ? localText(formName, currentLanguage()) : modelLook(modelTheme, m.id, m.tier);
+                      return look && <span className="small">{look}</span>;
+                    })()}
                     <span className="muted small">${m.priceInPerMTokUsd}/${m.priceOutPerMTokUsd}</span>
                   </button>
                 ))}
@@ -185,30 +336,6 @@ function AgentEditor({
             </div>
           );
         })}
-      </div>
-
-      <div className="field">
-        <b>{t('3. 후보 캐릭터 고르기')}</b>
-        <div className="muted small">{t('마음에 드는 캐릭터를 눌러 바로 적용하세요.')}</div>
-        <div className="cand-row">
-          {candidates.map((c) => (
-            <button
-              key={`${c.skin}:${c.model}`}
-              type="button"
-              className={`cand ${skin === c.skin && model === c.model ? 'selected' : ''}`}
-              title={`${skinName(c.skin)} · ${modelOf(c.model).label}`}
-              onClick={() => {
-                setSkin(c.skin);
-                setModel(c.model);
-              }}
-            >
-              <CharacterPreview role={agent.role} skin={c.skin} modelId={c.model} expression="smile" />
-            </button>
-          ))}
-          <button type="button" className="pixel-btn small cand-reroll" onClick={() => setRoll((r) => r + 1)}>
-            {t('후보 새로 뽑기')}
-          </button>
-        </div>
       </div>
 
       <div className="field">
@@ -239,11 +366,17 @@ function AgentEditor({
         {t('개인 규칙')}
         <textarea rows={3} value={rules} onChange={(e) => setRules(e.target.value)} />
       </label>
-      <div className="row end">
-        <button className="pixel-btn primary" disabled={!dirty} onClick={save}>
-          {t('저장')}
-        </button>
-      </div>
+      <WorkPolicyEditor
+        agent={agent}
+        onError={onError}
+        onNotice={onSaved}
+        actions={
+          <button className="pixel-btn primary" disabled={!dirty} onClick={save}>
+            {t('저장')}
+          </button>
+        }
+      />
+      {showRandom && <RandomPickModal candidates={candidates} onReroll={() => setRoll((r) => r + 1)} onClose={() => setShowRandom(false)} />}
     </div>
   );
 }
@@ -262,6 +395,15 @@ export function HireTab({
   const [hireName, setHireName] = useState('');
   const [busy, setBusy] = useState(false);
   const selected = agents.find((a) => a.id === selectedId) ?? agents[0];
+  // The theme picked in the editor's step 1; the legend explains what staff wear in it.
+  const [legendThemeId, setLegendThemeId] = useState<string>(DEFAULT_THEME);
+  const legendTheme = useThemeManifest(legendThemeId);
+  const legendCompanies = allCompanies()
+    .map((c) => ({ c, look: companyLook(legendTheme, c) }))
+    .filter((x): x is { c: (typeof x)['c']; look: string } => x.look !== null);
+  const legendTiers = tiersInUse().map((tier) => ({ tier, look: legendTheme ? modelLook(legendTheme, '', tier) : tierHat(tier) })).filter(
+    (x): x is { tier: Tier; look: string } => x.look !== null,
+  );
   const full = agents.length >= MAX_STAFF_PER_OFFICE;
   const lastOfRole = (agent: Agent) => !agents.some((a) => a.id !== agent.id && a.role === agent.role);
 
@@ -361,30 +503,36 @@ export function HireTab({
           themeId={themeId}
           onError={onError}
           onSaved={onNotice}
+          onPickTheme={setLegendThemeId}
         />
       )}
 
       <div className="hat-legend pixel-box">
-        <div>
-          <b>{t('모자 모양 = AI 회사')}</b>
-          <ul>
-            {allCompanies().map((c) => (
-              <li key={c.id}>
-                {c.name}: {hatName(c.hat)}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div>
-          <b>{t('장식 = 모델 등급')}</b>
-          <ul>
-            {TIERS.map((tier) => (
-              <li key={tier}>
-                {tierLabel(tier)}: {tierHat(tier)}
-              </li>
-            ))}
-          </ul>
-        </div>
+        {legendTheme?.accessoryLabels.summary && <p className="muted">{localText(legendTheme.accessoryLabels.summary, currentLanguage())}</p>}
+        {legendCompanies.length > 0 && (
+          <div>
+            <b>{legendTheme ? tpl('{theme} 테마 · AI 회사', { theme: legendTheme.name }) : t('모자 모양 = AI 회사')}</b>
+            <ul>
+              {legendCompanies.map(({ c, look }) => (
+                <li key={c.id}>
+                  {c.name}: {look}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {legendTiers.length > 0 && (
+          <div>
+            <b>{legendTheme ? tpl('{theme} 테마 · 모델 등급', { theme: legendTheme.name }) : t('장식 = 모델 등급')}</b>
+            <ul>
+              {legendTiers.map(({ tier, look }) => (
+                <li key={tier}>
+                  {tierLabel(tier)}: {look}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <p className="muted">
           {t('"직원별 실제 AI" 방식이면 직원마다 자기 모델 회사의 API로 호출해요. 시뮬레이션에서는 모델 가격으로 비용을 계산하고, 등급이 높을수록 검토 점수가 올라가요.')}{' '}
           <button className="link-btn" type="button" onClick={onManageModels}>
@@ -393,12 +541,20 @@ export function HireTab({
         </p>
       </div>
       <p className="muted small">
-        {t('스킨 출처')}:{' '}
-        {SKINS.filter((s) => s.credit).map((s) => (
-          <span key={s.id}>
-            {skinName(s.id)} — {s.credit}{' '}
-          </span>
-        ))}
+        {legendTheme ? (
+          <>
+            {t('테마 출처')}: {legendTheme.name} — {legendTheme.author}, {legendTheme.license}
+          </>
+        ) : (
+          <>
+            {t('스킨 출처')}:{' '}
+            {SKINS.filter((s) => s.credit).map((s) => (
+              <span key={s.id}>
+                {skinName(s.id)} — {s.credit}{' '}
+              </span>
+            ))}
+          </>
+        )}
       </p>
     </div>
   );

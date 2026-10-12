@@ -1,3 +1,4 @@
+import { t, tpl } from '../../../shared/i18n.ts';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { useMemo, useState, type ReactNode } from 'react';
@@ -9,6 +10,7 @@ import type { Agent, OfficeEvent, Person, Task, TeamId } from '../../../shared/t
 import { api } from '../api.ts';
 import { eventLabel, krw, statusLabel, timeOf } from '../format.ts';
 import { ExportBox } from './ExportBox.tsx';
+import { useLanguage } from '../LanguageProvider.tsx';
 
 type Tab = 'team' | 'report' | 'artifacts' | 'reviews' | 'profit' | 'log';
 
@@ -33,31 +35,32 @@ const renderMarkdown = (md: string) => DOMPurify.sanitize(marked.parse(md, { asy
 
 const ACTION_STATUS: Record<PlannedAction['status'], string> = {
   proposed: '',
-  running: '⏳ 실행 중',
-  done: '✅ 완료',
-  failed: '❌ 실패',
-  unknown: '⚠️ 결과 확인 필요',
-  skipped: '⏭️ 건너뜀',
+  running: t('⏳ 실행 중'),
+  done: t('✅ 완료'),
+  failed: t('❌ 실패'),
+  unknown: t('⚠️ 결과 확인 필요'),
+  skipped: t('⏭️ 건너뜀'),
 };
 
 function ActionList({ actions, editable, onToggle }: { actions: PlannedAction[]; editable: boolean; onToggle?: (id: string, enabled: boolean) => void }) {
+  const { t } = useLanguage();
   const pending = actions.every((a) => a.status === 'proposed');
   return (
     <div className="actions-box">
-      <b>{pending ? '승인하면 실행할 외부 작업' : '외부 작업 결과'}</b>
-      {pending && <div className="small muted">체크를 끄면 그 작업은 실행하지 않아요. 같은 작업은 한 번만 실행돼요.</div>}
+      <b>{pending ? t('승인하면 실행할 외부 작업') : t('외부 작업 결과')}</b>
+      {pending && <div className="small muted">{t('체크를 끄면 그 작업은 실행하지 않아요. 같은 작업은 한 번만 실행돼요.')}</div>}
       <ul>
         {actions.map((a) => (
           <li key={a.id} className={pending && !a.enabled ? 'off' : ''}>
             <label className="check">
               {pending && <input type="checkbox" checked={a.enabled} disabled={!editable} onChange={(e) => onToggle?.(a.id, e.target.checked)} />}
               <span>
-                {a.icon} <b>{a.serverName}</b> · <code>{a.tool}</code> {ACTION_STATUS[a.status]}
+                {a.icon} <b>{a.serverName}</b> · <code>{a.tool}</code> {ACTION_STATUS[a.status] && t(ACTION_STATUS[a.status])}
               </span>
             </label>
             <div>{a.summary}</div>
             <details>
-              <summary className="small muted">보낼 내용{a.result ? ' · 결과' : ''}</summary>
+              <summary className="small muted">{t('보낼 내용')}{a.result ? ` · ${t('결과')}` : ''}</summary>
               <pre>{JSON.stringify(a.arguments, null, 2)}</pre>
               {a.result && <pre>{a.result}</pre>}
             </details>
@@ -69,6 +72,7 @@ function ActionList({ actions, editable, onToggle }: { actions: PlannedAction[];
 }
 
 export function ReportPanel({ team, teamData, task, tasks, agents, events, canOperate, onSelectTask, onHelp, onError, onDiscuss, people }: Props) {
+  const { t, tpl } = useLanguage();
   const [tab, setTab] = useState<Tab>(TEAMS[team].inputLabel || team === 'welfare' || team === 'mgmt' ? 'team' : 'report');
   const [valueInput, setValueInput] = useState('');
   const [comment, setComment] = useState('');
@@ -80,8 +84,8 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
     return (
       <aside className="report">
         <div className="report-empty">
-          <h3>{TEAMS[team].emoji} {TEAMS[team].name}</h3>
-          <p>아직 업무가 없어요. 사무실 칠판을 눌러 첫 업무를 등록해 보세요.</p>
+          <h3>{TEAMS[team].emoji} {t(TEAMS[team].name)}</h3>
+          <p>{t('아직 업무가 없어요. 사무실 칠판을 눌러 첫 업무를 등록해 보세요.')}</p>
         </div>
         <div className="report-body">{teamData}</div>
       </aside>
@@ -90,6 +94,8 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
 
   const draft = task.artifacts.filter((a) => a.kind === 'draft').at(-1);
   const report = draft ? splitDraft(draft.content).body : '';
+  const localizedTitle = t(task.title);
+  const localizedReport = localizedTitle === task.title ? report : report.replaceAll(task.title, localizedTitle);
   const taskEvents = events.filter((e) => e.taskId === task.id || !e.taskId);
   const profit = task.value?.recognizedKrw ? task.value.recognizedKrw - task.costKrw : null;
   const queue = tasks.filter((t) => t.status === 'queued').reverse();
@@ -109,39 +115,39 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
     <aside className="report">
       <div className="report-head">
         <select className="task-select" value={task.id} onChange={(e) => onSelectTask(e.target.value)}>
-          {tasks.map((t) => (
-            <option key={t.id} value={t.id}>
-              [{statusLabel(t.status)}] {t.title}
+          {tasks.map((item) => (
+            <option key={item.id} value={item.id}>
+              [{statusLabel(item.status)}] {t(item.title)}
             </option>
           ))}
         </select>
         <div className="report-meta">
           <span className={`badge badge-${task.status}`}>{statusLabel(task.status)}</span>
-          <span>현재 단계: {currentStepLabel(task)}</span>
-          <span>비용 {krw(task.costKrw)}</span>
-          {Boolean(task.toolCalls) && <span>🧩 도구 {task.toolCalls}회</span>}
+          <span>{t('현재 단계')}: {t(currentStepLabel(task))}</span>
+          <span>{t('비용')} {krw(task.costKrw)}</span>
+          {Boolean(task.toolCalls) && <span>🧩 {t('도구')} {tpl('{n}회', { n: task.toolCalls })}</span>}
           {people && (
             <label className="assignee">
               👤
               <select
                 value={task.assigneeId ?? ''}
                 disabled={!canOperate || busy}
-                title="업무 담당자"
+                title={t('업무 담당자')}
                 onChange={(e) => run(() => api.setAssignee(task.id, e.target.value || null))}
               >
-                <option value="">담당자 없음</option>
+                <option value="">{t('담당자 없음')}</option>
                 {people.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
                 ))}
-                {task.assigneeId && !people.some((p) => p.id === task.assigneeId) && <option value={task.assigneeId}>(지금은 볼 수 없는 사람)</option>}
+                {task.assigneeId && !people.some((p) => p.id === task.assigneeId) && <option value={task.assigneeId}>{t('(지금은 볼 수 없는 사람)')}</option>}
               </select>
             </label>
           )}
           {onDiscuss && (
             <button className="pixel-btn small" onClick={() => onDiscuss(task.id)}>
-              💬 업무 대화
+              💬 {t('업무 대화')}
             </button>
           )}
         </div>
@@ -150,10 +156,10 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
             {queue.map((q, i) => (
               <li key={q.id} className={q.id === task.id ? 'selected' : ''}>
                 <button className="queue-title" onClick={() => onSelectTask(q.id)}>
-                  {i + 1}. {q.title}
+                  {i + 1}. {t(q.title)}
                 </button>
                 {canOperate && (
-                  <button className="icon-btn" title="대기 취소" disabled={busy} onClick={() => run(() => api.cancelTask(q.id))}>
+                  <button className="icon-btn" title={t('대기 취소')} disabled={busy} onClick={() => run(() => api.cancelTask(q.id))}>
                     ✕
                   </button>
                 )}
@@ -165,33 +171,33 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
 
       {task.status === 'queued' && (
         <div className="callout">
-          대기 {queue.findIndex((q) => q.id === task.id) + 1}번째예요. 앞 업무가 끝나면 직원들이 자동으로 시작해요.
+          {tpl('대기 {n}번째예요. 앞 업무가 끝나면 직원들이 자동으로 시작해요.', { n: queue.findIndex((q) => q.id === task.id) + 1 })}
         </div>
       )}
 
       {task.status === 'awaiting_help' && task.help && (
         <div className="callout callout-help">
           <span>
-            <b>{agentMap.get(task.help.agentId)?.name}</b>가 도움을 요청했어요: {task.help.question}
+            {tpl('{name}가 도움을 요청했어요: {question}', { name: agentMap.get(task.help.agentId)?.name ?? '', question: t(task.help.question) })}
           </span>
           {canOperate && (
             <button className="pixel-btn small primary" onClick={onHelp}>
-              도와주기
+              {t('도와주기')}
             </button>
           )}
         </div>
       )}
 
-      {task.status === 'failed' && <div className="callout callout-error">중단됨: {task.failureReason}</div>}
+      {task.status === 'failed' && <div className="callout callout-error">{t('중단됨')}: {task.failureReason}</div>}
 
       {task.status === 'completed' && task.actions?.some((a) => a.status !== 'proposed') && <ActionList actions={task.actions} editable={false} />}
 
       {task.status === 'awaiting_approval' && task.value && (
         <div className="approval">
-          <div className="approval-title">🙋 사용자 승인</div>
+          <div className="approval-title">🙋 {t('사용자 승인')}</div>
           {task.proposal && (
             <div className="proposal">
-              <b>{task.proposal.headline}</b>
+              <b>{t(task.proposal.headline)}</b>
               {task.proposal.lines.length > 0 && (
                 <ul>
                   {task.proposal.lines.map((line, i) => (
@@ -209,14 +215,14 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
             />
           )}
           <div className="value-breakdown">
-            기준 가치 {krw(task.value.baseKrw)} × 품질 {task.value.qualityMultiplier} × 사용자 평가 {task.value.userMultiplier}
-            <br />= 추정 가치 <b>{krw(task.value.estimatedKrw)}</b> · 지금까지 비용 {krw(task.costKrw)}
+            {t('기준 가치')} {krw(task.value.baseKrw)} × {t('품질')} {task.value.qualityMultiplier} × {t('사용자 평가')} {task.value.userMultiplier}
+            <br />= {t('추정 가치')} <b>{krw(task.value.estimatedKrw)}</b> · {t('지금까지 비용')} {krw(task.costKrw)}
           </div>
-          {!canOperate && <p className="small muted">승인과 수정 요청은 업무 처리 권한이 있는 사람만 할 수 있어요.</p>}
+          {!canOperate && <p className="small muted">{t('승인과 수정 요청은 업무 처리 권한이 있는 사람만 할 수 있어요.')}</p>}
           {canOperate && (
             <>
               <label className="field-inline">
-                인정할 가치(원)
+                {t('인정할 가치(원)')}
                 <input
                   type="number"
                   min={0}
@@ -236,11 +242,11 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
                     })
                   }
                 >
-                  승인하고 반영
+                  {t('승인하고 반영')}
                 </button>
               </div>
               <textarea
-                placeholder="수정 요청 내용 (예: 결론에 실행 일정을 추가해 주세요)"
+                placeholder={t('수정 요청 내용 (예: 결론에 실행 일정을 추가해 주세요)')}
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 rows={2}
@@ -255,7 +261,7 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
                   })
                 }
               >
-                수정 요청 (가치 70%로 감액)
+                {t('수정 요청 (가치 70%로 감액)')}
               </button>
             </>
           )}
@@ -265,16 +271,16 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
       <div className="tabs">
         {(
           [
-            ['team', '팀 자료'],
-            ['report', '보고서'],
-            ['artifacts', '중간 산출물'],
-            ['reviews', '검수 의견'],
-            ['profit', '손익'],
-            ['log', '실행 기록'],
+            ['team', t('팀 자료')],
+            ['report', t('보고서')],
+            ['artifacts', t('중간 산출물')],
+            ['reviews', t('검수 의견')],
+            ['profit', t('손익')],
+            ['log', t('실행 기록')],
           ] as [Tab, string][]
         ).map(([id, label]) => (
           <button key={id} className={`tab ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>
-            {label}
+            {t(label)}
           </button>
         ))}
       </div>
@@ -286,17 +292,17 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
             <>
               <div className="row between">
                 <span className="muted">
-                  {agentMap.get(draft.agentId)?.name} 작성 · v{draft.version}
+                  {agentMap.get(draft.agentId)?.name} {t('작성')} · v{draft.version}
                 </span>
                 <button className="pixel-btn small" onClick={() => setExportOpen((v) => !v)}>
-                  내보내기 {exportOpen ? '▴' : '▾'}
+                  {t('파일로 내보내기')} {exportOpen ? '▴' : '▾'}
                 </button>
               </div>
-              {exportOpen && <ExportBox task={task} draftVersion={draft.version} markdown={report} canOperate={canOperate} onError={onError} />}
-              <div className="markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(report) }} />
+              {exportOpen && <ExportBox task={task} draftVersion={draft.version} markdown={localizedReport} canOperate={canOperate} onError={onError} />}
+              <div className="markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(localizedReport) }} />
             </>
           ) : (
-            <p className="muted">아직 보고서 초안이 없어요. 작성자가 쓰는 중입니다.</p>
+            <p className="muted">{t('아직 보고서 초안이 없어요. 작성자가 쓰는 중입니다.')}</p>
           ))}
 
         {tab === 'artifacts' &&
@@ -307,37 +313,37 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
               .map((a) => (
                 <details key={a.id} className="artifact">
                   <summary>
-                    {a.title} v{a.version} · {agentMap.get(a.agentId)?.name} · {timeOf(a.createdAt)}
+                    {t(a.title)} v{a.version} · {agentMap.get(a.agentId)?.name} · {timeOf(a.createdAt)}
                   </summary>
                   <div className="markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(a.content) }} />
                 </details>
               ))
           ) : (
-            <p className="muted">아직 산출물이 없어요.</p>
+            <p className="muted">{t('아직 산출물이 없어요.')}</p>
           ))}
 
         {tab === 'reviews' &&
           (task.reviews.length || task.clarifications.length || task.userChangeRequests.length || task.chatNotes?.length ? (
             <ul className="plain-list">
               {task.clarifications.map((c, i) => (
-                <li key={`c${i}`}>🤝 사용자가 정한 방향: {c}</li>
+                <li key={`c${i}`}>🤝 {t('사용자가 정한 방향')}: {t(c)}</li>
               ))}
               {(task.chatNotes ?? []).map((n) => (
                 <li key={n.messageId}>
-                  💬 대화에서 전달된 메모 · {n.author}: {n.text}
+                  💬 {t('대화에서 전달된 메모')} · {n.author}: {n.text}
                 </li>
               ))}
               {task.reviews.map((r, i) => (
                 <li key={`r${i}`} className={r.approved ? 'ok' : 'ng'}>
-                  {r.approved ? '✅ 통과' : '❌ 반려'} ({r.score}점) · {agentMap.get(r.agentId)?.name}: {r.reason}
+                  {r.approved ? tpl('✅ {v}', { v: t('통과') }) : tpl('❌ {v}', { v: t('반려') })} ({tpl('{n}점', { n: r.score })}) · {agentMap.get(r.agentId)?.name}: {t(r.reason)}
                 </li>
               ))}
               {task.userChangeRequests.map((c, i) => (
-                <li key={`u${i}`}>✏️ 사용자 수정 요청: {c}</li>
+                <li key={`u${i}`}>✏️ {t('사용자가 남긴 수정 요청')}: {c}</li>
               ))}
             </ul>
           ) : (
-            <p className="muted">아직 검수 의견이 없어요.</p>
+            <p className="muted">{t('아직 검수 의견이 없어요.')}</p>
           ))}
 
         {tab === 'profit' && (
@@ -345,24 +351,24 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
             <tbody>
               {Object.entries(task.costByAgent).map(([id, cost]) => (
                 <tr key={id}>
-                  <td>{agentMap.get(id)?.name} 비용</td>
+                  <td>{tpl('{name} 비용', { name: agentMap.get(id)?.name ?? '' })}</td>
                   <td className="num">{krw(cost)}</td>
                 </tr>
               ))}
               <tr className="total">
-                <td>총비용</td>
+                <td>{t('총비용')}</td>
                 <td className="num">{krw(task.costKrw)}</td>
               </tr>
               <tr>
-                <td>추정 가치</td>
+                <td>{t('추정 가치')}</td>
                 <td className="num">{task.value ? krw(task.value.estimatedKrw) : '-'}</td>
               </tr>
               <tr>
-                <td>인정 가치{task.value?.userEdited ? ' (사용자 수정)' : ''}</td>
-                <td className="num">{task.value?.recognizedKrw ? krw(task.value.recognizedKrw) : '승인 전'}</td>
+                <td>{t('인정 가치')}{task.value?.userEdited ? ` (${t('사용자 수정')})` : ''}</td>
+                <td className="num">{task.value?.recognizedKrw ? krw(task.value.recognizedKrw) : t('승인 전')}</td>
               </tr>
               <tr className="total">
-                <td>업무 이익</td>
+                <td>{t('업무 이익')}</td>
                 <td className={`num ${profit !== null && profit < 0 ? 'neg' : 'pos'}`}>{profit !== null ? krw(profit) : '-'}</td>
               </tr>
             </tbody>

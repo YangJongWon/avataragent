@@ -1,3 +1,4 @@
+import { currentLanguage, localeOf, t, tpl } from '../../../shared/i18n.ts';
 import { useEffect, useRef, useState } from 'react';
 import { can } from '../../../shared/access.ts';
 import { COMPANY_CHANNEL, FORWARD_LABEL, FORWARDED_AS, forwardModes, MAX_CHAT_CHARS, officeChannel, parseChannel, taskOfMessage } from '../../../shared/chat.ts';
@@ -70,16 +71,16 @@ export function ChatPanel(props: {
     <aside className="chat-panel pixel-box">
       <div className="chat-head">
         <select value={channel} onChange={(e) => props.onChannel(e.target.value)}>
-          <option value={COMPANY_CHANNEL}># 회사 전체</option>
+          <option value={COMPANY_CHANNEL}>{t('# 회사 전체')}</option>
           {officeChannels &&
             snapshot.offices.map((o) => (
               <option key={o.id} value={officeChannel(o.id)}>
                 # {TEAMS[o.team].emoji} {o.name}
               </option>
             ))}
-          {threadTask && <option value={channel}>💬 업무: {threadTask.title}</option>}
+          {threadTask && <option value={channel}>💬 {t('업무')}: {t(threadTask.title)}</option>}
         </select>
-        <button className="icon-btn" title="닫기" onClick={props.onClose}>
+        <button className="icon-btn" title={t('닫기')} onClick={props.onClose}>
           ✕
         </button>
       </div>
@@ -92,26 +93,26 @@ export function ChatPanel(props: {
           <button
             className="pixel-btn small"
             disabled={busy}
-            onClick={() => void send({ channel: shareTarget, text: '이 업무 같이 봐 주세요.', taskId: threadTask.id }).then((ok) => ok && props.onChannel(shareTarget))}
+            onClick={() => void send({ channel: shareTarget, text: t('이 업무 같이 봐 주세요.'), taskId: threadTask.id }).then((ok) => ok && props.onChannel(shareTarget))}
           >
-            📣 {officeChannels ? `${officeName(threadTask.officeId)} 채널` : '회사 채널'}에 공유
+            📣 {tpl('{channel}에 공유', { channel: officeChannels ? tpl('{v} 채널', { v: officeName(threadTask.officeId) }) : t('회사 채널') })}
           </button>
         </div>
       )}
 
       <div className="chat-list" ref={listRef}>
-        {messages.length === 0 && <p className="muted small">아직 대화가 없어요. 첫 메시지를 남겨 보세요.</p>}
+        {messages.length === 0 && <p className="muted small">{t('아직 대화가 없어요. 첫 메시지를 남겨 보세요.')}</p>}
         {messages.map((m) => {
           const task = m.taskId ? taskOf(m.taskId) : undefined;
           return (
             <div key={m.id} className={`chat-msg ${isMine(snapshot, m) ? 'mine' : ''} ${m.author.kind === 'system' ? 'system' : ''}`}>
               <div className="chat-meta small muted">
-                {m.author.name} · {new Date(m.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                {m.author.name} · {new Date(m.at).toLocaleTimeString(localeOf(currentLanguage()), { hour: '2-digit', minute: '2-digit' })}
               </div>
               {m.text && <div className="chat-text">{m.text}</div>}
               {m.forwarded ? (
                 <div className="chat-forwarded small">
-                  🤖 {m.forwarded.by}님이 {FORWARDED_AS[m.forwarded.mode]} AI 직원에게 전달했어요
+                  🤖 {tpl('{by}님이 {mode} AI 직원에게 전달했어요', { by: m.forwarded.by, mode: t(FORWARDED_AS[m.forwarded.mode]) })}
                 </div>
               ) : (
                 (() => {
@@ -127,12 +128,12 @@ export function ChatPanel(props: {
                         </button>
                       ))}
                       <button className="link-btn small" onClick={() => setForwarding(null)}>
-                        취소
+                        {t('취소')}
                       </button>
                     </div>
                   ) : (
-                    <button className="link-btn small chat-forward" title={`"${targetTask!.title}" 업무의 AI 직원에게 전달`} onClick={() => setForwarding(m.id)}>
-                      🤖 AI 직원에게 전달
+                    <button className="link-btn small chat-forward" title={tpl('"{v}" 업무의 AI 직원에게 전달', { v: targetTask!.title })} onClick={() => setForwarding(m.id)}>
+                      {t('🤖 AI 직원에게 전달')}
                     </button>
                   );
                 })()
@@ -143,11 +144,11 @@ export function ChatPanel(props: {
                     <>
                       <b>{task.title}</b>
                       <span className="small muted">
-                        {officeName(task.officeId)} · {statusLabel(task.status)} · 비용 {krw(task.costKrw)}
+                        {officeName(task.officeId)} · {statusLabel(task.status)} · {t('비용')} {krw(task.costKrw)}
                       </span>
                     </>
                   ) : (
-                    <span className="small muted">지워진 업무예요.</span>
+                    <span className="small muted">{t('지워진 업무예요.')}</span>
                   )}
                 </button>
               )}
@@ -161,7 +162,7 @@ export function ChatPanel(props: {
           value={text}
           maxLength={MAX_CHAT_CHARS}
           rows={2}
-          placeholder="메시지 (Enter 보내기, Shift+Enter 줄바꿈)"
+          placeholder={t('메시지 (Enter 보내기, Shift+Enter 줄바꿈)')}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -171,10 +172,10 @@ export function ChatPanel(props: {
           }}
         />
         <button className="pixel-btn small primary" disabled={busy || !text.trim()} onClick={() => void submit()}>
-          보내기
+          {t('보내기')}
         </button>
       </div>
-      <p className="muted small chat-note">채팅은 기본적으로 AI 직원이 보지 않아요. 업무와 연결된 메시지는 "🤖 AI 직원에게 전달"을 눌러 골라서 넘길 수 있어요.</p>
+      <p className="muted small chat-note">{t('채팅은 기본적으로 AI 직원이 보지 않아요. 업무와 연결된 메시지는 "🤖 AI 직원에게 전달"을 눌러 골라서 넘길 수 있어요.')}</p>
     </aside>
   );
 }

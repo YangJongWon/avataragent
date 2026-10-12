@@ -3,6 +3,7 @@ import { TEAMS } from '../../../shared/teams.ts';
 import { officeTheme } from '../../../shared/theme-pack.ts';
 import type { Agent, Office, OfficeEvent, Snapshot } from '../../../shared/types.ts';
 import { OfficeScene, SCENE_H, SCENE_W } from './OfficeScene.ts';
+import { useLanguage } from '../LanguageProvider.tsx';
 
 export interface OfficeActions {
   onNewTask: () => void;
@@ -37,6 +38,7 @@ function menuAt(x: number, y: number) {
 }
 
 export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
+  const { t } = useLanguage();
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<OfficeScene | null>(null);
   const actionsRef = useRef(actions);
@@ -115,7 +117,7 @@ export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
           if (!pos) return null;
           return (
             <button key={a.id} className="bubble bubble-help" style={bubbleAt(pos.x, pos.y)} onClick={() => actions.onHelp(a.id)}>
-              도와주세요…! <span className="bubble-cta">도와주기</span>
+              {t('도와주세요…!')} <span className="bubble-cta">{t('도와주기')}</span>
             </button>
           );
         })}
@@ -128,7 +130,7 @@ export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
           <div>{bubble.activity}</div>
           {bubble.status === 'help_requested' && (
             <button className="pixel-btn small primary" onClick={() => actions.onHelp(bubble.id)}>
-              도와주기
+              {t('도와주기')}
             </button>
           )}
         </div>
@@ -148,15 +150,15 @@ export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
         >
           <div className="context-title">
             <span>{menu.name}</span>
-            <button className="context-close" onClick={() => setMenuAgent(null)} aria-label="닫기">X</button>
+            <button className="context-close" onClick={() => setMenuAgent(null)} aria-label={t('닫기')}>X</button>
           </div>
           {[
-            { label: '상태 보기', run: () => setBubbleAgent(menu.id) },
-            { label: '도와주기', run: () => actions.onHelp(menu.id), disabled: helpTaskAgent !== menu.id, highlight: helpTaskAgent === menu.id },
-            { label: '현재 업무 보기', run: () => actions.onShowTask() },
-            { label: '규칙 보기·편집', run: () => actions.onEditRules(menu.id) },
-            { label: '손익 카드', run: () => actions.onShowCard(menu.id) },
-            { label: menu.paused ? '다시 일하기' : '일시정지', run: () => actions.onTogglePause(menu) },
+            { label: t('상태 보기'), run: () => setBubbleAgent(menu.id) },
+            { label: t('도와주기'), run: () => actions.onHelp(menu.id), disabled: helpTaskAgent !== menu.id, highlight: helpTaskAgent === menu.id },
+            { label: t('현재 업무 보기'), run: () => actions.onShowTask() },
+            { label: t('규칙 보기·편집'), run: () => actions.onEditRules(menu.id) },
+            { label: t('손익 카드'), run: () => actions.onShowCard(menu.id) },
+            { label: menu.paused ? t('다시 일하기') : t('일시정지'), run: () => actions.onTogglePause(menu) },
           ].map((item) => (
             <button
               key={item.label}
@@ -187,11 +189,11 @@ export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
       )}
 
       <button className="pixel-btn new-task-btn" onClick={actions.onNewTask}>
-        + 업무 등록
+        + {t('업무 등록')}
       </button>
       <div className="office-hint">
-        <span className="hint-mouse">직원 클릭: 상태 · 우클릭: 메뉴 · 칠판 클릭: 업무 등록</span>
-        <span className="hint-touch">직원 탭: 상태 · 길게 누르기: 메뉴 · 칠판 탭: 업무 등록</span>
+        <span className="hint-mouse">{t('직원 클릭: 상태 · 우클릭: 메뉴 · 칠판 클릭: 업무 등록')}</span>
+        <span className="hint-touch">{t('직원 탭: 상태 · 길게 누르기: 메뉴 · 칠판 탭: 업무 등록')}</span>
       </div>
     </div>
     </div>

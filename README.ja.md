@@ -1,10 +1,21 @@
-# 🏢 AvatarCast Office
+# AvatarCast Office
 
-**AIエージェントオフィス** — 働く姿が見えるAI社員たち
+**AvatarCast** — AIキャラクターチームが働く姿を見られるプロジェクトオフィス
 
 [한국어](README.md) | [English](README.en.md) | 日本語 | [简体中文](README.zh-CN.md)
 
-AI社員に仕事を依頼し、ピクセルオフィスで働く様子を見ながら成果物を承認できるWebアプリです。マネージャー・調査担当・ライター・レビュー担当が、画面に表示されるワークフローに沿って作業します。最後にユーザーが承認すると、成果の価値が収益に反映されます。
+[avatarcast.app](https://avatarcast.app)
+
+AIエージェントを役割ごとのキャラクターとして配置し、仕事を依頼し、プロジェクトルーム内でワークフローが進む様子を見ながら成果物を承認できるWebアプリです。マネージャー・調査担当・ライター・レビュー担当が、画面に表示されるワークフローに沿って作業します。最後にユーザーが承認すると、成果と価値がレポートと収益に反映されます。
+
+## GitHub説明
+
+| 言語 | 説明 |
+| --- | --- |
+| 한국어 | AI 캐릭터 팀이 일하는 모습, 업무 흐름, 결과 보고서를 게임처럼 보여 주는 프로젝트 오피스 |
+| English | A visual project office where AI character teams work, show their workflow, and report results like a game |
+| 日本語 | AIキャラクターチームの作業、ワークフロー、成果レポートをゲームのように見せるプロジェクトオフィス |
+| 简体中文 | 像游戏一样展示 AI 角色团队的工作过程、工作流和成果报告的项目办公室 |
 
 永続的な実行環境とPostgreSQL開発環境は、Docker Desktopを起動して `npm.cmd run infra:up` を実行すると利用できます。SQLiteの移行とTemporalの確認方法は `OPERATIONS.md` を参照してください。
 

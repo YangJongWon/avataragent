@@ -1,3 +1,4 @@
+import { t, tpl } from '../../shared/i18n.ts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TEAMS } from '../../shared/teams.ts';
 import type { Agent, AgentStatus, Expression, OfficeEvent, Snapshot, Task, WorkflowStep } from '../../shared/types.ts';
@@ -22,12 +23,12 @@ function initialFrame(snapshot: Snapshot, officeId: string): Frame | null {
   const plan: WorkflowStep[] = templatePlan(office.team, taskType.id, agents).map((s, i) => ({ ...s, id: `demo_step_${i}`, status: 'pending' }));
   const now = new Date().toISOString();
   return {
-    agents: agents.map((a) => ({ ...a, status: 'idle', expression: 'normal', activity: '대기 중이에요.', paused: false })),
+    agents: agents.map((a) => ({ ...a, status: 'idle', expression: 'normal', activity: t('대기 중이에요.'), paused: false })),
     task: {
       id: TASK_ID,
       officeId,
-      title: `[데모] ${taskType.label}`,
-      description: '사용법 데모용 가짜 업무예요. 실제로 저장되거나 AI를 부르지 않아요.',
+      title: tpl('[데모] {label}', { label: taskType.label }),
+      description: t('사용법 데모용 가짜 업무예요. 실제로 저장되거나 AI를 부르지 않아요.'),
       taskType: taskType.id,
       status: 'queued',
       plan,
@@ -65,7 +66,7 @@ function script(frame: Frame) {
     f.agents = f.agents.map((a) => (a.id === id ? { ...a, status, expression, activity } : a));
   };
   const allIdle = (f: Frame, expression: Expression = 'normal') => {
-    f.agents = f.agents.map((a) => ({ ...a, status: 'idle', expression, activity: expression === 'celebrate' ? '업무 완료! 수고했어요.' : '대기 중이에요.' }));
+    f.agents = f.agents.map((a) => ({ ...a, status: 'idle', expression, activity: expression === 'celebrate' ? t('업무 완료! 수고했어요.') : t('대기 중이에요.') }));
   };
   const step = (f: Frame, i: number, status: WorkflowStep['status']) => {
     f.task = { ...f.task, plan: f.task.plan.map((s, j) => (j === i ? { ...s, status } : s)), currentStepId: status === 'running' || status === 'awaiting' ? plan[i].id : f.task.currentStepId };
@@ -81,7 +82,7 @@ function script(frame: Frame) {
     run: (f, emit) => {
       f.task = { ...f.task, status: 'running' };
       step(f, 0, 'running');
-      set(f, manager.id, 'working', 'focus', '업무를 접수하고 단계를 나누고 있어요.');
+      set(f, manager.id, 'working', 'focus', t('업무를 접수하고 단계를 나누고 있어요.'));
       emit('task.created', manager.id, { title: f.task.title });
       emit('queue.started', manager.id, { title: f.task.title });
     },
@@ -97,11 +98,11 @@ function script(frame: Frame) {
       wait: 3000,
       run: (f, emit) => {
         step(f, i - 1, 'done');
-        set(f, from.id, 'idle', 'smile', '넘겨줬어요.');
+        set(f, from.id, 'idle', 'smile', t('넘겨줬어요.'));
         spend(f, from, 40 + i * 15, emit);
         handOff(from, agent, emit);
         step(f, i, 'running');
-        const doing = kind === 'research' ? '자료를 찾고 있어요.' : kind === 'draft' ? '결과물을 쓰고 있어요.' : '결과물을 검토하고 있어요.';
+        const doing = kind === 'research' ? t('자료를 찾고 있어요.') : kind === 'draft' ? t('결과물을 쓰고 있어요.') : t('결과물을 검토하고 있어요.');
         set(f, agent.id, 'working', 'focus', doing);
       },
     });
@@ -119,21 +120,21 @@ function script(frame: Frame) {
             help: {
               id: 'demo_help',
               agentId: agent.id,
-              question: '결과물을 표 위주로 정리할까요, 글 위주로 정리할까요?',
-              options: ['표 위주', '글 위주'],
-              assumption: '표 위주로 정리할게요.',
+              question: t('결과물을 표 위주로 정리할까요, 글 위주로 정리할까요?'),
+              options: [t('표 위주'), t('글 위주')],
+              assumption: t('표 위주로 정리할게요.'),
               deadline: Date.now() + 60_000,
             },
           };
-          set(f, agent.id, 'help_requested', 'troubled', '표 위주로 할지 글 위주로 할지 모르겠어요. 도와주실 수 있을까요?');
+          set(f, agent.id, 'help_requested', 'troubled', t('표 위주로 할지 글 위주로 할지 모르겠어요. 도와주실 수 있을까요?'));
         },
       });
       beats.push({
         wait: 4000,
         run: (f, emit) => {
-          f.task = { ...f.task, status: 'running', help: null, clarifications: ['표 위주'] };
-          set(f, agent.id, 'working', 'thanks', '답을 받았어요! 표 위주로 쓰고 있어요.');
-          emit('agent.help_received', agent.id, { answer: '표 위주' });
+          f.task = { ...f.task, status: 'running', help: null, clarifications: [t('표 위주')] };
+          set(f, agent.id, 'working', 'thanks', t('답을 받았어요! 표 위주로 쓰고 있어요.'));
+          emit('agent.help_received', agent.id, { answer: t('표 위주') });
         },
       });
       beats.push({
@@ -149,13 +150,13 @@ function script(frame: Frame) {
                 stepId: plan[i].id,
                 kind: 'draft',
                 title: f.task.title,
-                content: '## 요약\n- 데모용 결과물이에요.\n- 실제 업무에서는 여기에 직원이 쓴 보고서가 들어가요.',
+                content: t('## 요약\n- 데모용 결과물이에요.\n- 실제 업무에서는 여기에 직원이 쓴 보고서가 들어가요.'),
                 version: f.task.artifacts.length + 1,
                 createdAt: new Date().toISOString(),
               },
             ],
           };
-          set(f, agent.id, 'working', 'smile', '초안을 다 썼어요.');
+          set(f, agent.id, 'working', 'smile', t('초안을 다 썼어요.'));
         },
       });
     }
@@ -167,9 +168,9 @@ function script(frame: Frame) {
         run: (f, emit) => {
           step(f, i, 'looped');
           step(f, draftIndex, 'running');
-          set(f, agent.id, 'idle', 'normal', '수정을 요청했어요.');
-          set(f, draftAgent.id, 'working', 'sweat', '검토 의견대로 고치고 있어요.');
-          f.task = { ...f.task, reviews: [...f.task.reviews, { agentId: agent.id, approved: false, score: 62, reason: '근거가 조금 부족해요.', at: new Date().toISOString() }] };
+          set(f, agent.id, 'idle', 'normal', t('수정을 요청했어요.'));
+          set(f, draftAgent.id, 'working', 'sweat', t('검토 의견대로 고치고 있어요.'));
+          f.task = { ...f.task, reviews: [...f.task.reviews, { agentId: agent.id, approved: false, score: 62, reason: t('근거가 조금 부족해요.'), at: new Date().toISOString() }] };
           emit('review.rejected', agent.id, { returnTo: draftAgent.id, score: 62 });
         },
       });
@@ -178,16 +179,16 @@ function script(frame: Frame) {
         run: (f, emit) => {
           step(f, draftIndex, 'done');
           step(f, i, 'running');
-          set(f, draftAgent.id, 'idle', 'smile', '고친 결과물을 넘겼어요.');
-          set(f, agent.id, 'working', 'focus', '고친 결과물을 다시 보고 있어요.');
+          set(f, draftAgent.id, 'idle', 'smile', t('고친 결과물을 넘겼어요.'));
+          set(f, agent.id, 'working', 'focus', t('고친 결과물을 다시 보고 있어요.'));
           handOff(draftAgent, agent, emit);
         },
       });
       beats.push({
         wait: 2500,
         run: (f, emit) => {
-          f.task = { ...f.task, reviews: [...f.task.reviews, { agentId: agent.id, approved: true, score: 88, reason: '좋아요.', at: new Date().toISOString() }] };
-          set(f, agent.id, 'working', 'smile', '통과! 팀장에게 넘길게요.');
+          f.task = { ...f.task, reviews: [...f.task.reviews, { agentId: agent.id, approved: true, score: 88, reason: t('좋아요.'), at: new Date().toISOString() }] };
+          set(f, agent.id, 'working', 'smile', t('통과! 팀장에게 넘길게요.'));
           emit('review.approved', agent.id, { score: 88 });
         },
       });
@@ -204,7 +205,7 @@ function script(frame: Frame) {
       if (approvalIndex >= 0) step(f, approvalIndex, 'awaiting');
       spend(f, last, 90, emit);
       allIdle(f);
-      set(f, manager.id, 'awaiting_approval', 'normal', '결과물을 올렸어요. 사용자 승인을 기다리고 있어요.');
+      set(f, manager.id, 'awaiting_approval', 'normal', t('결과물을 올렸어요. 사용자 승인을 기다리고 있어요.'));
       f.task = { ...f.task, status: 'awaiting_approval' };
       emit('approval.requested', manager.id);
     },

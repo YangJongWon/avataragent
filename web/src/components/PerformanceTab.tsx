@@ -64,7 +64,7 @@ export function PerformanceTab(props: {
           <div className="stat-label">{t('검수 통과율')}</div>
           <div className="stat-value">{pct(perf.review.passRate)}</div>
           <div className="muted small">
-            {perf.review.approved}/{perf.review.count}회 · {t('평균')} {points(perf.review.avgScore)}
+            {perf.review.approved}/{tpl('{n}회', { n: perf.review.count })} · {t('평균')} {points(perf.review.avgScore)}
           </div>
         </div>
         <div className="stat pixel-box">
@@ -76,14 +76,14 @@ export function PerformanceTab(props: {
           <div className="stat-label">{t('조사 정확도')}</div>
           <div className="stat-value">{points(perf.research.accuracy)}</div>
           <div className="muted small">
-            {t('검수자가 매긴 점수')} · {perf.research.scored}회
+            {t('검수자가 매긴 점수')} · {tpl('{n}회', { n: perf.research.scored })}
           </div>
         </div>
         <div className="stat pixel-box">
           <div className="stat-label">{t('조사 속도')}</div>
           <div className="stat-value">{secondsLabel(perf.research.avgMs)}</div>
           <div className="muted small">
-            {t('평균')} · {t('도구')} {perf.research.toolCalls}회
+            {t('평균')} · {t('도구')} {tpl('{n}회', { n: perf.research.toolCalls })}
             {perf.research.toolFailures ? ` (${t('실패')} ${perf.research.toolFailures})` : ''}
           </div>
         </div>
@@ -91,7 +91,7 @@ export function PerformanceTab(props: {
           <div className="stat-label">{t('검수 판단 정확도')}</div>
           <div className="stat-value">{perf.review.falsePassRate === null ? '-' : pct(1 - perf.review.falsePassRate)}</div>
           <div className="muted small">
-            {t('통과시킨 결과를 사용자도 승인한 비율')} · {perf.review.checked}회
+            {t('통과시킨 결과를 사용자도 승인한 비율')} · {tpl('{n}회', { n: perf.review.checked })}
           </div>
         </div>
       </div>
@@ -160,7 +160,8 @@ export function PerformanceTab(props: {
 
       <section className="pixel-box section">
         <h3>{t('직원별 기록')}</h3>
-        <table className="table">
+        <div className="table-scroll">
+        <table className="table scroll-table">
           <thead>
             <tr>
               <th>{t('직원')}</th>
@@ -193,6 +194,7 @@ export function PerformanceTab(props: {
             })}
           </tbody>
         </table>
+        </div>
       </section>
 
       <PlaybookPanel snapshot={snapshot} office={office} onError={props.onError} onNotice={props.onNotice} />

@@ -206,7 +206,7 @@ class Builder:
         self.pose_keys = {
             f'{who["id"]}-{pose}'
             for c in self.recipe['characters']
-            for who in [c, *(self.outfit_spec(c, o) for o in c.get('outfits', []))]
+            for who in [c, *(self.outfit_spec(c, o) for o in [*c.get('outfits', []), *c.get('forms', [])])]
             for pose in self.recipe['character']['poses']
         }
         # Seats are where feet stand; the same layout goes into the package so the app puts people where the art expects.
@@ -294,7 +294,7 @@ class Builder:
         for spec in self.recipe['characters']:
             for pose in self.recipe['character']['poses']:
                 yield self.pose_job(spec, pose)
-                for outfit in spec.get('outfits', []):
+                for outfit in [*spec.get('outfits', []), *spec.get('forms', [])]:
                     yield self.pose_job(self.outfit_spec(spec, outfit), pose)
             for expression in self.recipe['character']['portraits']:
                 yield self.face_job(spec, expression)
@@ -639,6 +639,8 @@ class Builder:
         "outfits" ([{"id", "name", "look"}]) draws the character again in other clothes, each its own sheet with the same
         frames. "split" ({"head": 0.42, "legs": 0.74}, fractions of the figure's height from the top of the hair) cuts
         the sheet into legs, body and head layers instead of one picture, so later outfits can swap one part.
+        "forms" ([{"id", "name", "look", "tier": "2"} or {..., "model": "claude-opus"}]) draws the look the character takes
+        for a model tier or one model (Super Saiyan 1, 2, 3…), drawn like an outfit; "accessories" (layers) go along as they are.
         """
         common = self.recipe['character']
         height = common['height']
@@ -652,8 +654,9 @@ class Builder:
 
         frames = posed(spec)
         outfits = [(o, posed(self.outfit_spec(spec, o))) for o in spec.get('outfits', [])]
-        # Every sheet of the character shares one frame size, so outfits line up with the frame rectangles.
-        fw = max(f.width for set_ in [frames, *(f for _, f in outfits)] for f in set_.values()) + 8
+        drawn_forms = [(f, posed(self.outfit_spec(spec, f))) for f in spec.get('forms', [])]
+        # Every sheet of the character shares one frame size, so outfits and forms line up with the frame rectangles.
+        fw = max(f.width for set_ in [frames, *(f for _, f in outfits), *(f for _, f in drawn_forms)] for f in set_.values()) + 8
         fh = height + 4
         names = {pose: f'f{i}' for i, pose in enumerate(frames)}
 
@@ -684,6 +687,15 @@ class Builder:
             {'id': o['id'], 'name': o.get('name', o['id']), 'sheet': self.save(sheet_of(f), f'assets/{spec["id"]}-{o["id"]}.png')}
             for o, f in outfits
         ]
+        forms = {'tiers': {}, 'models': {}}
+        for form, f in drawn_forms:
+            entry = {'name': form.get('name', form['id']), 'sheet': self.save(sheet_of(f), f'assets/{spec["id"]}-{form["id"]}.png')}
+            if 'accessories' in form:
+                entry['accessories'] = form['accessories']
+            if 'model' in form:
+                forms['models'][form['model']] = entry
+            else:
+                forms['tiers'][str(form['tier'])] = entry
 
         portraits = {}
         for expression in common['portraits']:
@@ -715,19 +727,24 @@ class Builder:
             'portraits': portraits,
             **({'parts': parts} if parts else {}),
             **({'outfits': outfit_entries} if outfit_entries else {}),
+            **({'forms': forms} if drawn_forms else {}),
         }, idle
 
     def accessories(self):
-        out = {}
+        out, models = {}, {}
         for key, spec in self.recipe.get('accessories', {}).items():
             item = self.cut(self.draw(*self.accessory_job(key, spec)), 'object')
             scale = spec['size'] / max(item.width, item.height)
             item = item.resize((max(1, round(item.width * scale)), max(1, round(item.height * scale))), Image.LANCZOS)
             path = self.save(item, f'assets/acc-{key}.png')
             layer = spec['layer']
-            tiers = out.setdefault(layer['company'], {})
-            tiers.setdefault(layer['tier'], []).append({'image': path, 'at': layer['at'], 'x': layer['x'], 'y': layer['y'], 'scale': 1})
-        return out
+            entry = {'image': path, 'at': layer['at'], 'x': layer['x'], 'y': layer['y'], 'scale': 1}
+            # A layer with "model" is that model's own set (modelAccessories); otherwise it goes under company and tier.
+            if 'model' in layer:
+                models.setdefault(layer['model'], []).append(entry)
+            else:
+                out.setdefault(layer['company'], {}).setdefault(layer['tier'], []).append(entry)
+        return out, models
 
     # ── package ────────────────────────────────────────────────
     def run(self, zip_path: Path):
@@ -781,6 +798,7 @@ class Builder:
         scene.convert('RGB').save(self.build / 'preview-full.png')
         self.save(scene.convert('RGB').resize((SCENE_W // 2, SCENE_H // 2), Image.LANCZOS), 'preview.png')
 
+        accessories, model_accessories = self.accessories()
         manifest = {
             'format': 'avataragent-theme',
             'version': 1,
@@ -806,7 +824,9 @@ class Builder:
             'characters': characters,
             'tokens': self.recipe.get('tokens', {}),
             'site': self.recipe.get('site', {}),
-            'accessories': self.accessories(),
+            'accessories': accessories,
+            **({'modelAccessories': model_accessories} if model_accessories else {}),
+            **({'accessoryLabels': self.recipe['accessoryLabels']} if 'accessoryLabels' in self.recipe else {}),
             'props': props,
             # Icons, lines, friendly menu items, event reactions and dress rules are written in the recipe as they go in the package.
             **{k: self.recipe[k] for k in ('emotes', 'interactions', 'events', 'dress') if k in self.recipe},

@@ -1,3 +1,4 @@
+import { t } from '../../../shared/i18n.ts';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 export interface MenuItem {
@@ -61,7 +62,7 @@ export function OfficeTabMenu({ title, x, y, items, onClose }: Props) {
     >
       <div className="context-title">
         <span>{title}</span>
-        <button className="context-close" onClick={onClose} aria-label="닫기">X</button>
+        <button className="context-close" onClick={onClose} aria-label={t('닫기')}>X</button>
       </div>
       {items.map((item) => (
         <button

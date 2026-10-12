@@ -2,6 +2,12 @@
 
 AvatarCast의 공개 사이트입니다. 소개·가격·설치·문서와 커뮤니티(테마·플로우·플레이북 공유), 플랜 판매(라이선스 발급)를 맡습니다. 각 회사가 설치해 쓰는 앱 AvatarCast Office(`server/`, `web/`)과는 따로 실행되고, 검증 코드 같은 공용 코드는 루트 `shared/`를 함께 씁니다.
 
+## 브랜드 운영 메모
+
+- 기본 공개 도메인은 `avatarcast.app`입니다.
+- GitHub 저장소 설명은 한중일영으로 함께 관리합니다. 대표 문구는 “A visual project office where AI character teams work, show their workflow, and report results like a game”입니다.
+- GitHub 방문자 수나 검색 유입이 충분히 늘지 않으면, 저장소명 `avataragent`를 `avatarcast` 또는 `avatarcast-office`로 바꾸는 것을 검토합니다. 그 전까지는 기존 설치 URL과 릴리스 링크가 깨지지 않도록 README와 설치 스크립트의 `YangJongWon/avataragent` 경로를 유지합니다.
+
 ## 실행
 
 ```bash
@@ -43,6 +49,12 @@ npm run site:start   # 서버가 dist/site 를 함께 서빙한다
 | `PADDLE_CURRENCY` | 유료 테마 가격의 통화. 기본 `USD` |
 
 이 저장소는 공개(AGPL)이므로 비밀값은 코드나 커밋에 넣지 말고 환경 변수로만 넣습니다.
+
+## 화면 언어
+
+사이트는 한국어·중국어·일본어·영어로 보입니다. 처음 방문하면 **접속 국가**로 정하고(한국 → 한국어, 일본 → 일본어, 중국·대만·홍콩·마카오·싱가포르 → 중국어, 그 밖 → 영어), 국가를 모르면 브라우저 언어를 씁니다. 방문자가 머리의 언어 선택에서 직접 고르면 그 뒤로는 그 언어가 우선합니다.
+
+접속 국가는 사이트 앞단이 붙여 주는 헤더(`CF-IPCountry`, `X-Vercel-IP-Country`, `CloudFront-Viewer-Country`, `X-AppEngine-Country`, `X-Country-Code`)에서 읽습니다. Cloudflare를 앞에 두면 기본으로 붙고, 이런 앞단 없이 직접 열면(로컬 포함) 브라우저 언어로 정해집니다.
 
 ## 플랜 판매 (라이선스)
 

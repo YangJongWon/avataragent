@@ -1,3 +1,4 @@
+import { t, tpl } from '../../../shared/i18n.ts';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { useEffect, useRef, useState } from 'react';
@@ -6,12 +7,12 @@ import { api, type HelpAnswer, type HelpTurn } from '../api.ts';
 const renderMarkdown = (md: string) => DOMPurify.sanitize(marked.parse(md, { async: false }) as string);
 
 const SUGGESTIONS: Record<string, string[]> = {
-  office: ['업무는 어떻게 맡겨?', '직원이 도움을 요청하면 어떻게 해?', '결과물을 PowerPoint로 받으려면?'],
-  hire: ['직원 모델은 어떻게 바꿔?', '같은 역할 직원을 여럿 두면 뭐가 좋아?'],
-  models: ['실제 AI로 바꾸려면?', 'DeepSeek이나 Ollama를 연결하려면?', '키가 맞는지 확인하는 방법은?'],
-  mcp: ['Slack 연결하려면?', '이 PC에서 실행(명령) MCP를 켜려면?', '도구의 "승인 후 실행"은 뭐야?'],
-  profit: ['예산을 다 쓰면 어떻게 돼?', '사무실별 예산 상한은 어디서 바꿔?'],
-  settings: ['화면 언어 바꾸려면?', '설정에서 무엇을 바꿀 수 있어?'],
+  office: [t('업무는 어떻게 맡겨?'), t('직원이 도움을 요청하면 어떻게 해?'), t('결과물을 PowerPoint로 받으려면?')],
+  hire: [t('직원 모델은 어떻게 바꿔?'), t('같은 역할 직원을 여럿 두면 뭐가 좋아?')],
+  models: [t('실제 AI로 바꾸려면?'), t('DeepSeek이나 Ollama를 연결하려면?'), t('키가 맞는지 확인하는 방법은?')],
+  mcp: [t('Slack 연결하려면?'), t('이 PC에서 실행(명령) MCP를 켜려면?'), t('도구의 "승인 후 실행"은 뭐야?')],
+  profit: [t('예산을 다 쓰면 어떻게 돼?'), t('사무실별 예산 상한은 어디서 바꿔?')],
+  settings: [t('화면 언어 바꾸려면?'), t('설정에서 무엇을 바꿀 수 있어?')],
 };
 
 interface Turn extends HelpTurn {
@@ -32,7 +33,12 @@ export function HelpPanel({ tab, officeId, onClose }: { tab: string; officeId?: 
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  useEffect(() => end.current?.scrollIntoView({ block: 'end' }), [turns, busy]);
+  useEffect(() => {
+    // scrollIntoView() must not leak its return value: some browsers/extensions
+    // patch it to return a value, which React would mistake for an effect cleanup
+    // and call as a function on unmount ("l is not a function").
+    end.current?.scrollIntoView({ block: 'end' });
+  }, [turns, busy]);
 
   const ask = async (text: string) => {
     const q = text.trim();
@@ -52,18 +58,18 @@ export function HelpPanel({ tab, officeId, onClose }: { tab: string; officeId?: 
   };
 
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal pixel-box help-panel">
         <div className="modal-head">
-          <span>❓ 도움말</span>
-          <button className="icon-btn" onClick={onClose} aria-label="닫기">
+          <span>{t('❓ 도움말')}</span>
+          <button className="icon-btn" onClick={onClose} aria-label={t('닫기')}>
             ✕
           </button>
         </div>
         <div className="help-log">
           {turns.length === 0 && (
             <div className="help-intro">
-              <p className="muted small">사용법을 물어보세요. 도움말 문서에서 찾아 답해요.</p>
+              <p className="muted small">{t('사용법을 물어보세요. 도움말 문서에서 찾아 답해요.')}</p>
               <div className="help-chips">
                 {(SUGGESTIONS[tab] ?? SUGGESTIONS.office).map((s) => (
                   <button key={s} className="pixel-btn small" onClick={() => ask(s)}>
@@ -73,16 +79,16 @@ export function HelpPanel({ tab, officeId, onClose }: { tab: string; officeId?: 
               </div>
             </div>
           )}
-          {turns.map((t, i) => (
+          {turns.map((turn, i) => (
             <div key={i} className="help-turn">
-              <div className="help-q">{t.question}</div>
+              <div className="help-q">{turn.question}</div>
               <div className="help-a">
-                <div className="markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(t.answer) }} />
-                <div className="muted small">{t.ai ? 'AI가 도움말을 보고 답했어요' : '도움말 원문에서 찾았어요'}</div>
-                {t.sources.length > 0 && (
+                <div className="markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(turn.answer) }} />
+                <div className="muted small">{turn.ai ? t('AI가 도움말을 보고 답했어요') : t('도움말 원문에서 찾았어요')}</div>
+                {turn.sources.length > 0 && (
                   <details>
-                    <summary className="small">근거 {t.sources.length}곳</summary>
-                    {t.sources.map((s) => (
+                    <summary className="small">{tpl('근거 {n}곳', { n: turn.sources.length })}</summary>
+                    {turn.sources.map((s) => (
                       <details key={`${s.source}${s.title}`} className="help-source">
                         <summary className="small">
                           {s.source} · {s.title}
@@ -95,7 +101,7 @@ export function HelpPanel({ tab, officeId, onClose }: { tab: string; officeId?: 
               </div>
             </div>
           ))}
-          {busy && <p className="muted small">찾아보는 중…</p>}
+          {busy && <p className="muted small">{t('찾아보는 중…')}</p>}
           {error && <p className="error small">{error}</p>}
           <div ref={end} />
         </div>
@@ -106,9 +112,9 @@ export function HelpPanel({ tab, officeId, onClose }: { tab: string; officeId?: 
             void ask(question);
           }}
         >
-          <input className="grow" value={question} maxLength={500} placeholder="예: Slack 연결하려면?" onChange={(e) => setQuestion(e.target.value)} autoFocus />
+          <input className="grow" value={question} maxLength={500} placeholder={t('예: Slack 연결하려면?')} onChange={(e) => setQuestion(e.target.value)} autoFocus />
           <button className="pixel-btn" type="submit" disabled={busy || !question.trim()}>
-            묻기
+            {t('묻기')}
           </button>
         </form>
       </div>

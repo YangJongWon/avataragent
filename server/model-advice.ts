@@ -1,4 +1,4 @@
-import { allModels, companyOf, DEFAULT_MODELS, type ModelEntry, type Tier } from '../shared/models.ts';
+import { allModels, companyOf, DEFAULT_MODELS, isTier, MAX_TIER, tiersInUse, type ModelEntry, type Tier } from '../shared/models.ts';
 import { complete, parseJson } from './ai.ts';
 import { apiKeyFor } from './secrets.ts';
 
@@ -81,11 +81,18 @@ const clampPrice = (v: unknown) => {
   return Number.isFinite(n) && n >= 0 && n <= 10_000 ? Math.round(n * 1000) / 1000 : null;
 };
 
+/** The tiers in use and the models in each, so a new model is placed on the same ladder as the rest. */
+const ladder = () =>
+  tiersInUse()
+    .map((tier) => `  ${tier}: ${allModels().filter((m) => m.tier === tier).map((m) => m.label).join(', ')}`)
+    .join('\n');
+
 const PROMPT = (company: string, apiModel: string) =>
   [
     `${company} API의 모델 "${apiModel}"을 사내 AI 직원 모델로 등록하려고 한다. 아는 범위에서 아래 JSON 하나만 출력해라.`,
-    '{"label":"화면에 보일 짧은 이름(30자 이내)","tier":1|2|3,"priceInPerMTokUsd":숫자,"priceOutPerMTokUsd":숫자,"note":"근거나 불확실한 점 한 줄"}',
-    '- tier: 1=경량(빠르고 싼 모델), 2=표준(일반 업무용 주력), 3=최상위(가장 똑똑하고 비싼 모델)',
+    '{"label":"화면에 보일 짧은 이름(30자 이내)","tier":1 이상의 정수,"priceInPerMTokUsd":숫자,"priceOutPerMTokUsd":숫자,"note":"근거나 불확실한 점 한 줄"}',
+    `- tier: 숫자가 클수록 똑똑하고 비싼 모델. 지금 쓰는 등급과 모델은 아래와 같다. 비슷한 수준이면 같은 숫자, 가장 위 모델보다 확실히 위면 그보다 큰 숫자(최대 ${MAX_TIER}).`,
+    ladder(),
     '- 단가는 입력/출력 토큰 100만 개당 미국 달러 기준 공식 API 정가. 모르면 비슷한 모델로 추정하고 note에 "추정"이라고 써라.',
   ].join('\n');
 
@@ -126,10 +133,10 @@ export async function adviseModel(vendor: string, apiModel: string, { ask = comp
       const tier = Number(parsed.tier);
       const priceIn = clampPrice(parsed.priceInPerMTokUsd);
       const priceOut = clampPrice(parsed.priceOutPerMTokUsd);
-      if (![1, 2, 3].includes(tier) || priceIn === null || priceOut === null) continue;
+      if (!isTier(tier) || priceIn === null || priceOut === null) continue;
       return {
         label: (typeof parsed.label === 'string' && parsed.label.trim().slice(0, 30)) || labelFromId(apiModel),
-        tier: tier as Tier,
+        tier,
         priceInPerMTokUsd: priceIn,
         priceOutPerMTokUsd: priceOut,
         source: 'ai',

@@ -16,12 +16,14 @@ import { PricingPage } from './pages/PricingPage.tsx';
 import { UploadPage } from './pages/UploadPage.tsx';
 import { Link, useLocation } from './router.tsx';
 import { SiteIcon, type SiteIconName } from './components/SiteIcon.tsx';
+import { chooseLanguage, currentLanguage, isLanguage, languageForCountry, LANGUAGES, setLanguage, t, type Language } from './i18n.tsx';
 
 const NAV_ICON: Record<string, SiteIconName> = {
-  '/pricing': 'pricing', '/install': 'download', '/community': 'community', '/forum': 'forum', '/ranking': 'ranking', '/docs': 'docs',
+  '/': 'home', '/pricing': 'pricing', '/install': 'download', '/community': 'community', '/forum': 'forum', '/ranking': 'ranking', '/docs': 'docs',
 };
 
 const NAV: [string, string][] = [
+  ['/', '홈'],
   ['/pricing', '가격'],
   ['/install', '설치'],
   ['/community', '커뮤니티'],
@@ -33,10 +35,23 @@ const NAV: [string, string][] = [
 export function App() {
   const { path, search } = useLocation();
   const [me, setMe] = useState<Me | null>(null);
-  const refresh = () => siteApi.me().then(setMe, () => setMe({ account: null, providers: { email: true, google: false, github: false } }));
+  const [language, setLanguageState] = useState<Language>(currentLanguage);
+  const showLanguage = (next: Language) => {
+    setLanguage(next);
+    setLanguageState(next);
+  };
+  const refresh = () =>
+    siteApi.me().then(
+      (m) => {
+        setMe(m);
+        showLanguage(languageForCountry(m.country));
+      },
+      () => setMe({ account: null, providers: { email: true, google: false, github: false } }),
+    );
 
   useEffect(() => {
     void refresh();
+    setLanguage(currentLanguage());
   }, []);
 
   const page = (() => {
@@ -61,9 +76,9 @@ export function App() {
     if (path.startsWith('/checkout/mock/')) return <MockPaymentPage id={path.split('/')[3]} />;
     return (
       <section className="page narrow">
-        <h1>찾는 페이지가 없어요</h1>
+        <h1>{t('찾는 페이지가 없어요')}</h1>
         <p>
-          <Link href="/">처음으로</Link>
+          <Link href="/">{t('처음으로')}</Link>
         </p>
       </section>
     );
@@ -73,21 +88,37 @@ export function App() {
     <div className="site">
       <header className="site-head">
         <Link href="/" className="brand">
-          <span className="brand-mark"><SiteIcon name="spark" /></span>
+          <img className="brand-mark" src="/logo-mark.png" alt="" />
           <span className="brand-name">AvatarCast</span>
         </Link>
         <nav>
           {NAV.map(([href, label]) => (
-            <Link key={href} href={href} className={path.startsWith(href) ? 'active' : ''}>
+            <Link key={href} href={href} className={href === '/' ? (path === '/' ? 'active' : '') : path.startsWith(href) ? 'active' : ''}>
               <SiteIcon name={NAV_ICON[href]} />
-              {label}
+              {t(label)}
             </Link>
           ))}
         </nav>
         <div className="head-account">
+          <select
+            className="lang-select"
+            value={language}
+            aria-label="Language"
+            onChange={(e) => {
+              if (!isLanguage(e.target.value)) return;
+              chooseLanguage(e.target.value);
+              setLanguageState(e.target.value);
+            }}
+          >
+            {LANGUAGES.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.label}
+              </option>
+            ))}
+          </select>
           {me?.account?.role === 'admin' && (
             <Link href="/admin" className="admin-link">
-              운영
+              {t('운영')}
             </Link>
           )}
           {me?.account ? (
@@ -96,17 +127,18 @@ export function App() {
             </Link>
           ) : (
             <Link href="/login" className="button">
-              로그인
+              {t('로그인')}
             </Link>
           )}
         </div>
       </header>
       <main>{page}</main>
       <footer className="site-foot">
-        <span>© 2026 YangJongWon · 앱은 AGPL-3.0과 상업 라이선스</span>
-        <Link href="/docs/licensing">라이선스</Link>
+        <span>© 2026 YangJongWon · {t('앱은 AGPL-3.0과 상업 라이선스')}</span>
+        <Link href="/docs/licensing">{t('라이선스')}</Link>
+        <Link href="/docs/privacy">{t('개인정보 처리방침')}</Link>
         <a href="https://github.com/YangJongWon/avataragent">GitHub</a>
-        <a href="mailto:doc.corax@gmail.com">문의</a>
+        <a href="mailto:doc.corax@gmail.com">{t('문의')}</a>
       </footer>
     </div>
   );

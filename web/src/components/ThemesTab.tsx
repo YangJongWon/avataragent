@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { t, tpl } from '../../../shared/i18n.ts';
-import { DEFAULT_THEME, THEME_BOOKINGS_MAX, THEME_LIMITS, type ThemeBooking, type ThemeSummary } from '../../../shared/theme-pack.ts';
+import { currentLanguage, t, tpl } from '../../../shared/i18n.ts';
+import { characterName, DEFAULT_THEME, THEME_BOOKINGS_MAX, THEME_LIMITS, type ThemeBooking, type ThemeSummary } from '../../../shared/theme-pack.ts';
 import { inDates } from '../../../shared/theme-rules.ts';
 import { themeApi } from '../themeApi.ts';
 import { forgetThemeManifests } from '../useThemePack.ts';
@@ -10,10 +10,10 @@ import './themes.css';
 const PIXEL: ThemeSummary = {
   id: DEFAULT_THEME,
   themeVersion: '',
-  name: '기본 픽셀',
+  name: t('기본 픽셀'),
   author: 'AvatarCast',
   license: 'AGPL-3.0',
-  description: '앱에 들어 있는 도트 사무실이에요. 테마가 없거나 불러오지 못하면 이 테마로 보여요.',
+  description: t('앱에 들어 있는 도트 사무실이에요. 테마가 없거나 불러오지 못하면 이 테마로 보여요.'),
   preview: '',
   hasCss: false,
   characters: [],
@@ -158,7 +158,7 @@ export function ThemesTab({ isOwner, companyTheme, onUseCompany, bookings, onBoo
                   </div>
                   {description && <p className="small">{description}</p>}
                   {theme.characters.length > 0 && (
-                    <div className="muted small">{tpl('캐릭터: {names}', { names: theme.characters.map((c) => c.name).join(', ') })}</div>
+                    <div className="muted small">{tpl('캐릭터: {names}', { names: theme.characters.map((c) => characterName(c, currentLanguage())).join(', ') })}</div>
                   )}
                   {theme.hasCss && <span className="theme-badge">{t('커스텀 CSS')}</span>}
                   {theme.hasCss && theme.id === current && onCssOn && (

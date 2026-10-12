@@ -3,13 +3,14 @@ import { siteApi, type ItemCard, type ItemType } from '../api.ts';
 import { Link, navigate } from '../router.tsx';
 import { SiteIcon, type SiteIconName } from '../components/SiteIcon.tsx';
 import { formatProductUsd } from '../../../shared/product-currency.ts';
+import { t } from '../i18n.tsx';
 
 const TYPE_ICON: Record<ItemType, SiteIconName> = { theme: 'theme', flow: 'flow', playbook: 'playbook' };
 
-export const TYPE_LABEL: Record<ItemType, { icon: string; label: string }> = {
-  theme: { icon: '🎨', label: '테마' },
-  flow: { icon: '🧭', label: '업무 흐름' },
-  playbook: { icon: '📘', label: '플레이북' },
+export const TYPE_LABEL: Record<ItemType, { icon: SiteIconName; label: string }> = {
+  theme: { icon: 'theme', label: '테마' },
+  flow: { icon: 'flow', label: '업무 흐름' },
+  playbook: { icon: 'playbook', label: '플레이북' },
 };
 
 const SORTS: [string, string][] = [
@@ -26,17 +27,17 @@ export function ItemCardView({ item }: { item: ItemCard }) {
       <div className="item-thumb">{item.preview ? <img src={item.preview} alt="" loading="lazy" /> : <span className="empty-art"><SiteIcon name={TYPE_ICON[item.type]} /></span>}</div>
       <div className="item-body">
         <div className="item-type">
-          <SiteIcon name={TYPE_ICON[item.type]} /> {type.label}
-          {item.verified && <span className="badge">검수 통과</span>}
-          {item.status && item.status !== 'published' && <span className="badge warn">{item.status === 'hidden' ? '숨김' : item.status}</span>}
-          <span className={`price-tag${item.priceKrw ? ' paid' : ''}`}>{item.priceKrw ? formatProductUsd(item.priceKrw) : '무료'}</span>
+          <SiteIcon name={TYPE_ICON[item.type]} /> {t(type.label)}
+          {item.verified && <span className="badge">{t('검수 통과')}</span>}
+          {item.status && item.status !== 'published' && <span className="badge warn">{item.status === 'hidden' ? t('숨김') : item.status}</span>}
+          <span className={`price-tag${item.priceKrw ? ' paid' : ''}`}>{item.priceKrw ? formatProductUsd(item.priceKrw) : t('무료')}</span>
         </div>
         <h3>{item.title}</h3>
         {item.summary && <p className="muted small clamp">{item.summary}</p>}
         <div className="item-meta small muted">
           <span>{item.owner.handle ? `@${item.owner.handle}` : item.owner.name}</span>
-          <span>♥ {item.likes}</span>
-          <span>⬇ {item.downloads}</span>
+          <span className="icon-stat"><SiteIcon name="heart" /> {item.likes}</span>
+          <span className="icon-stat"><SiteIcon name="download" /> {item.downloads}</span>
         </div>
       </div>
     </Link>
@@ -90,22 +91,22 @@ export function CommunityPage({ search }: { search: string }) {
   return (
     <section className="page">
       <div className="row between">
-        <h1>커뮤니티</h1>
+        <h1>{t('커뮤니티')}</h1>
         <Link href={`/community/upload${type ? `?type=${type}` : ''}`} className="button">
           <SiteIcon name="upload" />
-          올리기
+          {t('올리기')}
         </Link>
       </div>
-      <p className="lead">사무실 테마, 업무 흐름, 플레이북을 나눠요. 앱의 커뮤니티 탭에서 바로 설치할 수도 있어요.</p>
+      <p className="lead">{t('사무실 테마, 업무 흐름, 플레이북을 나눠요. 앱의 커뮤니티 탭에서 바로 설치할 수도 있어요.')}</p>
 
       <div className="gallery-bar">
         <div className="tabs">
           <button className={!type ? 'active' : ''} onClick={() => go({ type: '' })}>
-            전체
+            {t('전체')}
           </button>
-          {(Object.keys(TYPE_LABEL) as ItemType[]).map((t) => (
-            <button key={t} className={type === t ? 'active' : ''} onClick={() => go({ type: t })}>
-              <SiteIcon name={TYPE_ICON[t]} /> {TYPE_LABEL[t].label}
+          {(Object.keys(TYPE_LABEL) as ItemType[]).map((id) => (
+            <button key={id} className={type === id ? 'active' : ''} onClick={() => go({ type: id })}>
+              <SiteIcon name={TYPE_ICON[id]} /> {t(TYPE_LABEL[id].label)}
             </button>
           ))}
         </div>
@@ -116,11 +117,11 @@ export function CommunityPage({ search }: { search: string }) {
             go({ q: q.trim() });
           }}
         >
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름이나 설명으로 찾기" aria-label="찾기" />
-          <select value={sort} onChange={(e) => go({ sort: e.target.value })} aria-label="정렬">
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('이름이나 설명으로 찾기')} aria-label={t('찾기')} />
+          <select value={sort} onChange={(e) => go({ sort: e.target.value })} aria-label={t('정렬')}>
             {SORTS.map(([v, label]) => (
               <option key={v} value={v}>
-                {label}
+                {t(label)}
               </option>
             ))}
           </select>
@@ -128,20 +129,20 @@ export function CommunityPage({ search }: { search: string }) {
       </div>
       {tag && (
         <p>
-          태그 <b>#{tag}</b>{' '}
+          {t('태그')} <b>#{tag}</b>{' '}
           <button className="button small ghost" onClick={() => go({ tag: '' })}>
-            태그 지우기
+            {t('태그 지우기')}
           </button>
         </p>
       )}
 
       {error && <p className="error">{error}</p>}
       {items === null && !error ? (
-        <p className="muted">불러오는 중…</p>
+        <p className="muted">{t('불러오는 중…')}</p>
       ) : items?.length === 0 ? (
         <div className="card">
           <p className="muted">
-            {params.get('q') || tag ? '찾는 항목이 없어요.' : '아직 올라온 항목이 없어요. 첫 번째로 올려 보세요!'} <Link href="/docs/theme-guide">테마 만들기 가이드</Link>
+            {params.get('q') || tag ? t('찾는 항목이 없어요.') : t('아직 올라온 항목이 없어요. 첫 번째로 올려 보세요!')} <Link href="/docs/theme-guide">{t('테마 만들기 가이드')}</Link>
           </p>
         </div>
       ) : (
@@ -150,7 +151,7 @@ export function CommunityPage({ search }: { search: string }) {
       {items && items.length < total && (
         <p className="cta">
           <button className="button ghost" onClick={() => void more()}>
-            더 보기 ({items.length}/{total})
+            {t('더 보기')} ({items.length}/{total})
           </button>
         </p>
       )}

@@ -1,9 +1,15 @@
-import { t } from './i18n.ts';
+import { t, tpl } from './i18n.ts';
 import type { Role } from './types.ts';
 
 /** Company id. Built-in: claude, gpt, grok, gemini; registered companies get `co_…` ids. */
 export type Vendor = string;
-export type Tier = 1 | 2 | 3;
+/** A model's grade: a whole number from 1 up, higher is better. Looks and scores follow where it sits between the lowest and highest in use. */
+export type Tier = number;
+/** How a tier looks next to the others in use: 1 the lowest, 3 the highest, 2 anything between. */
+export type TierLook = 1 | 2 | 3;
+/** Upper bound for a typed-in tier, only to keep input sane. */
+export const MAX_TIER = 99;
+export const isTier = (v: unknown): v is Tier => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= MAX_TIER;
 export type ApiKind = 'anthropic' | 'openai' | 'xai' | 'gemini' | 'openai_compatible';
 export type HatShape = 'beanie' | 'cap' | 'helmet' | 'wizard' | 'beret' | 'tophat' | 'bandana';
 export type KeySource = 'saved' | 'env' | 'none';
@@ -155,9 +161,34 @@ export const HATS: Record<HatShape, { name: string; color: string }> = {
   bandana: { name: '두건 + 물방울', color: '#16a085' },
 };
 
-/** Korean in these tables is the catalogue key, so display goes through `t()`. */
-export const tierLabel = (tier: Tier) => t(TIER_LABEL[tier]);
-export const tierHat = (tier: Tier) => t(TIER_HAT[tier]);
+/** The tiers the models use now, lowest first. */
+export const tiersInUse = (): Tier[] => [...new Set(catalog.models.map((m) => m.tier))].sort((a, b) => a - b);
+
+/** Where a tier sits among those in use: the lowest looks light, the highest top, the rest standard. */
+export function tierLook(tier: Tier): TierLook {
+  const used = tiersInUse();
+  const low = used[0] ?? 1;
+  const high = used[used.length - 1] ?? 3;
+  if (high > low && tier >= high) return 3;
+  if (tier <= low) return 1;
+  return 2;
+}
+
+/** A tier on the 1..3 scale the scores were tuned for, spread evenly between the lowest and highest in use. */
+export function tierScale(tier: Tier): number {
+  const used = tiersInUse();
+  const low = used[0] ?? 1;
+  const high = used[used.length - 1] ?? 3;
+  if (high <= low) return 2;
+  return 1 + (2 * (Math.min(high, Math.max(low, tier)) - low)) / (high - low);
+}
+
+/** Korean in these tables is the catalogue key, so display goes through `t()`. With more than three tiers in use, the number leads. */
+export const tierLabel = (tier: Tier) => {
+  const name = t(TIER_LABEL[tierLook(tier)]);
+  return tiersInUse().some((x) => x > 3) ? `${tpl('{n}등급', { n: tier })} · ${name}` : name;
+};
+export const tierHat = (tier: Tier) => t(TIER_HAT[tierLook(tier)]);
 export const hatName = (shape: HatShape) => t(HATS[shape].name);
 export const linkLabel = (label: string) => t(label);
 
@@ -168,8 +199,8 @@ export const DEFAULT_COMPANIES: Company[] = [
   { id: 'gemini', name: 'Gemini', hat: 'wizard', color: HATS.wizard.color, api: 'gemini', baseUrl: '', builtin: true },
 ];
 
-export const TIER_LABEL: Record<Tier, string> = { 1: '경량', 2: '표준', 3: '최상위' };
-export const TIER_HAT: Record<Tier, string> = { 1: '기본 모자', 2: '금테 장식', 3: '금테 + 보석 + 빛나는 오라' };
+export const TIER_LABEL: Record<TierLook, string> = { 1: '경량', 2: '표준', 3: '최상위' };
+export const TIER_HAT: Record<TierLook, string> = { 1: '기본 모자', 2: '금테 장식', 3: '금테 + 보석 + 빛나는 오라' };
 
 // apiModel ids and prices are editable defaults; check each vendor's current model list before real calls.
 export const DEFAULT_MODELS: ModelEntry[] = [

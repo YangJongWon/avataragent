@@ -1,5 +1,6 @@
 import { builtinSkin } from '../../../shared/skins.ts';
-import { characterFor, portraitFor } from '../../../shared/theme-pack.ts';
+import { modelOf } from '../../../shared/models.ts';
+import { characterFor, formFor, portraitFor } from '../../../shared/theme-pack.ts';
 import type { Agent, Expression } from '../../../shared/types.ts';
 import { themeApi } from '../themeApi.ts';
 import { useThemeManifest } from '../useThemePack.ts';
@@ -15,7 +16,7 @@ export function AgentPortrait({ agent, themeId, expression = agent.expression }:
   const theme = useThemeManifest(themeId);
   if (theme) {
     const character = characterFor(theme, agent.skin, agent.role);
-    const portrait = portraitFor(character, expression);
+    const portrait = portraitFor(character, expression, formFor(character, modelOf(agent.model))?.form);
     if (portrait) return <img className="agent-portrait" src={themeApi.previewUrl(theme.id, portrait)} alt={`${agent.name} (${expression})`} />;
     return <PackCharacterPreview themeId={theme.id} character={character} title={agent.name} />;
   }
