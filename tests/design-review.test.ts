@@ -12,6 +12,9 @@ const { store } = await import('../server/store.ts');
 const { designReport, setPdfRenderer } = await import('../server/exports/designer.ts');
 const { buildExport } = await import('../server/exports/index.ts');
 
+// The default staff run free models; a paid one makes the charge visible.
+for (const agent of store.data.agents) agent.model = 'claude-sonnet';
+
 const long = Array.from({ length: 6 }, (_, i) => `- ${i + 1}번째 검토 항목은 ${'설명이 꽤 길어서 슬라이드 한 장에 모두 담기 어려운 문장이고 '.repeat(8)}끝입니다`).join('\n');
 const REPORT = `# 협업 도구 검토\n\n## 요약\n- 월 비용 1,200,000원\n- 만족도 81점\n\n## 비교\n| 후보 | 월 비용(원) | 만족도 |\n| --- | --- | --- |\n| A안 | 1,500,000 | 72 |\n| B안 | 1,200,000 | 81 |\n\n## 검토 항목\n${long}\n\n## 결론\nB안을 도입한다.\n`;
 

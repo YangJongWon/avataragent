@@ -13,6 +13,9 @@ export const isTier = (v: unknown): v is Tier => typeof v === 'number' && Number
 export type ApiKind = 'anthropic' | 'openai' | 'xai' | 'gemini' | 'openai_compatible';
 export type HatShape = 'beanie' | 'cap' | 'helmet' | 'wizard' | 'beret' | 'tophat' | 'bandana';
 export type KeySource = 'saved' | 'env' | 'none';
+export const COMPANY_NAME_MAX = 80;
+/** Long enough for official catalogue names such as "NVIDIA: Nemotron 3.5 Super VL (free)". */
+export const MODEL_LABEL_MAX = 80;
 
 export interface ModelEntry {
   id: string;
@@ -197,7 +200,17 @@ export const DEFAULT_COMPANIES: Company[] = [
   { id: 'gpt', name: 'GPT', hat: 'cap', color: HATS.cap.color, api: 'openai', baseUrl: '', builtin: true },
   { id: 'grok', name: 'Grok', hat: 'helmet', color: HATS.helmet.color, api: 'xai', baseUrl: '', builtin: true },
   { id: 'gemini', name: 'Gemini', hat: 'wizard', color: HATS.wizard.color, api: 'gemini', baseUrl: '', builtin: true },
+  // Free open models through one free key: the default team, so a new office runs real AI without paying.
+  { id: 'openrouter', name: 'OpenRouter (무료)', hat: 'bandana', color: HATS.bandana.color, api: 'openai_compatible', baseUrl: 'https://openrouter.ai/api/v1', builtin: true },
 ];
+
+export const OPENROUTER_FREE_ROUTER = 'openrouter/free';
+/** Free OpenRouter models: 20 requests a minute and 50 a day per account, 1,000 a day after $10 of credits once. */
+export const isFreeOpenRouterModel = (apiModel: string) => apiModel.endsWith(':free') || apiModel === OPENROUTER_FREE_ROUTER;
+export const isOpenRouterCompany = (company: Pick<Company, 'api' | 'baseUrl'>) =>
+  company.api === 'openai_compatible' && /^https:\/\/openrouter\.ai(?:\/|$)/i.test(company.baseUrl);
+/** Local OpenAI-compatible servers may be keyless; OpenRouter is not. */
+export const companyRequiresKey = (company: Pick<Company, 'api' | 'baseUrl'>) => company.api !== 'openai_compatible' || isOpenRouterCompany(company);
 
 export const TIER_LABEL: Record<TierLook, string> = { 1: '경량', 2: '표준', 3: '최상위' };
 export const TIER_HAT: Record<TierLook, string> = { 1: '기본 모자', 2: '금테 장식', 3: '금테 + 보석 + 빛나는 오라' };
@@ -216,13 +229,23 @@ export const DEFAULT_MODELS: ModelEntry[] = [
   { id: 'gemini-flash-lite', vendor: 'gemini', tier: 1, label: 'Gemini Flash-Lite', apiModel: 'gemini-2.5-flash-lite', priceInPerMTokUsd: 0.1, priceOutPerMTokUsd: 0.4 },
   { id: 'gemini-flash', vendor: 'gemini', tier: 2, label: 'Gemini Flash', apiModel: 'gemini-2.5-flash', priceInPerMTokUsd: 0.3, priceOutPerMTokUsd: 2.5 },
   { id: 'gemini-pro', vendor: 'gemini', tier: 3, label: 'Gemini Pro', apiModel: 'gemini-2.5-pro', priceInPerMTokUsd: 1.25, priceOutPerMTokUsd: 10 },
+  // OpenRouter's free list changes every few months; a free model that is gone falls back to openrouter/free.
+  { id: 'free-nemotron-ultra', vendor: 'openrouter', tier: 3, label: 'Nemotron 3 Ultra (무료)', apiModel: 'nvidia/nemotron-3-ultra-550b-a55b:free', priceInPerMTokUsd: 0, priceOutPerMTokUsd: 0 },
+  { id: 'free-nemotron-super', vendor: 'openrouter', tier: 2, label: 'Nemotron 3 Super (무료)', apiModel: 'nvidia/nemotron-3-super-120b-a12b:free', priceInPerMTokUsd: 0, priceOutPerMTokUsd: 0 },
+  { id: 'free-nemotron-vl', vendor: 'openrouter', tier: 2, label: 'Nemotron 3.5 Super VL (무료)', apiModel: 'nvidia/nemotron-3.5-super-vl:free', priceInPerMTokUsd: 0, priceOutPerMTokUsd: 0 },
+  { id: 'free-gemma', vendor: 'openrouter', tier: 2, label: 'Gemma 4 31B (무료)', apiModel: 'google/gemma-4-31b-it:free', priceInPerMTokUsd: 0, priceOutPerMTokUsd: 0 },
+  { id: 'free-auto', vendor: 'openrouter', tier: 1, label: 'OpenRouter 자동 선택 (무료)', apiModel: OPENROUTER_FREE_ROUTER, priceInPerMTokUsd: 0, priceOutPerMTokUsd: 0 },
 ].map((m) => ({ ...m, tier: m.tier as Tier, builtin: true }));
 
+/**
+ * New staff start on free models, one free OpenRouter key for the whole team. The manager plans and the reviewer
+ * judges in JSON, so both use a model with JSON output; the writer is a different family from the reviewer.
+ */
 export const DEFAULT_MODEL_BY_ROLE: Record<Role, string> = {
-  manager: 'claude-opus',
-  researcher: 'gemini-flash',
-  writer: 'gpt',
-  reviewer: 'grok-mini',
+  manager: 'free-nemotron-super',
+  researcher: 'free-nemotron-vl',
+  writer: 'free-gemma',
+  reviewer: 'free-nemotron-super',
 };
 
 // Both server and browser keep the live catalog here so modelOf() stays synchronous.
@@ -242,6 +265,12 @@ export function modelOf(id: string): ModelEntry {
 
 export function companyOf(id: Vendor): Company {
   return catalog.companies.find((c) => c.id === id) ?? DEFAULT_COMPANIES.find((c) => c.id === id) ?? DEFAULT_COMPANIES[0];
+}
+
+/** The model counts against OpenRouter's daily free allowance. Shared viewers see no base URLs, so the built-in vendor counts too. */
+export function usesFreeQuota(modelId: string) {
+  const model = modelOf(modelId);
+  return isFreeOpenRouterModel(model.apiModel) && (model.vendor === 'openrouter' || isOpenRouterCompany(companyOf(model.vendor)));
 }
 
 export const isHatShape = (v: unknown): v is HatShape => typeof v === 'string' && v in HATS;

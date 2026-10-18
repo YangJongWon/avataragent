@@ -477,16 +477,23 @@ export function HelpDialog({
       </div>
       <label className="field">
         {t('직접 답하기')}
-        <input value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder={t('원하는 방향을 짧게 적어 주세요')} />
+        <span className="help-answer">
+          <input
+            value={answer}
+            onChange={(e) => setAnswer(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && answer.trim() && void send(answer)}
+            placeholder={t('원하는 방향을 짧게 적어 주세요')}
+          />
+          <button type="button" className="pixel-btn primary" disabled={!answer.trim()} onClick={() => send(answer)}>
+            {t('이렇게 해줘')}
+          </button>
+        </span>
       </label>
-      <div className="row between">
-        <button className="pixel-btn" onClick={() => send(null)}>
-          {tpl('알아서 진행 ("{assumption}")', { assumption: help.assumption })}
-        </button>
-        <button className="pixel-btn primary" disabled={!answer.trim()} onClick={() => send(answer)}>
-          {t('이렇게 해줘')}
-        </button>
-      </div>
+      {/* The assumption can be a long sentence, so it reads under the button's name instead of squeezing the row. */}
+      <button className="pixel-btn help-default" onClick={() => send(null)}>
+        <b>{t('알아서 진행')}</b>
+        <span className="small muted">{help.assumption}</span>
+      </button>
       <p className="muted small">
         {tpl('{n}초 안에 답이 없으면 "{assumption}"(으)로 진행해요. 곤란 표정은 감정이 아니라 지시가 모호하다는 신호예요.', { n: remaining, assumption: help.assumption })}
       </p>

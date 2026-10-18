@@ -13,6 +13,17 @@ import type { FlowPack } from './flow-pack.ts';
 /** 'env' follows AI_PROVIDER in .env; the others override it from the model settings page. */
 export type AiMode = 'env' | 'mock' | 'agents';
 
+/** How long one AI call may take, in seconds; free models get longer since they run slowly on shared hardware. */
+export interface AiTimeouts {
+  paidSec: number;
+  freeSec: number;
+  /** What each falls back to when the owner clears it (.env AI_TIMEOUT_MS, and at least 3 minutes for free models). */
+  defaults: { paidSec: number; freeSec: number };
+}
+
+/** Bounds for both limits, in seconds. */
+export const AI_TIMEOUT_RANGE = { min: 30, max: 1800 } as const;
+
 export type Role = 'manager' | 'researcher' | 'writer' | 'reviewer';
 
 export type TeamId = 'dev' | 'hr' | 'mgmt' | 'support' | 'welfare';
@@ -386,6 +397,16 @@ export interface ChatNote {
   at: string;
 }
 
+/** Today's requests to OpenRouter's free models against the account's daily allowance. */
+export interface FreeQuota {
+  used: number;
+  limit: number;
+  /** When the count starts over (00:00 UTC). */
+  resetsAt: string;
+  /** When OpenRouter last reported the count; null while it is the office's own estimate. */
+  checkedAt: string | null;
+}
+
 export interface Snapshot {
   viewer: Viewer;
   /** Owner only. */
@@ -418,10 +439,13 @@ export interface Snapshot {
   model: string;
   /** Owner only. */
   aiMode?: AiMode;
+  /** Owner only. */
+  aiTimeouts?: AiTimeouts;
   /** Owner only: AI_PROVIDER from .env. */
   envProvider?: string;
   companies: Company[];
   models: ModelEntry[];
+  freeQuota: FreeQuota;
   /** Owner only. */
   mcpServers?: McpServer[];
   /** Owner only: MCP_ALLOW_STDIO is on. */

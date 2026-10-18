@@ -1,11 +1,11 @@
-import type { Company, KeySource } from '../shared/models.ts';
+import { isOpenRouterCompany, type Company, type KeySource } from '../shared/models.ts';
 import { config } from './config.ts';
 import { loadKv, saveKv } from './db.ts';
 
 // API keys live in their own kv row so they never ride along with the state snapshot.
 const saved: Record<string, string> = loadKv<Record<string, string>>('secrets') ?? {};
 
-const envKey = (company: Company) => (company.api === 'openai_compatible' ? '' : config.keys[company.api]);
+const envKey = (company: Company) => (isOpenRouterCompany(company) ? config.keys.openrouter : company.api === 'openai_compatible' ? '' : config.keys[company.api]);
 
 export function setApiKey(companyId: string, key: string | null) {
   if (key) saved[companyId] = key;

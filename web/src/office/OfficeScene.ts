@@ -795,7 +795,7 @@ export class OfficeScene {
           : task.status === 'completed'
             ? t('완료! 칠판을 눌러 새 업무 등록')
             : task.status === 'failed'
-              ? t('중단됨 - 칠판을 눌러 다시 등록')
+              ? t('중단됨 - 오른쪽에서 이어서 하기')
               : tpl('진행 중: {v}', { v: currentStepLabel(task) });
     this.boardTitle.text = `${t('목표')}: ${clip(t(task.title), 16)}`;
     this.boardLines.text = `${tpl('진행률 {done}/{total}', { done, total })}${queued ? ` · ${tpl('대기 {n}건', { n: queued })}` : ''}

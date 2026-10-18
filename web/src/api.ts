@@ -12,6 +12,7 @@ import type { ThemeBooking } from '../../shared/theme-pack.ts';
 import type {
   Agent,
   AiMode,
+  AiTimeouts,
   ChatMessage,
   ForwardMode,
   Member,
@@ -90,6 +91,7 @@ export const api = {
   simulateInquiry: () => call('POST', '/api/sim/inquiry'),
   updateInterests: (patch: Partial<Interests>) => call('PUT', '/api/interests', patch),
   cancelTask: (taskId: string) => call('POST', `/api/tasks/${taskId}/cancel`),
+  retryTask: (taskId: string) => call('POST', `/api/tasks/${taskId}/retry`),
   answerHelp: (taskId: string, answer: string | null) => call('POST', `/api/tasks/${taskId}/help`, { answer }),
   approve: (taskId: string, valueKrw?: number) => call('POST', `/api/tasks/${taskId}/approve`, { valueKrw }),
   requestChanges: (taskId: string, comment: string) =>
@@ -104,6 +106,7 @@ export const api = {
   setPaused: (agentId: string, paused: boolean) => call('POST', `/api/agents/${agentId}/pause`, { paused }),
   updateBudget: (patch: { monthlyKrw?: number; hourlyRateKrw?: number }) => call('PUT', '/api/budget', patch),
   setAiMode: (mode: AiMode) => call('PUT', '/api/ai-mode', { mode }),
+  setAiTimeouts: (body: { paidSec: number | null; freeSec: number | null }) => call<AiTimeouts>('PUT', '/api/ai-timeouts', body),
   createCompany: (input: CompanyInput & { apiKey?: string }) => call<Company>('POST', '/api/companies', input),
   updateCompany: (id: string, patch: Partial<CompanyInput> & { apiKey?: string | null }) => call<Company>('PUT', `/api/companies/${id}`, patch),
   deleteCompany: (id: string) => call('DELETE', `/api/companies/${id}`),
@@ -113,6 +116,8 @@ export const api = {
   createModel: (input: ModelInput) => call<ModelEntry>('POST', '/api/models', input),
   updateModel: (id: string, patch: Partial<ModelInput>) => call<ModelEntry>('PUT', `/api/models/${id}`, patch),
   deleteModel: (id: string) => call('DELETE', `/api/models/${id}`),
+  resetModel: (id: string) => call<ModelEntry>('POST', `/api/models/${id}/reset`),
+  resetCompanyModels: (id: string) => call<{ models: ModelEntry[] }>('POST', `/api/companies/${id}/models/reset`),
   createMcpServer: (input: McpServerInput & { secrets?: Record<string, string> }) => call<McpServer>('POST', '/api/mcp-servers', input),
   updateMcpServer: (id: string, patch: Partial<McpServerInput> & { secrets?: Record<string, string | null>; tools?: Record<string, McpToolMode> }) =>
     call<McpServer>('PUT', `/api/mcp-servers/${id}`, patch),

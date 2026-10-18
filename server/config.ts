@@ -34,6 +34,7 @@ export const config = {
     anthropic: process.env.ANTHROPIC_API_KEY ?? '',
     gemini: process.env.GEMINI_API_KEY ?? '',
     xai: process.env.XAI_API_KEY ?? '',
+    openrouter: process.env.OPENROUTER_API_KEY ?? '',
   },
   priceInputPerMTokUsd: num('PRICE_INPUT_PER_MTOK_USD', 1),
   priceOutputPerMTokUsd: num('PRICE_OUTPUT_PER_MTOK_USD', 4),

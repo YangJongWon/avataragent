@@ -11,6 +11,7 @@ import {
   designPlan,
   drainQueues,
   recordTask,
+  reopenTask,
   setPaused,
   updatePlan,
 } from '../orchestrator.ts';
@@ -73,6 +74,10 @@ export function createTemporalRuntime(options: { address?: string; namespace?: s
     designPlan: (input) => designPlan(input),
     updatePlan: async (taskId, steps) => updatePlan(taskId, steps),
     cancelTask: async (taskId) => cancelTask(taskId),
+    async retryTask(taskId) {
+      if (reopenTask(taskId)) await startWorkflow(taskId);
+      else await drain();
+    },
     async answerHelp(taskId, answer) {
       expectStatus(taskId, 'awaiting_help');
       await client.workflow.getHandle(workflowIdOf(taskId)).signal(helpAnsweredSignal, answer);

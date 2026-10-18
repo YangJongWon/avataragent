@@ -515,6 +515,32 @@ export const CATALOGUE: Catalogue = {
   '후보 캐릭터 고르기': { zh: '3. 选择候选角色', ja: '3. 候補キャラクターを選ぶ', en: '3. Pick a candidate' },
   '성격 · 일하는 스타일': { zh: '4. 性格 · 工作风格', ja: '4. 性格・働き方', en: '4. Personality and style' },
   '후보 새로 뽑기': { zh: '再抽一批候选', ja: '候補を引き直す', en: 'Shuffle candidates' },
+  '🎲 랜덤 후보 만들기': { zh: '🎲 生成随机候选', ja: '🎲 ランダム候補を作る', en: '🎲 Generate candidates' },
+  '구분하기 쉬운 모자 후보': { zh: '易于区分的帽子候选', ja: '見分けやすい帽子候補', en: 'Distinct hat candidates' },
+  '서비스 회사': { zh: '服务公司', ja: 'サービス会社', en: 'Service provider' },
+  '모델 목록 요청': { zh: '请求模型列表', ja: 'モデル一覧を取得', en: 'Fetch model list' },
+  'API 모델 ID 검색·선택': { zh: '搜索并选择 API 模型 ID', ja: 'APIモデルIDを検索・選択', en: 'Search and select an API model ID' },
+  '모델 이름이나 ID를 입력하세요': { zh: '输入模型名称或 ID', ja: 'モデル名またはIDを入力', en: 'Enter a model name or ID' },
+  '이 모델 선택': { zh: '选择此模型', ja: 'このモデルを選択', en: 'Select this model' },
+  '선택하는 중…': { zh: '正在选择…', ja: '選択中…', en: 'Selecting…' },
+  '선택한 모델이 처음이면 자동으로 모델 목록에 등록돼요.': { zh: '首次选择的模型会自动添加到模型列表。', ja: '初めて選ぶモデルはモデル一覧に自動登録されます。', en: 'A newly selected model is automatically added to the model catalogue.' },
+  '{name} 모델을 선택했어요.': { zh: '已选择 {name} 模型。', ja: '{name} モデルを選択しました。', en: 'Selected the {name} model.' },
+  '{name} 모델을 등록하고 선택했어요.': { zh: '已添加并选择 {name} 模型。', ja: '{name} モデルを登録して選択しました。', en: 'Added and selected the {name} model.' },
+  '모델 추가': { zh: '添加模型', ja: 'モデルを追加', en: 'Add model' },
+  '목록 새로고침': { zh: '刷新列表', ja: '一覧を更新', en: 'Refresh list' },
+  '추가하는 중…': { zh: '正在添加…', ja: '追加中…', en: 'Adding…' },
+  '모델 삭제': { zh: '删除模型', ja: 'モデルを削除', en: 'Delete model' },
+  '{name} 모델 삭제': { zh: '删除 {name} 模型', ja: '{name} モデルを削除', en: 'Delete the {name} model' },
+  '{name} 모델을 지웠어요.': { zh: '已删除 {name} 模型。', ja: '{name} モデルを削除しました。', en: 'Deleted the {name} model.' },
+  '{name} 모델을 기본값으로 초기화할까요?': { zh: '将 {name} 模型恢复为默认值吗？', ja: '{name} モデルを初期値に戻しますか？', en: 'Reset the {name} model to its defaults?' },
+  '{name} 모델을 초기화했어요.': { zh: '已重置 {name} 模型。', ja: '{name} モデルを初期化しました。', en: 'Reset the {name} model.' },
+  '삭제됨': { zh: '已删除', ja: '削除済み', en: 'Deleted' },
+  '기본 모델 초기화': { zh: '重置默认模型', ja: '基本モデルを初期化', en: 'Reset default models' },
+  '1. 서비스 회사 선택': { zh: '1. 选择服务公司', ja: '1. サービス会社を選択', en: '1. Select a service provider' },
+  '2. API 모델 선택': { zh: '2. 选择 API 模型', ja: '2. APIモデルを選択', en: '2. Select an API model' },
+  'API 모델 선택': { zh: '选择 API 模型', ja: 'APIモデルを選択', en: 'Select an API model' },
+  '{name} 회사의 기본 모델을 모두 초기화할까요?': { zh: '重置 {name} 的所有默认模型吗？', ja: '{name} の基本モデルをすべて初期化しますか？', en: 'Reset all default models for {name}?' },
+  '{name} 회사의 기본 모델을 초기화했어요.': { zh: '已重置 {name} 的默认模型。', ja: '{name} の基本モデルを初期化しました。', en: 'Reset the default models for {name}.' },
   '🎲 랜덤 고르기': { zh: '🎲 随机推荐', ja: '🎲 ランダムおすすめ', en: '🎲 Random picks' },
   '랜덤': { zh: '随机', ja: 'ランダム', en: 'Random' },
   '모자 모양 = AI 회사, 장식 = 등급': {
@@ -1436,6 +1462,28 @@ export const CATALOGUE: Catalogue = {
   '아직 검수 의견이 없어요.': { zh: '还没有审核意见。', ja: 'まだレビュー意見がありません。', en: 'No review notes yet.' },
   '자료 접수': { zh: '受理资料', ja: '資料の受付', en: 'Material intake' },
   // ── 화면 전체 번역 정리 ──
+  '다 썼어요': { zh: '已用完', ja: '使い切りました', en: 'used up' },
+  '⬇ 버튼을 누르면 파일을 받아요. ✨ AI 디자인을 적용해 두면 같은 버튼으로 디자인된 파일이 받아져요.': {
+    zh: '点 ⬇ 按钮下载文件。应用 ✨ AI 设计后，同一按钮会下载设计后的文件。',
+    ja: '⬇ ボタンでファイルを受け取ります。✨ AI デザインを適用しておくと、同じボタンでデザイン済みのファイルになります。',
+    en: 'Press ⬇ to download. Once an ✨ AI design is applied, the same button gives the designed file.',
+  },
+  '📄 문서': { zh: '📄 文档', ja: '📄 ドキュメント', en: '📄 Document' },
+  '🖼️ 슬라이드': { zh: '🖼️ 幻灯片', ja: '🖼️ スライド', en: '🖼️ Slides' },
+  '📊 표': { zh: '📊 表格', ja: '📊 表', en: '📊 Sheet' },
+  'AI 디자인 적용됨': { zh: 'AI 设计已应用', ja: 'AI デザイン適用済み', en: 'AI design applied' },
+  '✨ AI로 디자인': { zh: '✨ 用 AI 设计', ja: '✨ AI でデザイン', en: '✨ Design with AI' },
+  '원문 그대로': { zh: '原文', ja: '原文のまま', en: 'Plain text' },
+  '승인을 기다리고 있어요': { zh: '正在等待批准', ja: '承認を待っています', en: 'Waiting for your approval' },
+  '지금은 이번 여정을 바꿀 수 없어요. 저장하면 다음 업무에서 쓸 흐름이 돼요.': { zh: '现在无法更改本次流程。保存后将成为下次任务使用的流程。', ja: '今はこの流れを変えられません。保存すると次の業務で使う流れになります。', en: "This task's journey can't change now. Saving keeps it as a flow for the next task." },
+  '알아서 진행': { zh: '自行推进', ja: 'おまかせで進める', en: 'Carry on with a guess' },
+  '▶ 이어서 하기': { zh: '▶ 继续', ja: '▶ 続きから', en: '▶ Continue' },
+  '끝난 단계는 그대로 두고, 멈춘 단계부터 다시 해요.': { zh: '保留已完成的步骤，从中断的步骤重新开始。', ja: '終わった段階はそのままに、止まった段階からやり直します。', en: 'Keeps the finished steps and picks up again at the step that stopped.' },
+  '중단됨 - 오른쪽에서 이어서 하기': { zh: '已中断 - 在右侧继续', ja: '中断 - 右側で続きから', en: 'Stopped - continue on the right' },
+  '업무 다시 진행': { zh: '任务重新进行', ja: '業務を再開', en: 'Task picked up again' },
+  'AI 응답 제한시간': { zh: 'AI 响应时限', ja: 'AI 応答制限時間', en: 'AI time limit' },
+  '일반 모델 (초)': { zh: '普通模型（秒）', ja: '通常モデル（秒）', en: 'Regular models (s)' },
+  '무료 모델 (초)': { zh: '免费模型（秒）', ja: '無料モデル（秒）', en: 'Free models (s)' },
 };
 
 /**
@@ -1809,6 +1857,34 @@ export const TEMPLATES: Record<string, Partial<Record<Language, string>>> = {
   // ── 화면 전체 번역 정리 ──
   // ── 화면 전체 번역 정리 ──
   '{name} 설정': { zh: '{name} 设置', ja: '{name} の設定', en: '{name} settings' },
+  '모든 OpenRouter 무료 모델이 함께 쓰는 하루 {limit}회 한도예요. 이 앱에서 보낸 횟수로 셉니다. {time}에 다시 채워져요.': {
+    zh: '所有 OpenRouter 免费模型共用每天 {limit} 次的额度，按本应用发出的次数计算，{time} 重置。',
+    ja: 'すべての OpenRouter 無料モデルで共有する1日 {limit} 回の上限です。このアプリから送った回数で数え、{time} にリセットされます。',
+    en: 'All OpenRouter free models share {limit} requests a day, counted from this app. Resets at {time}.',
+  },
+  '모든 OpenRouter 무료 모델이 함께 쓰는 하루 {limit}회 한도예요. OpenRouter 계정 기준 횟수이고 {time}에 다시 채워져요.': {
+    zh: '所有 OpenRouter 免费模型共用每天 {limit} 次的额度，按 OpenRouter 账户统计，{time} 重置。',
+    ja: 'すべての OpenRouter 無料モデルで共有する1日 {limit} 回の上限です。OpenRouter アカウントの回数で、{time} にリセットされます。',
+    en: 'All OpenRouter free models share {limit} requests a day, as counted on your OpenRouter account. Resets at {time}.',
+  },
+  '{step} 단계부터 다시 진행': { zh: '从 {step} 步骤重新进行', ja: '{step} の段階から再開', en: 'Picked up again at {step}' },
+  '다시 해 볼게요: {title}': { zh: '再试一次：{title}', ja: 'もう一度やってみます：{title}', en: 'Trying again: {title}' },
+  '기본 {n}초': { zh: '默认 {n} 秒', ja: '既定 {n} 秒', en: 'Default {n}s' },
+  'AI가 이 시간 안에 답하지 않으면 다시 시도하고, 그래도 안 되면 업무가 멈춰요. 무료 모델은 느려서 따로 길게 둬요. {min}~{max}초, 비우면 기본값.': {
+    zh: 'AI 在此时间内未回答时会重试，仍失败则任务暂停。免费模型较慢，单独设得更长。{min}~{max} 秒，留空使用默认值。',
+    ja: 'AI がこの時間内に答えないと再試行し、それでも駄目なら業務が止まります。無料モデルは遅いので別に長くします。{min}〜{max} 秒、空欄なら既定値。',
+    en: 'If the AI does not answer within this time it is retried, then the task stops. Free models are slow, so they get their own, longer limit. {min}–{max} seconds; leave empty for the default.',
+  },
+  'AI 응답 제한시간을 일반 {paid}초, 무료 {free}초로 정했어요. 다음 AI 호출부터 적용돼요.': {
+    zh: 'AI 响应时限已设为：普通 {paid} 秒，免费 {free} 秒。从下一次 AI 调用开始生效。',
+    ja: 'AI の応答制限時間を通常 {paid} 秒、無料 {free} 秒にしました。次の AI 呼び出しから適用されます。',
+    en: 'AI time limits set to {paid}s for regular models and {free}s for free ones. They apply from the next AI call.',
+  },
+  '무료 모델 공용 · 오늘 {left}/{limit}회 남음': {
+    zh: '免费模型共用 · 今日剩余 {left}/{limit} 次',
+    ja: '無料モデル共通 · 本日残り {left}/{limit} 回',
+    en: 'Shared by free models · {left}/{limit} left today',
+  },
 };
 
 function lookup(source: string, language: Language) {

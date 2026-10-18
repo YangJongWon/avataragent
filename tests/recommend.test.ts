@@ -17,6 +17,8 @@ const { templatePlan } = await import('../shared/workflow.ts');
 
 const OFFICE = 'office_dev';
 const agents = () => store.data.agents.filter((a) => a.officeId === OFFICE);
+// The default staff run free models; a paid one makes the charge visible.
+for (const agent of agents()) agent.model = 'claude-sonnet';
 
 let siteCalls = 0;
 function fakeSite(items: Record<string, unknown>[]) {

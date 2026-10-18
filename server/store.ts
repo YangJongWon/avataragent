@@ -22,6 +22,7 @@ import { DEFAULT_WORK_POLICY, freshDailyUsage, normalizeWorkPolicy } from '../sh
 import type {
   Agent,
   AiMode,
+  AiTimeouts,
   Budget,
   CalendarEvent,
   ChatMessage,
@@ -47,10 +48,13 @@ import { config, ORGANIZATION_SAFETY_RULES, type ProviderName } from './config.t
 import { appendEvent, loadKv, loadRelationalState, maxSeq, onStorageConflict, recentEvents, saveRelationalState } from './db.ts';
 import { loginInfo } from './mcp-oauth.ts';
 import { keyInfo, mcpSecretInfo } from './secrets.ts';
+import { freeQuota } from './free-quota.ts';
 import { defaultInterests, initialInquiries, initialMails } from './seed.ts';
 
 const PROJECT_ID = 'company_alpha';
 const STATE_VERSION = 3;
+/** Free models answer in 20–60 seconds without their thinking, but a busy one takes minutes. */
+const FREE_TIMEOUT_SEC = 180;
 const ROLES: Role[] = ['manager', 'researcher', 'writer', 'reviewer'];
 
 export interface PersistedState {
@@ -69,7 +73,11 @@ export interface PersistedState {
   shares: ShareLink[];
   companies: Company[];
   models: ModelEntry[];
+  /** Built-in models deliberately removed by the owner; each can be restored from DEFAULT_MODELS. */
+  removedBuiltinModelIds: string[];
   aiMode: AiMode;
+  /** Seconds an AI call may take; null keeps the default. */
+  aiTimeoutSec?: { paid: number | null; free: number | null };
   mcpServers: McpServer[];
   performance: PerfRecord[];
   improvements: ImprovementLog[];
@@ -160,7 +168,9 @@ function fresh(): PersistedState {
     shares: [],
     companies: structuredClone(DEFAULT_COMPANIES),
     models: structuredClone(DEFAULT_MODELS),
-    aiMode: 'env',
+    removedBuiltinModelIds: [],
+    // An OpenRouter key is enough to boot directly into the free per-agent setup.
+    aiMode: config.keys.openrouter ? 'agents' : 'env',
     mcpServers: [],
     performance: [],
     improvements: [],
@@ -180,6 +190,7 @@ function fresh(): PersistedState {
 function fillCatalog(state: PersistedState) {
   state.companies ??= [];
   state.models ??= [];
+  state.removedBuiltinModelIds ??= [];
   state.aiMode ??= 'env';
   state.mcpServers ??= [];
   // Added after v3 shipped, so old rows simply lack it. Do not bump STATE_VERSION for this.
@@ -192,7 +203,7 @@ function fillCatalog(state: PersistedState) {
     if (!state.companies.some((c) => c.id === company.id)) state.companies.push(structuredClone(company));
   }
   for (const model of DEFAULT_MODELS) {
-    if (!state.models.some((m) => m.id === model.id)) state.models.push(structuredClone(model));
+    if (!state.removedBuiltinModelIds.includes(model.id) && !state.models.some((m) => m.id === model.id)) state.models.push(structuredClone(model));
   }
 }
 
@@ -294,6 +305,13 @@ class Store {
     return () => this.listeners.delete(listener);
   }
 
+  get aiTimeouts(): AiTimeouts {
+    const paid = Math.round(config.aiTimeoutMs / 1000);
+    const defaults = { paidSec: paid, freeSec: Math.max(paid, FREE_TIMEOUT_SEC) };
+    const saved = this.state.aiTimeoutSec;
+    return { paidSec: saved?.paid ?? defaults.paidSec, freeSec: saved?.free ?? defaults.freeSec, defaults };
+  }
+
   /** AI_PROVIDER from .env unless the model settings page overrides it. */
   get provider(): ProviderName {
     return this.state.aiMode === 'env' ? config.provider : this.state.aiMode;
@@ -316,9 +334,11 @@ class Store {
       provider,
       model: provider === 'mock' || provider === 'agents' ? '직원별 모델' : config.model,
       aiMode: s.aiMode,
+      aiTimeouts: this.aiTimeouts,
       envProvider: config.provider,
       companies: s.companies.map((c) => ({ ...c, key: keyInfo(c) })),
       models: s.models,
+      freeQuota: freeQuota(),
       mcpServers: s.mcpServers.map((m) => ({ ...m, secrets: mcpSecretInfo(m.id), login: m.oauth ? loginInfo(m.id) : undefined })),
       mcpStdioAllowed: config.mcpAllowStdio,
       offices: s.offices,
@@ -520,6 +540,11 @@ class Store {
   private changed() {
     setCatalog(this.state.companies, this.state.models);
     this.persist();
+    this.announce();
+  }
+
+  /** Sends viewers a fresh snapshot; also for what the snapshot shows from outside the store (free-model requests). */
+  announce() {
     if (this.snapshotScheduled) return;
     this.snapshotScheduled = true;
     setImmediate(() => {

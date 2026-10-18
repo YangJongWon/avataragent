@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { currentLanguage, t, tpl } from '../../../shared/i18n.ts';
 import { localText } from '../../../shared/theme-rules.ts';
-import { allCompanies, allModels, companyOf, hatName, HATS, type HatShape, modelOf, tierHat, tierLabel, tiersInUse, type Tier } from '../../../shared/models.ts';
+import { allCompanies, allModels, companyOf, DEFAULT_MODELS, hatName, HATS, type HatShape, modelOf, tierHat, tierLabel, tiersInUse, usesFreeQuota, type Tier } from '../../../shared/models.ts';
 import { PERSONALITIES, personalityDescription, personalityLabel } from '../../../shared/personality.ts';
 import { builtinSkin, SKINS, skinName, skinNote } from '../../../shared/skins.ts';
 import { MAX_STAFF_PER_OFFICE, TEAMS } from '../../../shared/teams.ts';
 import { accessoryLabelFor, activeVariant, applyVariant, characterFor, companyLabelFor, formFor, characterName, DEFAULT_THEME, packSkin, splitPackSkin, type ThemeManifest, type ThemeSummary } from '../../../shared/theme-pack.ts';
-import type { Agent, AgentSkin, Office, Role, Skin } from '../../../shared/types.ts';
+import type { Agent, AgentSkin, FreeQuota, Office, Role, Skin } from '../../../shared/types.ts';
 import { api } from '../api.ts';
 import { themeApi } from '../themeApi.ts';
 import { useThemeManifest } from '../useThemePack.ts';
 import { CharacterPreview } from './CharacterPreview.tsx';
+import { FreeQuotaBadge } from './FreeQuotaBadge.tsx';
 import { HatPreview } from './HatPreview.tsx';
 import { Modal } from './Modals.tsx';
 import { PackCharacterPreview } from './PackCharacterPreview.tsx';
@@ -93,20 +94,26 @@ function AgentEditor({
   agent,
   roleTitle,
   themeId,
+  freeQuota,
   onError,
   onSaved,
   onPickTheme,
-}: { agent: Agent; roleTitle: string; themeId?: string; onError: (m: string) => void; onSaved: (m: string) => void; onPickTheme: (id: string) => void }) {
+}: { agent: Agent; roleTitle: string; themeId?: string; freeQuota: FreeQuota; onError: (m: string) => void; onSaved: (m: string) => void; onPickTheme: (id: string) => void }) {
   const officeTheme = useThemeManifest(themeId);
   const [themes, setThemes] = useState<ThemeSummary[]>([]);
   const [name, setName] = useState(agent.name);
   const [model, setModel] = useState(agent.model);
+  const [addCompany, setAddCompany] = useState<string | null>(null);
+  const [serviceModels, setServiceModels] = useState<string[]>([]);
+  const [serviceModel, setServiceModel] = useState('');
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [selectingModel, setSelectingModel] = useState(false);
   const [rules, setRules] = useState(agent.rules);
   const [skin, setSkin] = useState(agent.skin);
   const [outfit, setOutfit] = useState<string | null>(agent.outfit ?? null);
   const [personality, setPersonality] = useState(agent.personality);
-  // Step 1 picks the theme, step 2 a look inside it; it starts on the theme the current look belongs to.
-  const [pickTheme, setPickTheme] = useState(splitPackSkin(agent.skin)?.themeId ?? DEFAULT_THEME);
+  // Step 1 picks the theme, step 2 a look inside it; it starts on the theme the current look belongs to, else the office's.
+  const [pickTheme, setPickTheme] = useState(splitPackSkin(agent.skin)?.themeId ?? themeId ?? DEFAULT_THEME);
   const theme = useThemeManifest(pickTheme);
   const [roll, setRoll] = useState(0);
   const [showRandom, setShowRandom] = useState(false);
@@ -117,6 +124,10 @@ function AgentEditor({
   // The model cards show the theme picked in step 1: its character for this agent wearing that theme's accessories.
   const modelTheme = pickTheme !== DEFAULT_THEME ? theme : null;
   const modelCharacter = modelTheme && characterFor(modelTheme, skin, agent.role);
+  // The stage shows the staff as the office draws them: a look from a theme picked here, else the office theme's character
+  // for this skin and role, wearing the model's form and accessories.
+  const stageTheme = ownCharacter ? ownTheme : officeTheme;
+  const stageCharacter = ownCharacter ?? (officeTheme && characterFor(officeTheme, skin, agent.role));
 
   // The legend under the editor follows the theme picked here.
   useEffect(() => onPickTheme(pickTheme), [pickTheme, onPickTheme]);
@@ -170,6 +181,83 @@ function AgentEditor({
     }
   };
 
+  const loadServiceModels = async (companyId: string) => {
+    setLoadingModels(true);
+    setServiceModels([]);
+    setServiceModel('');
+    try {
+      const result = await api.discoverModels({ companyId });
+      setServiceModels(result.models);
+      onSaved(tpl('{name}에서 모델 {n}개를 불러왔어요.', { name: companyOf(companyId).name, n: result.models.length }));
+    } catch (e) {
+      onError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoadingModels(false);
+    }
+  };
+
+  const chooseServiceModel = async () => {
+    const apiModel = serviceModel.trim();
+    if (!apiModel || !addCompany) return;
+    setSelectingModel(true);
+    try {
+      const existing = allModels().find((m) => m.vendor === addCompany && m.apiModel === apiModel);
+      if (existing) {
+        setModel(existing.id);
+        onSaved(tpl('{name} 모델을 선택했어요.', { name: existing.label }));
+        setAddCompany(null);
+        return;
+      }
+      const short = apiModel.split('/').pop()?.replace(/:free$/i, '') || apiModel;
+      const label = `${short.replace(/[-_]+/g, ' ')}${/:free$/i.test(apiModel) ? ' (무료)' : ''}`;
+      const added = await api.createModel({
+        vendor: addCompany,
+        tier: 2,
+        label,
+        apiModel,
+        priceInPerMTokUsd: /:free$/i.test(apiModel) ? 0 : 1,
+        priceOutPerMTokUsd: /:free$/i.test(apiModel) ? 0 : 4,
+      });
+      setModel(added.id);
+      onSaved(tpl('{name} 모델을 등록하고 선택했어요.', { name: added.label }));
+      setAddCompany(null);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSelectingModel(false);
+    }
+  };
+
+  const openModelAdder = (companyId: string) => {
+    if (addCompany === companyId) {
+      setAddCompany(null);
+      return;
+    }
+    setAddCompany(companyId);
+    void loadServiceModels(companyId);
+  };
+
+  const removeModel = async (id: string, label: string) => {
+    if (!window.confirm(tpl('{name} 모델을 지울까요?', { name: label }))) return;
+    try {
+      await api.deleteModel(id);
+      if (model === id) setModel(agent.model);
+      onSaved(tpl('{name} 모델을 지웠어요.', { name: label }));
+    } catch (e) {
+      onError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const resetCompanyModels = async (companyId: string, companyName: string) => {
+    if (!window.confirm(tpl('{name} 회사의 기본 모델을 모두 초기화할까요?', { name: companyName }))) return;
+    try {
+      await api.resetCompanyModels(companyId);
+      onSaved(tpl('{name} 회사의 기본 모델을 초기화했어요.', { name: companyName }));
+    } catch (e) {
+      onError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   return (
     <div className="hire-card pixel-box">
       <div className="hire-card-head">
@@ -178,8 +266,8 @@ function AgentEditor({
       </div>
 
       <div className="hire-stage">
-        {ownTheme && ownCharacter ? (
-          <PackCharacterPreview themeId={ownTheme.id} character={ownCharacter} outfit={wearing} />
+        {stageTheme && stageCharacter ? (
+          <PackCharacterPreview themeId={stageTheme.id} character={stageCharacter} outfit={wearing} wearing={{ theme: stageTheme, modelId: model }} />
         ) : (
           <CharacterPreview role={agent.role} skin={builtinSkin(skin)} modelId={model} expression="smile" />
         )}
@@ -188,7 +276,8 @@ function AgentEditor({
           <div className="muted small">
             {modelOf(model).label} · {tierLabel(modelOf(model).tier)} · {companyOf(modelOf(model).vendor).name}
           </div>
-          <div className="muted small">{ownCharacter ? `${characterName(ownCharacter, currentLanguage())} · ${ownTheme?.name}` : skinName(skin)}</div>
+          {usesFreeQuota(model) && <FreeQuotaBadge quota={freeQuota} />}
+          <div className="muted small">{stageCharacter ? `${characterName(stageCharacter, currentLanguage())} · ${stageTheme?.name}` : skinName(skin)}</div>
           <div className="muted small">
             {PERSONALITIES.find((p) => p.id === personality)?.emoji} {personalityLabel(personality)}
           </div>
@@ -247,7 +336,7 @@ ${t('출처')}: ${s.credit}` : skinNote(s.id)}
               return (
                 <button
                   key={id}
-                  className={`skin-option skin-option-art ${skin === id ? 'selected' : ''}`}
+                  className={`skin-option skin-option-art ${skin === id || (stageTheme?.id === theme.id && stageCharacter?.id === c.id) ? 'selected' : ''}`}
                   type="button"
                   title={`${theme.name} · ${theme.author} · ${theme.license}`}
                   onClick={() => setSkin(id)}
@@ -303,20 +392,25 @@ ${t('출처')}: ${s.credit}` : skinNote(s.id)}
         </div>
         {allCompanies().map((company) => {
           const list = allModels().filter((m) => m.vendor === company.id).sort((a, b) => a.tier - b.tier);
-          if (!list.length) return null;
+          const removedDefaults = DEFAULT_MODELS.filter((m) => m.vendor === company.id && !list.some((saved) => saved.id === m.id));
+          const hasDefaults = DEFAULT_MODELS.some((m) => m.vendor === company.id);
           return (
             <div key={company.id} className="model-pick-group">
               <div className="model-pick-title">
-                {[company.name, companyLook(modelTheme, company)].filter(Boolean).join(' · ')}
+                <span>{[company.name, companyLook(modelTheme, company)].filter(Boolean).join(' · ')}</span>
+                {list.some((m) => usesFreeQuota(m.id)) && <FreeQuotaBadge quota={freeQuota} />}
+                <span className="model-company-actions">
+                  {hasDefaults && (
+                    <button className="pixel-btn small" type="button" onClick={() => void resetCompanyModels(company.id, company.name)}>
+                      {t('기본 모델 초기화')}
+                    </button>
+                  )}
+                </span>
               </div>
               <div className="model-pick-row">
                 {list.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    className={`model-pick ${model === m.id ? 'selected' : ''}`}
-                    onClick={() => setModel(m.id)}
-                  >
+                  <div key={m.id} className="model-pick-wrap">
+                    <button type="button" className={`model-pick ${model === m.id ? 'selected' : ''}`} onClick={() => setModel(m.id)}>
                     {modelTheme && modelCharacter ? (
                       <PackCharacterPreview themeId={modelTheme.id} character={modelCharacter} outfit={modelCharacter === ownCharacter ? wearing : null} wearing={{ theme: modelTheme, modelId: m.id }} />
                     ) : (
@@ -329,9 +423,23 @@ ${t('출처')}: ${s.credit}` : skinNote(s.id)}
                       const look = formName ? localText(formName, currentLanguage()) : modelLook(modelTheme, m.id, m.tier);
                       return look && <span className="small">{look}</span>;
                     })()}
-                    <span className="muted small">${m.priceInPerMTokUsd}/${m.priceOutPerMTokUsd}</span>
-                  </button>
+                    <span className="muted small">{usesFreeQuota(m.id) ? t('무료') : `$${m.priceInPerMTokUsd}/$${m.priceOutPerMTokUsd}`}</span>
+                    </button>
+                    <div className="model-pick-actions">
+                      <button className="danger" type="button" onClick={() => void removeModel(m.id, m.label)}>{t('삭제')}</button>
+                    </div>
+                  </div>
                 ))}
+                {removedDefaults.map((m) => (
+                  <div key={m.id} className="model-pick-removed">
+                    <span>{m.label}</span>
+                    <span className="muted small">{t('삭제됨')}</span>
+                  </div>
+                ))}
+                <button type="button" className={`model-pick model-pick-add ${addCompany === company.id ? 'selected' : ''}`} onClick={() => openModelAdder(company.id)}>
+                  <span className="model-pick-add-icon">+</span>
+                  <span className="model-pick-label">{t('모델 추가')}</span>
+                </button>
               </div>
             </div>
           );
@@ -376,6 +484,49 @@ ${t('출처')}: ${s.credit}` : skinNote(s.id)}
           </button>
         }
       />
+      {addCompany && (
+        <Modal title={t('모델 추가')} onClose={() => setAddCompany(null)}>
+          <div className="service-model-picker model-add-dialog">
+            {allCompanies().length > 1 && (
+              <label className="field">
+                {t('1. 서비스 회사 선택')}
+                <select
+                  value={addCompany}
+                  onChange={(e) => {
+                    const companyId = e.target.value;
+                    setAddCompany(companyId);
+                    void loadServiceModels(companyId);
+                  }}
+                >
+                  {allCompanies().map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+                </select>
+              </label>
+            )}
+            <label className="field">
+              {allCompanies().length > 1 ? t('2. API 모델 선택') : t('API 모델 선택')}
+              <input
+                list={`service-models-${agent.id}`}
+                value={serviceModel}
+                placeholder={loadingModels ? t('불러오는 중…') : t('모델 이름이나 ID를 입력하세요')}
+                disabled={loadingModels}
+                onChange={(e) => setServiceModel(e.target.value)}
+              />
+              <datalist id={`service-models-${agent.id}`}>
+                {serviceModels.map((id) => <option key={id} value={id} />)}
+              </datalist>
+            </label>
+            <div className="row end wrap">
+              <button className="pixel-btn small" type="button" disabled={loadingModels} onClick={() => void loadServiceModels(addCompany)}>
+                {loadingModels ? t('불러오는 중…') : t('목록 새로고침')}
+              </button>
+              <button className="pixel-btn small" type="button" onClick={() => setAddCompany(null)}>{t('취소')}</button>
+              <button className="pixel-btn small primary" type="button" disabled={selectingModel || loadingModels || !serviceModel.trim()} onClick={() => void chooseServiceModel()}>
+                {selectingModel ? t('추가하는 중…') : t('추가')}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {showRandom && <RandomPickModal candidates={candidates} onReroll={() => setRoll((r) => r + 1)} onClose={() => setShowRandom(false)} />}
     </div>
   );
@@ -385,10 +536,11 @@ export function HireTab({
   office,
   themeId,
   agents,
+  freeQuota,
   onError,
   onNotice,
   onManageModels,
-}: { office: Office; themeId: string; agents: Agent[]; onError: (m: string) => void; onNotice: (m: string) => void; onManageModels: () => void }) {
+}: { office: Office; themeId: string; agents: Agent[]; freeQuota: FreeQuota; onError: (m: string) => void; onNotice: (m: string) => void; onManageModels: () => void }) {
   const team = TEAMS[office.team];
   const [selectedId, setSelectedId] = useState<string | null>(agents[0]?.id ?? null);
   const [hireRole, setHireRole] = useState<Role>('researcher');
@@ -501,6 +653,7 @@ export function HireTab({
           agent={selected}
           roleTitle={t(team.roleTitles[selected.role])}
           themeId={themeId}
+          freeQuota={freeQuota}
           onError={onError}
           onSaved={onNotice}
           onPickTheme={setLegendThemeId}

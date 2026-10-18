@@ -87,6 +87,8 @@ export interface WorkflowEditing {
   canSaveFlows: boolean;
   onSave: (steps: WorkflowStepInput[]) => Promise<void>;
   onSaveFlow: (flow: FlowPack) => Promise<void>;
+  onApprove: (valueKrw?: number) => Promise<void>;
+  onRequestChanges: (comment: string) => Promise<void>;
   onError: (message: string) => void;
 }
 
@@ -500,7 +502,12 @@ function WorkflowInner({ task, agents, team, edit, dense, maxRows }: Props) {
           steps={inputs}
           index={selected}
           locked={canEdit ? locked : 0}
-          template={!canEdit}
+          template={canEdit ? undefined : task.status === 'completed' ? 'completed' : 'locked'}
+          approval={
+            task.status === 'awaiting_approval' && inputs[selected]?.kind === 'approval'
+              ? { estimatedKrw: task.value?.estimatedKrw ?? null, onApprove: edit.onApprove, onRequestChanges: edit.onRequestChanges, onError: edit.onError }
+              : undefined
+          }
           saveLabel={canEdit ? t('💾 변경 저장') : t('💾 다음 업무용 흐름으로 저장')}
           showSave={canEdit || edit.canSaveFlows}
           saveDisabled={!draft || Boolean(draftError)}

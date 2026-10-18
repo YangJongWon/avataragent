@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { can, seesEverything, shareRoleLabel, type Action } from '../../shared/access.ts';
 import { TEAMS } from '../../shared/teams.ts';
+import { usesFreeQuota } from '../../shared/models.ts';
 import type { Agent, OfficeEvent, Snapshot } from '../../shared/types.ts';
 import { currentStepLabel, planProgress } from '../../shared/workflow.ts';
 import { api, useOffice } from './api.ts';
 import { DemoTour } from './components/DemoTour.tsx';
 import { Drawer } from './components/Drawer.tsx';
+import { FreeQuotaBadge } from './components/FreeQuotaBadge.tsx';
 import { HelpPanel } from './components/HelpPanel.tsx';
 import { CommunityTab } from './components/CommunityTab.tsx';
 import { HireTab } from './components/HireTab.tsx';
@@ -427,6 +429,12 @@ export function App() {
                 await api.updatePlan(task!.id, steps);
                 toast(t('업무 여정을 저장했어요.'));
               },
+              onApprove: async (valueKrw) => {
+                await api.approve(task!.id, valueKrw);
+              },
+              onRequestChanges: async (comment) => {
+                await api.requestChanges(task!.id, comment);
+              },
               onSaveFlow: async (flow) => {
                 await api.saveFlow(flow, 'mine');
                 toast(t('다음 업무에서 쓸 흐름으로 저장했어요.'));
@@ -591,6 +599,7 @@ export function App() {
             <button type="button" className="office-tab-desc muted small link-button" title={t('사무실 설정')} onClick={() => setDialog({ kind: 'officeSettings', officeId: office.id })}>
               {office.description || t(team.description)} ⚙️
             </button>
+            {view.agents.some((a) => usesFreeQuota(a.model)) && <FreeQuotaBadge quota={snapshot.freeQuota} />}
           </nav>
         )}
         {tabMenu && menuOffice && (
@@ -678,7 +687,7 @@ export function App() {
           </main>
         )}
         {tab === 'hire' && (
-          <HireTab key={office.id} office={office} themeId={themeId} agents={view.agents} onError={showError} onNotice={toast} onManageModels={() => setTab('models')} />
+          <HireTab key={office.id} office={office} themeId={themeId} agents={view.agents} freeQuota={snapshot.freeQuota} onError={showError} onNotice={toast} onManageModels={() => setTab('models')} />
         )}
         {tab === 'lounge' && (
           <ProjectLounge

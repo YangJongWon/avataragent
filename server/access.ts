@@ -38,6 +38,7 @@ export function snapshotFor(viewer: Viewer): Snapshot {
     shares: _shares,
     publicUrl: _publicUrl,
     aiMode: _aiMode,
+    aiTimeouts: _aiTimeouts,
     envProvider: _envProvider,
     mcpServers: _mcpServers,
     mcpStdioAllowed: _mcpStdioAllowed,

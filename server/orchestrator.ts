@@ -1365,6 +1365,33 @@ export function resumeActiveTasks() {
   }
 }
 
+/**
+ * Puts a stopped task back to work from the step that failed, keeping what was already done. A task that never got
+ * going (skipped for lack of input) goes back to the queue instead, so its inputs are gathered again.
+ * Returns whether it can run right away.
+ */
+export function reopenTask(taskId: string): boolean {
+  const task = store.task(taskId);
+  if (task.status !== 'failed') throw new Error('중단된 업무만 이어서 할 수 있어요.');
+  if (!canStart(task.officeId)) throw new Error('이 사무실에서 다른 업무가 진행 중이에요. 그 업무가 끝난 뒤 이어서 해 주세요.');
+  const started = task.artifacts.length > 0 || task.plan.some((step) => step.status !== 'pending');
+  const failedStep = task.plan.find((step) => step.status === 'error');
+  store.updateTask(taskId, (t) => {
+    t.status = started ? 'running' : 'queued';
+    t.failureReason = null;
+    for (const step of t.plan) if (step.status === 'error') step.status = 'pending';
+  });
+  const agent = failedStep ? agentOfStep(task, failedStep) : agentOf(task, 'manager');
+  setAgent(agent, 'idle', 'normal', LT('다시 해 볼게요: {title}', { title: L(task.title) }));
+  store.emit('task.retried', { taskId, agentId: agent.id, payload: { step: failedStep?.label ?? null } });
+  return started;
+}
+
+export function retryTask(taskId: string) {
+  if (reopenTask(taskId)) void runTask(taskId);
+  else drainQueues();
+}
+
 export function cancelTask(taskId: string) {
   const task = store.task(taskId);
   if (task.status !== 'queued') throw new Error('대기 중인 업무만 취소할 수 있어요.');

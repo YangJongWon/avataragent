@@ -188,7 +188,18 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
         </div>
       )}
 
-      {task.status === 'failed' && <div className="callout callout-error">{t('중단됨')}: {task.failureReason}</div>}
+      {task.status === 'failed' && (
+        <div className="callout callout-error callout-retry">
+          <span>
+            {t('중단됨')}: {task.failureReason}
+          </span>
+          {canOperate && (
+            <button className="pixel-btn small primary" disabled={busy} onClick={() => run(() => api.retryTask(task.id))} title={t('끝난 단계는 그대로 두고, 멈춘 단계부터 다시 해요.')}>
+              {t('▶ 이어서 하기')}
+            </button>
+          )}
+        </div>
+      )}
 
       {task.status === 'completed' && task.actions?.some((a) => a.status !== 'proposed') && <ActionList actions={task.actions} editable={false} />}
 

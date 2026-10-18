@@ -11,6 +11,7 @@ import {
   drainQueues,
   requestChanges,
   resumeActiveTasks,
+  retryTask,
   setPaused,
   updatePlan,
 } from './orchestrator.ts';
@@ -47,6 +48,8 @@ export interface WorkflowRuntime {
   designPlan(input: PlanDraftInput): Promise<PlanDraft>;
   updatePlan(taskId: string, steps: WorkflowStepInput[]): Promise<Task>;
   cancelTask(taskId: string): Promise<void>;
+  /** Continues a stopped task from the step that failed. */
+  retryTask(taskId: string): Promise<void>;
   answerHelp(taskId: string, answer: string | null): Promise<void>;
   approve(taskId: string, valueKrw?: number): Promise<void>;
   requestChanges(taskId: string, comment: string): Promise<void>;
@@ -75,6 +78,7 @@ export const localWorkflowRuntime: WorkflowRuntime = {
   designPlan: (input) => designPlan(input),
   updatePlan: async (taskId, steps) => updatePlan(taskId, steps),
   cancelTask: async (taskId) => cancelTask(taskId),
+  retryTask: async (taskId) => retryTask(taskId),
   answerHelp: async (taskId, answer) => answerHelp(taskId, answer),
   approve: async (taskId, valueKrw) => approve(taskId, valueKrw),
   requestChanges: async (taskId, comment) => requestChanges(taskId, comment),

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { TEAMS } from '../../../shared/teams.ts';
 import { officeTheme } from '../../../shared/theme-pack.ts';
 import type { Agent, Office, OfficeEvent, Snapshot } from '../../../shared/types.ts';
@@ -25,6 +25,42 @@ const devTheme = () => (import.meta.env.DEV ? (new URLSearchParams(location.sear
 
 const pct = (x: number, y: number) => ({ left: `${(x / SCENE_W) * 100}%`, top: `${(y / SCENE_H) * 100}%` });
 const bubbleAt = (x: number, y: number) => pct(Math.min(Math.max(x, SCENE_W * 0.12), SCENE_W * 0.88), y);
+
+const EDGE = 4;
+
+/**
+ * A speech bubble over a character's head, nudged inside the office when it would stick out past an edge; the tail keeps
+ * pointing at the character. Measured after every render, since the line inside and the office's size both change.
+ */
+function Bubble({ x, y, className = '', onClick, children }: { x: number; y: number; className?: string; onClick: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLButtonElement & HTMLDivElement>(null);
+  const [, redraw] = useState(0);
+  useEffect(() => {
+    const onResize = () => redraw((n) => n + 1);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const office = el?.closest('.office');
+    if (!el || !office) return;
+    el.style.setProperty('--dx', '0px');
+    el.style.setProperty('--dy', '0px');
+    const box = el.getBoundingClientRect();
+    const room = office.getBoundingClientRect();
+    const dx = box.left < room.left + EDGE ? room.left + EDGE - box.left : box.right > room.right - EDGE ? room.right - EDGE - box.right : 0;
+    const dy = box.top < room.top + EDGE ? room.top + EDGE - box.top : 0;
+    el.style.setProperty('--dx', `${dx}px`);
+    el.style.setProperty('--dy', `${dy}px`);
+    el.classList.toggle('bubble-pushed', dy > 0);
+  });
+  const Tag = className.includes('bubble-help') ? 'button' : 'div';
+  return (
+    <Tag ref={ref} className={`bubble ${className}`} style={bubbleAt(x, y)} onClick={onClick}>
+      {children}
+    </Tag>
+  );
+}
 
 /** Beside the character, opening upward in the lower half; it never reaches past the office, scrolling itself if the office is small. */
 function menuAt(x: number, y: number) {
@@ -116,14 +152,14 @@ export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
           const pos = anchor(a.id);
           if (!pos) return null;
           return (
-            <button key={a.id} className="bubble bubble-help" style={bubbleAt(pos.x, pos.y)} onClick={() => actions.onHelp(a.id)}>
+            <Bubble key={a.id} className="bubble-help" x={pos.x} y={pos.y} onClick={() => actions.onHelp(a.id)}>
               {t('도와주세요…!')} <span className="bubble-cta">{t('도와주기')}</span>
-            </button>
+            </Bubble>
           );
         })}
 
       {bubble && bubblePos && (
-        <div className="bubble" style={bubbleAt(bubblePos.x, bubblePos.y)} onClick={() => setBubbleAgent(null)}>
+        <Bubble x={bubblePos.x} y={bubblePos.y} onClick={() => setBubbleAgent(null)}>
           <div className="bubble-name">
             {bubble.name} · {TEAMS[office.team].roleTitles[bubble.role]}
           </div>
@@ -133,7 +169,7 @@ export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
               {t('도와주기')}
             </button>
           )}
-        </div>
+        </Bubble>
       )}
 
       {menu && menuPos && (

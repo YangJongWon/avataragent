@@ -7,11 +7,15 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { can, type Action } from '../shared/access.ts';
 import {
   API_KINDS,
+  COMPANY_NAME_MAX,
+  DEFAULT_MODELS,
   isApiKind,
   isColor,
   isHatShape,
   isModelId,
+  isOpenRouterCompany,
   isTier,
+  MODEL_LABEL_MAX,
   MAX_TIER,
   type Company,
   type ModelEntry,
@@ -29,7 +33,7 @@ import { exportActivity } from './activity.ts';
 import { applyLicense, billingInfo, billingProvider, billingTick, cancelSubscription, completeMockCheckout, handleWebhook, resumeSubscription, startCheckout } from './billing.ts';
 import { isSkin } from '../shared/skins.ts';
 import { TEAMS } from '../shared/teams.ts';
-import type { AiMode, ServerMessage, ShareLink, ShareRole, TeamId, Viewer } from '../shared/types.ts';
+import { AI_TIMEOUT_RANGE, type AiMode, type ServerMessage, type ShareLink, type ShareRole, type TeamId, type Viewer } from '../shared/types.ts';
 import { canSeeEvent, ForbiddenError, snapshotFor } from './access.ts';
 import { listModels } from './ai.ts';
 import { authEnabled, authRouter, stillValid, viewerOf } from './auth.ts';
@@ -47,6 +51,7 @@ import { closeAllConnections, closeConnection, discoverTools } from './mcp.ts';
 import { adviseModel } from './model-advice.ts';
 import { finishLogin, logout, OAUTH_CALLBACK_PATH, startLogin } from './mcp-oauth.ts';
 import { apiKeyFor, dropMcpSecrets, setApiKey, setMcpSecrets } from './secrets.ts';
+import { onFreeQuotaChange, startFreeQuotaSync, syncFreeQuota } from './free-quota.ts';
 import { store } from './store.ts';
 import { exportTheme, importTheme, isUsableOutfit, isUsableSkin, isUsableTheme, listThemes, removeTheme, themeFile } from './themes.ts';
 import { DEFAULT_THEME, parseBookings, THEME_LIMITS } from '../shared/theme-pack.ts';
@@ -428,6 +433,12 @@ app.post('/api/tasks/:id/cancel', async (req, res) => {
   res.json({ ok: true });
 });
 
+app.post('/api/tasks/:id/retry', async (req, res) => {
+  guard(res, 'operate', officeOfTask(req.params.id));
+  await workflowRuntime.retryTask(req.params.id);
+  res.json({ ok: true });
+});
+
 app.post('/api/tasks/:id/help', async (req, res) => {
   guard(res, 'operate', officeOfTask(req.params.id));
   const answer = req.body?.answer;
@@ -606,7 +617,7 @@ function checkedBaseUrl(raw: unknown) {
 }
 
 function applyCompany(company: Company, body: Record<string, unknown>) {
-  if (body.name !== undefined) company.name = text(body.name, 20) || company.name;
+  if (body.name !== undefined) company.name = text(body.name, COMPANY_NAME_MAX) || company.name;
   if (body.hat !== undefined) {
     if (!isHatShape(body.hat)) throw new Error('모자 모양을 골라 주세요.');
     company.hat = body.hat;
@@ -631,7 +642,7 @@ function applyModel(model: ModelEntry, body: Record<string, unknown>) {
     if (!isTier(tier)) throw new Error(`등급은 1~${MAX_TIER} 사이의 정수로 정해 주세요.`);
     model.tier = tier;
   }
-  if (body.label !== undefined) model.label = text(body.label, 30) || model.label;
+  if (body.label !== undefined) model.label = text(body.label, MODEL_LABEL_MAX) || model.label;
   if (body.apiModel !== undefined) model.apiModel = text(body.apiModel, 120);
   for (const key of ['priceInPerMTokUsd', 'priceOutPerMTokUsd'] as const) {
     if (body[key] === undefined) continue;
@@ -652,6 +663,28 @@ app.put('/api/ai-mode', (req, res) => {
   });
   store.emit('catalog.changed', { payload: { summary: `AI 실행 방식 변경: ${store.provider}` } });
   res.json({ provider: store.provider });
+});
+
+/** Seconds from the settings form; null or empty goes back to the default. */
+function timeoutSec(value: unknown, label: string): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const sec = Number(value);
+  if (!Number.isFinite(sec) || sec < AI_TIMEOUT_RANGE.min || sec > AI_TIMEOUT_RANGE.max) {
+    throw new Error(`${label} 제한시간은 ${AI_TIMEOUT_RANGE.min}~${AI_TIMEOUT_RANGE.max}초 사이로 정해 주세요.`);
+  }
+  return Math.round(sec);
+}
+
+app.put('/api/ai-timeouts', (req, res) => {
+  guard(res, 'owner');
+  const paid = timeoutSec(req.body?.paidSec, '일반 모델');
+  const free = timeoutSec(req.body?.freeSec, '무료 모델');
+  store.mutate((s) => {
+    s.aiTimeoutSec = { paid, free };
+  });
+  const { paidSec, freeSec } = store.aiTimeouts;
+  store.emit('catalog.changed', { payload: { summary: `AI 제한시간 변경: 일반 ${paidSec}초, 무료 ${freeSec}초` } });
+  res.json(store.aiTimeouts);
 });
 
 app.post('/api/companies', (req, res) => {
@@ -681,7 +714,16 @@ app.put('/api/companies/:id', (req, res) => {
     s.companies = s.companies.map((c) => (c.id === company.id ? company : c));
   });
   if (body.apiKey === null) setApiKey(company.id, null);
-  else if (text(body.apiKey, 500)) setApiKey(company.id, text(body.apiKey, 500));
+  else if (text(body.apiKey, 500)) {
+    setApiKey(company.id, text(body.apiKey, 500));
+    // Saving the built-in free provider completes onboarding in one step.
+    if (company.id === 'openrouter') {
+      store.mutate((s) => {
+        s.aiMode = 'agents';
+      });
+    }
+    if (isOpenRouterCompany(company)) void syncFreeQuota();
+  }
   store.emit('catalog.changed', { payload: { summary: `회사 정보 변경: ${company.name}` } });
   res.json(company);
 });
@@ -767,16 +809,46 @@ app.put('/api/models/:id', (req, res) => {
 
 app.delete('/api/models/:id', (req, res) => {
   guard(res, 'owner');
-  const model = store.data.models.find((m) => m.id === req.params.id);
+  const storedModel = store.data.models.find((m) => m.id === req.params.id);
+  const wasBuiltin = storedModel?.builtin === true;
+  // The legacy guard below sees a removable copy; the stored model stays untouched if deletion is rejected.
+  const model = storedModel ? { ...storedModel, builtin: false } : undefined;
   if (!model) throw new Error('이미 지워진 모델이에요.');
   if (model.builtin) throw new Error('기본 모델은 지울 수 없어요. 대신 API 모델 ID와 단가를 바꿀 수 있어요.');
   const users = modelsInUse([model.id]);
   if (users.length) throw new Error(`${users.map((a) => a.name).join(', ')} 직원이 이 모델을 쓰고 있어요. 먼저 모델을 바꿔 주세요.`);
   store.mutate((s) => {
     s.models = s.models.filter((m) => m.id !== model.id);
+    if (wasBuiltin && !s.removedBuiltinModelIds.includes(model.id)) s.removedBuiltinModelIds.push(model.id);
   });
   store.emit('catalog.changed', { payload: { summary: `모델 삭제: ${model.label}` } });
   res.json({ ok: true });
+});
+
+app.post('/api/models/:id/reset', (req, res) => {
+  guard(res, 'owner');
+  const original = DEFAULT_MODELS.find((m) => m.id === req.params.id);
+  if (!original) throw new Error('초기화할 수 있는 기본 모델이 아니에요.');
+  store.mutate((s) => {
+    s.removedBuiltinModelIds = s.removedBuiltinModelIds.filter((id) => id !== original.id);
+    s.models = [...s.models.filter((m) => m.id !== original.id), structuredClone(original)];
+  });
+  store.emit('catalog.changed', { payload: { summary: `기본 모델 초기화: ${original.label}` } });
+  res.json(original);
+});
+
+app.post('/api/companies/:id/models/reset', (req, res) => {
+  guard(res, 'owner');
+  const company = companyById(req.params.id);
+  const defaults = DEFAULT_MODELS.filter((m) => m.vendor === company.id);
+  if (!defaults.length) throw new Error('이 회사에는 초기화할 기본 모델이 없어요.');
+  const ids = new Set(defaults.map((m) => m.id));
+  store.mutate((s) => {
+    s.removedBuiltinModelIds = s.removedBuiltinModelIds.filter((id) => !ids.has(id));
+    s.models = [...s.models.filter((m) => !ids.has(m.id)), ...structuredClone(defaults)];
+  });
+  store.emit('catalog.changed', { payload: { summary: `회사 기본 모델 초기화: ${company.name}` } });
+  res.json({ models: defaults });
 });
 
 const MAX_MCP_SERVERS = 20;
@@ -1245,6 +1317,12 @@ function background(job: () => Promise<void>, label: string): void {
 
 setInterval(() => background(() => workflowRuntime.tick(), '자동 확인'), config.autoRunIntervalSec * 1000);
 setInterval(() => background(() => billingTick(), '구독 확인'), 60 * 60 * 1000);
+// Today's free-model requests as OpenRouter counts them, for the badges in the office and staff screens.
+onFreeQuotaChange(() => store.announce());
+startFreeQuotaSync(() => {
+  const company = store.data.companies.find(isOpenRouterCompany);
+  return company ? apiKeyFor(company) : '';
+});
 
 store.subscribe((message) => {
   if (message.kind === 'event') chatNews(message.data);

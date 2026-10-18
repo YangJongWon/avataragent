@@ -117,6 +117,8 @@ export function eventLabel(event: OfficeEvent, agents: Map<string, Agent>) {
       return tpl('업무 중단', { reason: String(p.reason ?? '') });
     case 'task.paused':
       return tpl('{who} 일시정지', { who });
+    case 'task.retried':
+      return p.step ? tpl('{step} 단계부터 다시 진행', { step: String(p.step) }) : t('업무 다시 진행');
     case 'task.resumed':
       return tpl('{who} 재개', { who });
     case 'rule.changed':

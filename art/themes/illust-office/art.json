@@ -12,7 +12,7 @@
   "negative": "lowres, bad anatomy, bad hands, text, error, missing finger, extra digits, fewer digits, cropped, worst quality, low quality, low score, bad score, average score, signature, watermark, username, blurry, multiple views, reference sheet, 2girls, 3girls, multiple girls, clones, cropped legs, out of frame, border, frame, realistic, photorealistic, 3d, tall, long legs, realistic proportions, mature female, shadow, drop shadow, cast shadow, shadow on floor",
   "tokens": {
     "accent": "#e8925a",
-    "primary": "#5b8def",
+    "primary": "#3d6fd6",
     "bg": "#f6ecdf",
     "paper": "#fffaf3",
     "line": "#5a3f33",

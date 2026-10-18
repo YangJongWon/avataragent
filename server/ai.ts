@@ -1,5 +1,6 @@
-import { API_KINDS, companyOf, type ApiKind, type ModelEntry } from '../shared/models.ts';
+import { API_KINDS, companyOf, isFreeOpenRouterModel, isOpenRouterCompany, OPENROUTER_FREE_ROUTER, type ApiKind, type ModelEntry } from '../shared/models.ts';
 import { config } from './config.ts';
+import { freeQuota, noteFreeExhausted, noteFreeRequest } from './free-quota.ts';
 import { apiKeyFor } from './secrets.ts';
 import { store } from './store.ts';
 
@@ -64,10 +65,12 @@ export async function complete(req: CompletionRequest): Promise<CompletionResult
 
 class ProviderRequestError extends Error {
   readonly retryable: boolean;
+  readonly status: number | undefined;
 
-  constructor(message: string, retryable: boolean) {
+  constructor(message: string, retryable: boolean, status?: number) {
     super(message);
     this.retryable = retryable;
+    this.status = status;
   }
 }
 
@@ -157,11 +160,11 @@ function requireKey(key: string, name: string) {
   if (!key) throw new Error(`${name} API 키가 없습니다. 모델 관리에서 키를 등록하거나 .env 파일을 확인해 주세요.`);
 }
 
-const postJson = (url: string, headers: Record<string, string>, body: unknown) => requestJson('POST', url, headers, body);
+const postJson = (url: string, headers: Record<string, string>, body: unknown, timeoutMs?: number) => requestJson('POST', url, headers, body, timeoutMs);
 
-async function requestJson(method: 'GET' | 'POST', url: string, headers: Record<string, string>, body?: unknown) {
+async function requestJson(method: 'GET' | 'POST', url: string, headers: Record<string, string>, body?: unknown, timeoutMs = store.aiTimeouts.paidSec * 1000) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.aiTimeoutMs);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
       method,
@@ -172,7 +175,7 @@ async function requestJson(method: 'GET' | 'POST', url: string, headers: Record<
     const text = await res.text();
     if (!res.ok) {
       const retryable = res.status === 408 || res.status === 409 || res.status === 429 || res.status >= 500;
-      throw new ProviderRequestError(`AI 호출 실패 (${res.status}): ${text.slice(0, 300)}`, retryable);
+      throw new ProviderRequestError(`AI 호출 실패 (${res.status}): ${text.slice(0, 300)}`, retryable, res.status);
     }
     try {
       return JSON.parse(text);
@@ -181,18 +184,61 @@ async function requestJson(method: 'GET' | 'POST', url: string, headers: Record<
     }
   } catch (error) {
     if (error instanceof ProviderRequestError) throw error;
-    if (controller.signal.aborted) throw new ProviderRequestError(`AI 호출이 ${config.aiTimeoutMs}ms 제한시간을 넘었습니다.`, true);
+    if (controller.signal.aborted) throw new ProviderRequestError(`AI 호출이 ${Math.round(timeoutMs / 1000)}초 제한시간을 넘었습니다.`, true);
     throw new ProviderRequestError(`AI 네트워크 호출 실패: ${error instanceof Error ? error.message : String(error)}`, true);
   } finally {
     clearTimeout(timer);
   }
 }
 
+/**
+ * Free OpenRouter models come and go every few months and are often busy: one that is gone or busy upstream is retried
+ * once through openrouter/free, and a used-up daily allowance is told plainly instead of being retried.
+ */
 async function openaiCompatible(endpoint: Endpoint, model: string, req: CompletionRequest): Promise<CompletionResult> {
+  if (!isOpenRouterCompany(endpoint) || !isFreeOpenRouterModel(model)) return openaiCompatibleOnce(endpoint, model, req);
+  try {
+    noteFreeRequest();
+    return await openaiCompatibleOnce(endpoint, model, req);
+  } catch (error) {
+    if (!(error instanceof ProviderRequestError)) throw error;
+    if (error.status === 429 && /per[- ]day|free-models-per-day/i.test(error.message)) {
+      noteFreeExhausted();
+      const { limit } = freeQuota();
+      throw new ProviderRequestError(
+        limit > 50
+          ? `OpenRouter 무료 모델의 오늘 사용 한도(하루 ${limit.toLocaleString()}회)를 다 썼어요. 한국 시간 오전 9시에 다시 채워져요.`
+          : 'OpenRouter 무료 모델의 오늘 사용 한도(하루 50회)를 다 썼어요. 한국 시간 오전 9시에 다시 채워지고, OpenRouter에 $10 이상 충전하면 무료 모델을 하루 1,000회까지 쓸 수 있어요.',
+        false,
+        429,
+      );
+    }
+    const gone = error.status === 404 || (error.status === 400 && /no endpoints|not a valid model|not available|does not exist/i.test(error.message));
+    // A popular free model is often busy at its provider; the router picks another free one.
+    const busy = error.status === 429 && /upstream|temporarily/i.test(error.message);
+    if ((gone || busy) && model !== OPENROUTER_FREE_ROUTER) {
+      noteFreeRequest();
+      return openaiCompatibleOnce(endpoint, OPENROUTER_FREE_ROUTER, req);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Free models run on shared hardware at some 30–40 tokens a second, and the reasoning ones think for thousands of tokens
+ * first: a research step took 2–3 minutes. Without the thinking it takes 20–60 seconds, so they skip it and get their own,
+ * longer time limit.
+ */
+async function openaiCompatibleOnce(endpoint: Endpoint, model: string, req: CompletionRequest): Promise<CompletionResult> {
   if (endpoint.api !== 'openai_compatible') requireKey(endpoint.key, endpoint.name);
+  const free = isOpenRouterCompany(endpoint) && isFreeOpenRouterModel(model);
   const data = await postJson(
     `${baseOf(endpoint)}/chat/completions`,
-    endpoint.key ? { authorization: `Bearer ${endpoint.key}` } : {},
+    {
+      ...(endpoint.key ? { authorization: `Bearer ${endpoint.key}` } : {}),
+      // OpenRouter credits the app by these in its public app rankings.
+      ...(isOpenRouterCompany(endpoint) ? { 'HTTP-Referer': 'https://avatarcast.app', 'X-Title': 'AvatarCast Office' } : {}),
+    },
     {
       model,
       messages: [
@@ -208,7 +254,9 @@ async function openaiCompatible(endpoint: Endpoint, model: string, req: Completi
         },
       ],
       ...(req.json ? { response_format: { type: 'json_object' } } : {}),
+      ...(free ? { reasoning: { enabled: false } } : {}),
     },
+    free ? store.aiTimeouts.freeSec * 1000 : undefined,
   );
   return {
     text: data.choices?.[0]?.message?.content ?? '',

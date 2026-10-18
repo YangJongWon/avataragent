@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { TEAMS } from '../../../shared/teams.ts';
 import type { Agent, StepLoop, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
@@ -13,8 +13,15 @@ interface Props {
   index: number;
   /** Leading steps that already started and stay as they are. */
   locked: number;
-  /** A finished task: edits never touch it, they are kept as a flow for the next task. */
-  template?: boolean;
+  /** A task whose journey can no longer change (finished, or past the point of editing): edits become a flow for the next task. */
+  template?: 'completed' | 'locked';
+  /** The task waits for the user's decision at this approval step; it can be given here too. */
+  approval?: {
+    estimatedKrw: number | null;
+    onApprove: (valueKrw?: number) => Promise<void>;
+    onRequestChanges: (comment: string) => Promise<void>;
+    onError: (message: string) => void;
+  };
   /** Footer save: the dialog always keeps edits as a draft until this is pressed. */
   saveLabel: string;
   showSave: boolean;
@@ -26,8 +33,44 @@ interface Props {
   onClose: () => void;
 }
 
+/** The decision the report panel offers, for when the approval step's dialog is the one open. */
+function ApprovalBox({ approval, onDone }: { approval: NonNullable<Props['approval']>; onDone: () => void }) {
+  const { t } = useLanguage();
+  const [value, setValue] = useState('');
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    try {
+      await fn();
+      onDone();
+    } catch (e) {
+      approval.onError(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="step-approval">
+      <b>🙋 {t('승인을 기다리고 있어요')}</b>
+      <div className="row wrap">
+        <label className="field-inline">
+          {t('인정할 가치(원)')}
+          <input type="number" min={0} placeholder={approval.estimatedKrw === null ? '' : String(approval.estimatedKrw)} value={value} onChange={(e) => setValue(e.target.value)} />
+        </label>
+        <button type="button" className="pixel-btn primary" disabled={busy} onClick={() => void run(() => approval.onApprove(value === '' ? undefined : Number(value)))}>
+          {t('승인하고 반영')}
+        </button>
+      </div>
+      <textarea rows={2} placeholder={t('수정 요청 내용 (예: 결론에 실행 일정을 추가해 주세요)')} value={comment} onChange={(e) => setComment(e.target.value)} />
+      <button type="button" className="pixel-btn" disabled={busy || !comment.trim()} onClick={() => void run(() => approval.onRequestChanges(comment.trim()))}>
+        {t('수정 요청 (가치 70%로 감액)')}
+      </button>
+    </div>
+  );
+}
+
 /** Edits one step of a task's journey in place: name, kind, who does it, instructions, loop, and its neighbours. */
-export function StepInspector({ team, agents, steps, index, locked, template, saveLabel, showSave, saveDisabled, saving, onSave, onDiscard, onChange, onClose }: Props) {
+export function StepInspector({ team, agents, steps, index, locked, template, approval, saveLabel, showSave, saveDisabled, saving, onSave, onDiscard, onChange, onClose }: Props) {
   const { t, tpl } = useLanguage();
   const step = steps[index];
   // A dialog of its own (portaled to the body so the bottom drawer on mobile never traps it).
@@ -81,7 +124,9 @@ export function StepInspector({ team, agents, steps, index, locked, template, sa
         </div>
         <div className="step-inspector">
           <p className="small muted">{stepKindHint(step.kind)}</p>
-          {template && <p className="small callout">✅ {t('완료된 업무라 이번 여정은 바뀌지 않아요. 저장하면 다음 업무에서 쓸 흐름이 돼요.')}</p>}
+          {approval && <ApprovalBox approval={approval} onDone={onClose} />}
+          {template === 'completed' && <p className="small callout">✅ {t('완료된 업무라 이번 여정은 바뀌지 않아요. 저장하면 다음 업무에서 쓸 흐름이 돼요.')}</p>}
+          {template === 'locked' && <p className="small callout">{t('지금은 이번 여정을 바꿀 수 없어요. 저장하면 다음 업무에서 쓸 흐름이 돼요.')}</p>}
       {readOnly && <p className="small callout">{t('이미 시작한 단계라 바꿀 수 없어요. 뒤의 단계는 고칠 수 있어요.')}</p>}
 
       <label className="field">

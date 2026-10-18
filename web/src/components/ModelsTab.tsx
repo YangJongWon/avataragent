@@ -2,11 +2,14 @@ import { useState } from 'react';
 import { t, tpl } from '../../../shared/i18n.ts';
 import {
   API_KINDS,
+  COMPANY_NAME_MAX,
   COMPATIBLE_SERVICES,
   HATS,
   companyLinks,
+  companyRequiresKey,
   hatName,
   linkLabel,
+  MODEL_LABEL_MAX,
   MAX_TIER,
   TIER_LABEL,
   tierHat,
@@ -19,7 +22,7 @@ import {
   type Tier,
   type TierLook,
 } from '../../../shared/models.ts';
-import type { AiMode, Snapshot } from '../../../shared/types.ts';
+import { AI_TIMEOUT_RANGE, type AiMode, type AiTimeouts, type Snapshot } from '../../../shared/types.ts';
 import { api, type CompanyInput, type ModelAdvice, type ModelInput } from '../api.ts';
 import { HatPreview } from './HatPreview.tsx';
 import { LinkRow } from './LinkRow.tsx';
@@ -27,6 +30,34 @@ import { LinkRow } from './LinkRow.tsx';
 type Notify = { onError: (m: string) => void; onNotice: (m: string) => void };
 
 const LOOKS: TierLook[] = [1, 2, 3];
+const HAT_COLORS = ['#c0392b', '#d97757', '#e0a800', '#16a085', '#2980b9', '#4c6ef5', '#7c3aed', '#c026d3', '#db2777', '#475569', '#7c4a21', '#111827'];
+type HatCandidate = { hat: HatShape; color: string };
+
+const rgb = (hex: string) => [1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16));
+const colorDistance = (a: string, b: string) => {
+  const x = rgb(a);
+  const y = rgb(b);
+  return Math.sqrt(x.reduce((sum, value, i) => sum + (value - y[i]) ** 2, 0));
+};
+
+/** Randomized, but biased toward combinations that are visually distinct from companies already in the office. */
+function hatCandidates(companies: Company[], editingId?: string): HatCandidate[] {
+  const used = companies.filter((c) => c.id !== editingId);
+  const pool = (Object.keys(HATS) as HatShape[]).flatMap((hat) => HAT_COLORS.map((color) => ({ hat, color, random: Math.random() * 80 })));
+  const picked: HatCandidate[] = [];
+  while (picked.length < 6 && pool.length) {
+    const references = [...used, ...picked];
+    const score = (candidate: HatCandidate & { random: number }) => {
+      if (!references.length) return candidate.random;
+      const nearest = Math.min(...references.map((other) => colorDistance(candidate.color, other.color) + (candidate.hat === other.hat ? 0 : 180)));
+      return nearest + candidate.random;
+    };
+    pool.sort((a, b) => score(b) - score(a));
+    const [best] = pool.splice(0, 1);
+    picked.push(best);
+  }
+  return picked;
+}
 
 /** The tiers in use, the one being edited, and one past each end, so a new lowest or highest tier can be made. */
 function tierChoices(current: Tier): Tier[] {
@@ -50,7 +81,7 @@ function KeyBadge({ company }: { company: Company }) {
   const key = company.key ?? { source: 'none', hint: '' };
   if (key.source === 'saved') return <span className="key-badge ok">🔑 {t('등록됨')} {key.hint}</span>;
   if (key.source === 'env') return <span className="key-badge ok">🔑 .env {key.hint}</span>;
-  if (company.api === 'openai_compatible') return <span className="key-badge">{t('키 없음 (필요 없으면 괜찮아요)')}</span>;
+  if (!companyRequiresKey(company)) return <span className="key-badge">{t('키 없음 (필요 없으면 괜찮아요)')}</span>;
   return <span className="key-badge warn">{t('키 없음')}</span>;
 }
 
@@ -100,7 +131,65 @@ function QuickKey({ company, onError, onNotice }: { company: Company } & Notify)
   );
 }
 
-function CompanyForm({ company, onDone, onError, onNotice }: { company: Company | null; onDone: () => void } & Notify) {
+/** How long one AI call may take before it is retried; free models get their own, longer limit. Empty keeps the default. */
+function TimeoutForm({ timeouts, onError, onNotice }: { timeouts: AiTimeouts } & Notify) {
+  const own = (sec: number, fallback: number) => (sec === fallback ? '' : String(sec));
+  const [paid, setPaid] = useState(own(timeouts.paidSec, timeouts.defaults.paidSec));
+  const [free, setFree] = useState(own(timeouts.freeSec, timeouts.defaults.freeSec));
+  const [busy, setBusy] = useState(false);
+  const changed = paid !== own(timeouts.paidSec, timeouts.defaults.paidSec) || free !== own(timeouts.freeSec, timeouts.defaults.freeSec);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const saved = await api.setAiTimeouts({ paidSec: paid.trim() ? Number(paid) : null, freeSec: free.trim() ? Number(free) : null });
+      onNotice(tpl('AI 응답 제한시간을 일반 {paid}초, 무료 {free}초로 정했어요. 다음 AI 호출부터 적용돼요.', { paid: saved.paidSec, free: saved.freeSec }));
+    } catch (e) {
+      onError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const input = (value: string, set: (v: string) => void, fallback: number) => (
+    <input
+      type="number"
+      min={AI_TIMEOUT_RANGE.min}
+      max={AI_TIMEOUT_RANGE.max}
+      step={10}
+      value={value}
+      placeholder={tpl('기본 {n}초', { n: fallback })}
+      onChange={(e) => set(e.target.value)}
+    />
+  );
+
+  return (
+    <>
+      <h3>{t('AI 응답 제한시간')}</h3>
+      <p className="muted small">
+        {tpl('AI가 이 시간 안에 답하지 않으면 다시 시도하고, 그래도 안 되면 업무가 멈춰요. 무료 모델은 느려서 따로 길게 둬요. {min}~{max}초, 비우면 기본값.', {
+          min: AI_TIMEOUT_RANGE.min,
+          max: AI_TIMEOUT_RANGE.max,
+        })}
+      </p>
+      <div className="row wrap timeout-row">
+        <label className="field">
+          {t('일반 모델 (초)')}
+          {input(paid, setPaid, timeouts.defaults.paidSec)}
+        </label>
+        <label className="field">
+          {t('무료 모델 (초)')}
+          {input(free, setFree, timeouts.defaults.freeSec)}
+        </label>
+        <button className="pixel-btn primary" type="button" disabled={busy || !changed} onClick={() => void save()}>
+          {t('저장')}
+        </button>
+      </div>
+    </>
+  );
+}
+
+function CompanyForm({ company, companies, onDone, onError, onNotice }: { company: Company | null; companies: Company[]; onDone: () => void } & Notify) {
   const [form, setForm] = useState<CompanyInput>(
     company
       ? { name: company.name, hat: company.hat, color: company.color, api: company.api, baseUrl: company.baseUrl }
@@ -109,6 +198,7 @@ function CompanyForm({ company, onDone, onError, onNotice }: { company: Company 
   const [apiKey, setApiKey] = useState('');
   const [found, setFound] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [hatPicks, setHatPicks] = useState<HatCandidate[]>([]);
   const set = (patch: Partial<CompanyInput>) => setForm((f) => ({ ...f, ...patch }));
   const savedKey = company?.key?.source === 'saved';
 
@@ -175,7 +265,7 @@ function CompanyForm({ company, onDone, onError, onNotice }: { company: Company 
       )}
       <label className="field">
         {t('회사 이름')}
-        <input value={form.name} maxLength={20} placeholder={t('예: DeepSeek')} onChange={(e) => set({ name: e.target.value })} />
+        <input value={form.name} maxLength={COMPANY_NAME_MAX} placeholder={t('예: DeepSeek')} onChange={(e) => set({ name: e.target.value })} />
       </label>
       <div className="row wrap">
         <label className="field grow">
@@ -192,6 +282,35 @@ function CompanyForm({ company, onDone, onError, onNotice }: { company: Company 
           {t('모자 색')}
           <input type="color" value={form.color} onChange={(e) => set({ color: e.target.value })} />
         </label>
+      </div>
+      <div className="hat-randomizer">
+        <div className="row between wrap">
+          <span className="muted small">{t('구분하기 쉬운 모자 후보')}</span>
+          <button className="pixel-btn small" type="button" onClick={() => setHatPicks(hatCandidates(companies, company?.id))}>
+            {hatPicks.length ? t('후보 새로 뽑기') : t('🎲 랜덤 후보 만들기')}
+          </button>
+        </div>
+        {hatPicks.length > 0 && (
+          <div className="hat-candidates" role="list" aria-label={t('구분하기 쉬운 모자 후보')}>
+            {hatPicks.map((pick) => {
+              const selected = form.hat === pick.hat && form.color.toLowerCase() === pick.color;
+              return (
+                <button
+                  key={`${pick.hat}-${pick.color}`}
+                  type="button"
+                  role="listitem"
+                  className={`hat-candidate ${selected ? 'selected' : ''}`}
+                  title={`${hatName(pick.hat)} · ${pick.color}`}
+                  aria-pressed={selected}
+                  onClick={() => set({ hat: pick.hat, color: pick.color })}
+                >
+                  <HatPreview hat={pick.hat} color={pick.color} look={2} />
+                  <span>{hatName(pick.hat)}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
       <label className="field">
         {t('API 종류')}
@@ -355,7 +474,7 @@ function ModelForm({
         <div className="row wrap">
           <label className="field grow">
             {t('화면에 보일 이름')}
-            <input value={form.label} maxLength={30} placeholder={t('예: DeepSeek Chat')} onChange={(e) => set({ label: e.target.value })} />
+            <input value={form.label} maxLength={MODEL_LABEL_MAX} placeholder={t('예: DeepSeek Chat')} onChange={(e) => set({ label: e.target.value })} />
           </label>
           <label className="field grow">
             <span className="row between">
@@ -440,7 +559,7 @@ export function ModelsTab({ snapshot, onError, onNotice }: { snapshot: Snapshot 
   const mode = snapshot.aiMode ?? 'env';
   const live = snapshot.provider === 'agents';
   const missingKeys = live
-    ? companies.filter((c) => c.key?.source === 'none' && c.api !== 'openai_compatible' && agents.some((a) => models.find((m) => m.id === a.model)?.vendor === c.id))
+    ? companies.filter((c) => c.key?.source === 'none' && companyRequiresKey(c) && agents.some((a) => models.find((m) => m.id === a.model)?.vendor === c.id))
     : [];
 
   const changeMode = async (next: AiMode) => {
@@ -515,6 +634,12 @@ export function ModelsTab({ snapshot, onError, onNotice }: { snapshot: Snapshot 
         )}
       </section>
 
+      {snapshot.aiTimeouts && (
+        <section className="pixel-box section">
+          <TimeoutForm timeouts={snapshot.aiTimeouts} onError={onError} onNotice={onNotice} />
+        </section>
+      )}
+
       <section className="pixel-box section">
         <div className="row between">
           <h3>{t('회사 · 모자 모양')}</h3>
@@ -527,13 +652,13 @@ export function ModelsTab({ snapshot, onError, onNotice }: { snapshot: Snapshot 
         <div className="company-grid">
           {editCompany === 'new' && (
             <div className="company-card editing">
-              <CompanyForm company={null} onDone={() => setEditCompany(null)} onError={onError} onNotice={onNotice} />
+              <CompanyForm company={null} companies={companies} onDone={() => setEditCompany(null)} onError={onError} onNotice={onNotice} />
             </div>
           )}
           {companies.map((c) =>
             editCompany === c.id ? (
               <div key={c.id} className="company-card editing">
-                <CompanyForm company={c} onDone={() => setEditCompany(null)} onError={onError} onNotice={onNotice} />
+                <CompanyForm company={c} companies={companies} onDone={() => setEditCompany(null)} onError={onError} onNotice={onNotice} />
               </div>
             ) : (
               <div key={c.id} className="company-card">
