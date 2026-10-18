@@ -12,6 +12,7 @@ import {
 } from '../../../shared/mcp.ts';
 import type { Office, Snapshot } from '../../../shared/types.ts';
 import { api, type McpServerInput } from '../api.ts';
+import { MailAccountBox } from './MailAccountBox.tsx';
 import { LinkRow } from './LinkRow.tsx';
 import { currentLanguage, localeOf, t, tpl } from '../../../shared/i18n.ts';
 
@@ -72,7 +73,8 @@ function McpForm({
   onDone,
   onError,
   onNotice,
-}: { server: McpServer | null; preset: McpPreset | null; offices: Office[]; stdioAllowed: boolean; onDone: () => void } & Notify) {
+  onOpenMail,
+}: { server: McpServer | null; preset: McpPreset | null; offices: Office[]; stdioAllowed: boolean; onDone: () => void; onOpenMail?: () => void } & Notify) {
   const [form, setForm] = useState<McpServerInput>(
     server
       ? {
@@ -164,6 +166,20 @@ function McpForm({
 
   return (
     <div className="company-form">
+      {known?.id === 'gmail' && !server && (
+        <div className="callout mail-shortcut">
+          <span>
+            <b>📮 {t('메일함을 읽고 정리하는 것만 필요하다면 더 쉬운 방법이 있어요.')}</b>
+            <br />
+            {t('구글 클라우드 설정 없이, 이 화면 위쪽의 "메일 계정 연결"에 Gmail 주소와 앱 비밀번호만 넣으면 돼요. 승인하면 Gmail 라벨 붙이기와 보관도 해요. 아래 MCP 연결은 직원이 조사 중에 Gmail을 검색하거나 초안을 만들게 할 때 써요.')}
+          </span>
+          {onOpenMail && (
+            <button type="button" className="pixel-btn small primary" onClick={onOpenMail}>
+              {t('메일 계정 연결로 가기')} →
+            </button>
+          )}
+        </div>
+      )}
       {known && <p className="muted small">{known.note}</p>}
       <LinkRow links={known?.links} />
       <div className="row wrap">
@@ -354,6 +370,16 @@ function ToolList({ server, onError }: { server: McpServer } & Pick<Notify, 'onE
 const ON_THIS_PC = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(location.hostname);
 
 export function McpTab({ snapshot, onError, onNotice }: { snapshot: Snapshot } & Notify) {
+  // The mail account feeds the HR office's mailbox; it is set up here with the other connections.
+  const hr = snapshot.offices.find((o) => o.team === 'hr');
+  const runMail = async (fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+    } catch (e) {
+      onError(message(e));
+    }
+  };
+  const onOpenMail = () => document.getElementById('mail-account')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const servers = snapshot.mcpServers ?? [];
   // Built-in connections always work; a command typed in by hand is saved from the PC running the app (or with MCP_ALLOW_STDIO=1).
   const stdioAllowed = Boolean(snapshot.mcpStdioAllowed) || ON_THIS_PC;
@@ -409,13 +435,19 @@ export function McpTab({ snapshot, onError, onNotice }: { snapshot: Snapshot } &
     }
   };
 
-  const formProps = { offices: snapshot.offices, stdioAllowed, onDone: () => setEditing(null), onError, onNotice };
+  const formProps = { offices: snapshot.offices, stdioAllowed, onDone: () => setEditing(null), onError, onNotice, onOpenMail };
 
   return (
     <div className="page">
       <h2>{t('MCP 관리')}</h2>
       <p className="muted">{t('검색, Notion, 메일 같은 외부 기능을 MCP 서버로 연결해요. 도구마다 조사 때 자동으로 쓸지, 메일 발송처럼 승인 후 실행할지 고를 수 있어요. 도구 호출과 결과는 업무 기록에 남아요.')}</p>
       {!stdioAllowed && <p className="muted small">{t('ℹ 직접 입력한 실행 명령(npx·uvx)은 보안을 위해 이 앱을 실행 중인 PC에서 열어야 등록할 수 있어요. 기본 제공 연결은 어디서든 쓸 수 있어요.')}</p>}
+
+      {hr && (
+        <section className="pixel-box section" id="mail-account">
+          <MailAccountBox snapshot={snapshot} office={hr} run={runMail} onNotice={onNotice} />
+        </section>
+      )}
 
       <section className="pixel-box section">
         <div className="row between">

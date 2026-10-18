@@ -3447,3 +3447,13 @@ p.plan-note {
   gap: 4px;
   margin-top: 4px;
 }
+
+/* The Gmail MCP form points to the simpler mail account connection first. */
+.mail-shortcut {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}

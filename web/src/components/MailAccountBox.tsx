@@ -55,7 +55,9 @@ export function MailAccountBox({
 
   return (
     <div className="mail-account">
-      <b>📮 {t('메일 계정 연결')}</b>
+      <b>
+        📮 {t('메일 계정 연결')} <span className="muted small">→ {t(office.name)}</span>
+      </b>
       {account ? (
         <div className="row wrap">
           <span>

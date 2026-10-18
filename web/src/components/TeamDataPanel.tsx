@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { TEAMS } from '../../../shared/teams.ts';
 import type { Office, Recommendation, Snapshot } from '../../../shared/types.ts';
 import { api } from '../api.ts';
-import { MailAccountBox } from './MailAccountBox.tsx';
 import { SchedulesPanel } from './SchedulesPanel.tsx';
 import { krw, timeOf } from '../format.ts';
 import { useLanguage } from '../LanguageProvider.tsx';
@@ -59,7 +58,6 @@ function HrData({ snapshot, office, busy, onStart, onNotice, run }: Props & Run)
   const pending = snapshot.mailbox.filter((m) => !m.processed);
   return (
     <>
-      <MailAccountBox snapshot={snapshot} office={office} run={run} onNotice={onNotice} />
       <div className="row">
         <button className="pixel-btn small" onClick={() => run(api.simulateMail)}>
           📨 {t('새 메일 도착 (시뮬레이션)')}

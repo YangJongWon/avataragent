@@ -1533,6 +1533,13 @@ export const CATALOGUE: Catalogue = {
   '앱 비밀번호 만들기': { zh: '创建应用密码', ja: 'アプリパスワードを作成', en: 'Create an app password' },
   'IMAP 설정 열기': { zh: '打开 IMAP 设置', ja: 'IMAP 設定を開く', en: 'Open IMAP settings' },
   '다음 메일 열기': { zh: '打开 Daum 邮箱', ja: 'Daum メールを開く', en: 'Open Daum Mail' },
+  '메일함을 읽고 정리하는 것만 필요하다면 더 쉬운 방법이 있어요.': { zh: '如果只需要读取和整理邮箱，有更简单的方法。', ja: 'メールボックスを読んで整理するだけなら、もっと簡単な方法があります。', en: 'If you only need your inbox read and sorted, there is an easier way.' },
+  '구글 클라우드 설정 없이, 이 화면 위쪽의 "메일 계정 연결"에 Gmail 주소와 앱 비밀번호만 넣으면 돼요. 승인하면 Gmail 라벨 붙이기와 보관도 해요. 아래 MCP 연결은 직원이 조사 중에 Gmail을 검색하거나 초안을 만들게 할 때 써요.': {
+    zh: '无需 Google Cloud 设置，只要在本页上方的“邮箱账户连接”中填入 Gmail 地址和应用密码即可。批准后还会添加 Gmail 标签并归档。下面的 MCP 连接用于让员工在调研时搜索 Gmail 或创建草稿。',
+    ja: 'Google Cloud の設定なしで、この画面上部の「メールアカウント連携」に Gmail アドレスとアプリパスワードを入れるだけです。承認すると Gmail のラベル付けとアーカイブも行います。下の MCP 接続は、スタッフが調査中に Gmail を検索したり下書きを作ったりするときに使います。',
+    en: 'No Google Cloud setup: put your Gmail address and an app password into "Mail account" at the top of this page. Approving also labels and archives in Gmail. The MCP connection below is for letting staff search Gmail or write drafts while researching.',
+  },
+  '메일 계정 연결로 가기': { zh: '前往邮箱账户连接', ja: 'メールアカウント連携へ', en: 'Go to mail account' },
   '승인을 기다리고 있어요': { zh: '正在等待批准', ja: '承認を待っています', en: 'Waiting for your approval' },
   '지금은 이번 여정을 바꿀 수 없어요. 저장하면 다음 업무에서 쓸 흐름이 돼요.': { zh: '现在无法更改本次流程。保存后将成为下次任务使用的流程。', ja: '今はこの流れを変えられません。保存すると次の業務で使う流れになります。', en: "This task's journey can't change now. Saving keeps it as a flow for the next task." },
   '알아서 진행': { zh: '自行推进', ja: 'おまかせで進める', en: 'Carry on with a guess' },
