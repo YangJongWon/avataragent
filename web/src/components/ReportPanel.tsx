@@ -1,4 +1,4 @@
-import { t, tpl } from '../../../shared/i18n.ts';
+import { localize, t, tpl } from '../../../shared/i18n.ts';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { useMemo, useState, type ReactNode } from 'react';
@@ -208,7 +208,7 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
           <div className="approval-title">🙋 {t('사용자 승인')}</div>
           {task.proposal && (
             <div className="proposal">
-              <b>{t(task.proposal.headline)}</b>
+              <b>{t(localize(task.proposal.headline))}</b>
               {task.proposal.lines.length > 0 && (
                 <ul>
                   {task.proposal.lines.map((line, i) => (

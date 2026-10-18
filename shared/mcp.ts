@@ -76,6 +76,8 @@ export interface McpServer {
   stats?: McpUsage;
   /** http only: sign in through the server's OAuth login instead of a fixed token. */
   oauth?: boolean;
+  /** stdio: a command typed in by hand, saved from the PC running the app (see isLocalRequest). */
+  localApproved?: boolean;
   /** Snapshot-only OAuth state; tokens never leave the server. */
   login?: McpLoginInfo;
 }
@@ -237,3 +239,16 @@ export const isToolMode = (value: unknown): value is McpToolMode => value === 'o
 
 export const usableBy = (server: McpServer, officeId: string) =>
   server.enabled && (server.officeIds === 'all' || server.officeIds.includes(officeId));
+
+/**
+ * The built-in connection a stdio command line is, if any. These start a known package with fixed arguments, so they
+ * work without any extra permission; only a command typed in by hand has to be saved from the PC running the app.
+ */
+export function stdioPresetOf(server: Pick<McpServer, 'transport' | 'command' | 'args'>): McpPreset | null {
+  if (server.transport !== 'stdio') return null;
+  return (
+    MCP_PRESETS.find(
+      (p) => p.id !== 'custom' && p.transport === 'stdio' && p.command === server.command && (p.args ?? []).length === server.args.length && (p.args ?? []).every((a, i) => a === server.args[i]),
+    ) ?? null
+  );
+}

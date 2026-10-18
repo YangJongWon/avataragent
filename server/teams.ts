@@ -3,7 +3,7 @@ import { TEAMS } from '../shared/teams.ts';
 import type { Proposal, Recommendation, Role, Task, TeamId } from '../shared/types.ts';
 import { parseJson } from './ai.ts';
 import { store } from './store.ts';
-import { L, LT } from './text.ts';
+import { L, LT, V } from './text.ts';
 
 export interface Inputs {
   text: string;
@@ -98,10 +98,10 @@ const dev: TeamSpec = {
     },
   },
   buildProposal: (_json, task) => ({
-    headline: L('승인하면 보고서가 보고서함에 보관됩니다.'),
-    lines: [`📄 ${L(task.title)}`],
+    headline: V('승인하면 보고서가 보고서함에 보관됩니다.'),
+    lines: [`📄 ${task.title}`],
   }),
-  onApprove: (_json, task) => LT('보고서 "{title}"를 보고서함에 보관했어요.', { title: L(task.title) }),
+  onApprove: (_json, task) => V('보고서 "{title}"를 보고서함에 보관했어요.', { title: task.title }),
 };
 
 // ───────────────────────────── 인사팀 ─────────────────────────────
@@ -191,7 +191,7 @@ const hr: TeamSpec = {
   buildProposal(json) {
     const { summaries, events } = parseHr(json);
     return {
-      headline: LT('승인하면 일정 {events}건을 캘린더에 등록하고 메일 {mails}통을 처리 완료로 표시합니다.', { events: events.length, mails: summaries.length }),
+      headline: V('승인하면 일정 {events}건을 캘린더에 등록하고 메일 {mails}통을 처리 완료로 표시합니다.', { events: events.length, mails: summaries.length }),
       lines: [
         ...events.map((e) => `📅 ${e.date} ${e.start}~${e.end} ${e.title}${e.location ? ` (${e.location})` : ''}`),
         ...summaries.map((s) => `✉️ [${s.category}] ${s.summary} → ${s.action}`),
@@ -219,7 +219,7 @@ const hr: TeamSpec = {
       s.calendar.sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
       for (const m of s.mailbox) if (task.inputIds.includes(m.id)) m.processed = true;
     });
-    return LT('일정 {added}건을 캘린더에 등록하고 메일 {mails}통을 정리했어요.', { added, mails: task.inputIds.length });
+    return V('일정 {added}건을 캘린더에 등록하고 메일 {mails}통을 정리했어요.', { added, mails: task.inputIds.length });
   },
 };
 
@@ -315,7 +315,7 @@ const mgmt: TeamSpec = {
     const allocations = parseMgmt(json);
     const offices = store.data.offices;
     return {
-      headline: LT('승인하면 {n}개 팀의 월 예산 상한을 아래처럼 바꿉니다.', { n: allocations.length }),
+      headline: V('승인하면 {n}개 팀의 월 예산 상한을 아래처럼 바꿉니다.', { n: allocations.length }),
       lines: allocations.map((a) => {
         const o = offices.find((x) => x.id === a.officeId)!;
         const before = o.budgetKrw === null ? L('상한 없음') : krw(o.budgetKrw);
@@ -331,7 +331,7 @@ const mgmt: TeamSpec = {
         if (o) o.budgetKrw = Math.round(Number(a.budgetKrw));
       }
     });
-    return LT('{n}개 팀의 예산 상한을 반영했어요.', { n: allocations.length });
+    return V('{n}개 팀의 예산 상한을 반영했어요.', { n: allocations.length });
   },
 };
 
@@ -423,7 +423,7 @@ const support: TeamSpec = {
   buildProposal(json) {
     const replies = parseSupport(json);
     return {
-      headline: LT('승인하면 답변 {n}건이 발송 대기함에 들어갑니다. 실제 발송은 하지 않아요.', { n: replies.length }),
+      headline: V('승인하면 답변 {n}건이 발송 대기함에 들어갑니다. 실제 발송은 하지 않아요.', { n: replies.length }),
       lines: replies.map((r) => `✉️ [${r.urgency}·${r.category}] ${r.subject}`),
     };
   },
@@ -448,7 +448,7 @@ const support: TeamSpec = {
       }
       s.outbox = s.outbox.slice(0, 100);
     });
-    return LT('답변 {n}건을 발송 대기함에 넣었어요.', { n: replies.length });
+    return V('답변 {n}건을 발송 대기함에 넣었어요.', { n: replies.length });
   },
 };
 
@@ -572,7 +572,7 @@ const welfare: TeamSpec = {
   buildProposal(json) {
     const recs = parseWelfare(json);
     return {
-      headline: LT('승인하면 추천 {n}개가 추천 보관함에 저장됩니다.', { n: recs.length }),
+      headline: V('승인하면 추천 {n}개가 추천 보관함에 저장됩니다.', { n: recs.length }),
       lines: recs.map((r) => `${KIND_EMOJI[r.kind]} ${r.title} — ${r.reason}`),
     };
   },
@@ -590,7 +590,7 @@ const welfare: TeamSpec = {
       }));
       s.recommendations = [...items, ...s.recommendations].slice(0, 60);
     });
-    return LT('추천 {n}개를 추천 보관함에 저장했어요.', { n: recs.length });
+    return V('추천 {n}개를 추천 보관함에 저장했어요.', { n: recs.length });
   },
 };
 

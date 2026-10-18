@@ -1,5 +1,5 @@
 import { companyOf, modelOf, tierLabel } from '../../shared/models.ts';
-import { currentLanguage, localeOf, num, t, tpl, type Vars } from '../../shared/i18n.ts';
+import { currentLanguage, localeOf, localize, num, t, tpl, type Vars } from '../../shared/i18n.ts';
 import { improvementReasonVars } from '../../shared/performance.ts';
 import { TEAMS } from '../../shared/teams.ts';
 import type { Agent, Office, OfficeEvent, TaskStatus } from '../../shared/types.ts';
@@ -132,7 +132,7 @@ export function eventLabel(event: OfficeEvent, agents: Map<string, Agent>) {
     case 'budget.exceeded':
       return t(p.officeId ? '팀 예산 상한 초과' : '월 예산 초과');
     case 'team.applied':
-      return tpl('반영 완료', { summary: String(p.summary ?? '') });
+      return tpl('반영 완료', { summary: localize(String(p.summary ?? '')) });
     case 'mail.received':
       return tpl('새 메일 도착', { subject: String(p.subject ?? '') });
     case 'inquiry.received':

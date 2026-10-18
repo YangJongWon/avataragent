@@ -186,7 +186,7 @@ function McpForm({
         {(
           [
             ['http', t('주소로 연결 (HTTP)'), t('원격 MCP 서버 주소에 연결해요.')],
-            ['stdio', t('이 PC에서 실행 (명령)'), stdioAllowed ? t('npx·uvx 같은 명령으로 MCP 서버를 띄워요.') : t('.env에 MCP_ALLOW_STDIO=1이 필요해요.')],
+            ['stdio', t('이 PC에서 실행 (명령)'), stdioAllowed ? t('npx·uvx 같은 명령으로 MCP 서버를 띄워요.') : t('직접 입력한 명령은 앱을 실행 중인 PC에서 열어야 등록할 수 있어요.')],
           ] as [McpTransport, string, string][]
         ).map(([id, label, note]) => (
           <label key={id} className={`mode-option ${form.transport === id ? 'selected' : ''}`}>
@@ -350,9 +350,13 @@ function ToolList({ server, onError }: { server: McpServer } & Pick<Notify, 'onE
   );
 }
 
+/** The page is open on the PC running the app, where commands typed in by hand may be saved. */
+const ON_THIS_PC = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(location.hostname);
+
 export function McpTab({ snapshot, onError, onNotice }: { snapshot: Snapshot } & Notify) {
   const servers = snapshot.mcpServers ?? [];
-  const stdioAllowed = Boolean(snapshot.mcpStdioAllowed);
+  // Built-in connections always work; a command typed in by hand is saved from the PC running the app (or with MCP_ALLOW_STDIO=1).
+  const stdioAllowed = Boolean(snapshot.mcpStdioAllowed) || ON_THIS_PC;
   const [editing, setEditing] = useState<{ id: string | 'new'; preset: McpPreset | null } | null>(null);
   const [checking, setChecking] = useState<string | null>(null);
 
@@ -411,9 +415,7 @@ export function McpTab({ snapshot, onError, onNotice }: { snapshot: Snapshot } &
     <div className="page">
       <h2>{t('MCP 관리')}</h2>
       <p className="muted">{t('검색, Notion, 메일 같은 외부 기능을 MCP 서버로 연결해요. 도구마다 조사 때 자동으로 쓸지, 메일 발송처럼 승인 후 실행할지 고를 수 있어요. 도구 호출과 결과는 업무 기록에 남아요.')}</p>
-      {!stdioAllowed && (
-        <p className="warn-line">{t('⚠ 이 PC에서 명령을 실행하는 MCP(npx·uvx)는 꺼져 있어요. 쓰려면 .env에 MCP_ALLOW_STDIO=1을 넣고 서버를 다시 켜 주세요. 외부 공개 중이라면 비밀번호를 길게 바꾼 뒤 켜는 걸 권해요.')}</p>
-      )}
+      {!stdioAllowed && <p className="muted small">{t('ℹ 직접 입력한 실행 명령(npx·uvx)은 보안을 위해 이 앱을 실행 중인 PC에서 열어야 등록할 수 있어요. 기본 제공 연결은 어디서든 쓸 수 있어요.')}</p>}
 
       <section className="pixel-box section">
         <div className="row between">
@@ -424,7 +426,6 @@ export function McpTab({ snapshot, onError, onNotice }: { snapshot: Snapshot } &
             <button
               key={preset.id}
               className={`pixel-btn small ${editing?.id === 'new' && editing.preset?.id === preset.id ? 'primary' : ''}`}
-              disabled={preset.transport === 'stdio' && !stdioAllowed}
               title={t(preset.note)}
               onClick={() => setEditing({ id: 'new', preset })}
             >

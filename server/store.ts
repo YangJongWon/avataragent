@@ -43,7 +43,7 @@ import type {
   TeamId,
 } from '../shared/types.ts';
 import { reviewLoop, templatePlan } from '../shared/workflow.ts';
-import { DEFAULT_LANGUAGE, isLanguage, type Language } from '../shared/i18n.ts';
+import { DEFAULT_LANGUAGE, isLanguage, viewerText, type Language } from '../shared/i18n.ts';
 import { config, ORGANIZATION_SAFETY_RULES, type ProviderName } from './config.ts';
 import { appendEvent, loadKv, loadRelationalState, maxSeq, onStorageConflict, recentEvents, saveRelationalState } from './db.ts';
 import { loginInfo } from './mcp-oauth.ts';
@@ -126,7 +126,7 @@ function newAgent(office: Office, role: Role, id: string, name: string): Agent {
     skin: 'pixel',
     status: 'idle',
     expression: 'normal',
-    activity: '휴게실에서 쉬고 있어요. ☕',
+    activity: viewerText('휴게실에서 쉬고 있어요. ☕'),
     paused: false,
     workPolicy: structuredClone(DEFAULT_WORK_POLICY),
     dailyUsage: freshDailyUsage(DEFAULT_WORK_POLICY),
@@ -294,7 +294,7 @@ class Store {
       if (!isAgentSkin(agent.skin)) agent.skin = 'pixel';
       agent.status = agent.paused ? 'paused' : 'idle';
       agent.expression = 'normal';
-      agent.activity = agent.paused ? '일시정지 중이에요.' : '휴게실에서 쉬고 있어요. ☕';
+      agent.activity = viewerText(agent.paused ? '일시정지 중이에요.' : '휴게실에서 쉬고 있어요. ☕');
     }
     this.rollPeriodIfNeeded();
     this.persist();

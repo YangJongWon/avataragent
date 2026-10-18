@@ -21,7 +21,8 @@ import {
   type ModelEntry,
   type Tier,
 } from '../shared/models.ts';
-import { allowedModes, isToolMode, type McpServer } from '../shared/mcp.ts';
+import { allowedModes, isToolMode, stdioPresetOf, type McpServer } from '../shared/mcp.ts';
+import { isLocalRequest } from './local-request.ts';
 import { isExportFormat } from '../shared/design.ts';
 import { isPersonality } from '../shared/personality.ts';
 import { parsePlaybook, playbookChanges } from '../shared/playbook.ts';
@@ -896,9 +897,34 @@ function applyMcp(server: McpServer, body: Record<string, unknown>) {
   if (server.transport === 'http') {
     if (!/^https?:\/\/[^\s/]+/i.test(server.url)) throw new Error('MCP 주소는 http:// 또는 https:// 로 시작해야 해요.');
   } else {
-    if (!config.mcpAllowStdio) throw new Error('실행 명령(stdio) MCP는 .env에 MCP_ALLOW_STDIO=1을 넣고 서버를 다시 켜야 등록할 수 있어요.');
     if (!server.command || /[\r\n]/.test(server.command)) throw new Error('실행 명령을 입력해 주세요.');
   }
+}
+
+const STDIO_LOCAL_ONLY = '직접 입력한 실행 명령은 이 앱을 실행 중인 PC에서 열어야 등록하거나 바꿀 수 있어요. 기본 제공 연결(웹 검색, Notion, 웹 페이지 읽기)은 어디서든 쓸 수 있어요.';
+
+/**
+ * A stdio server runs a program on this PC. Built-in ones run a fixed package; one typed in by hand is only saved from
+ * the PC itself (or with MCP_ALLOW_STDIO=1), so nobody can start programs here from outside with the password alone.
+ * `changed` is whether this save touches what runs: the command, its arguments or its environment (secrets).
+ */
+function checkStdio(server: McpServer, local: boolean, changed: boolean) {
+  if (server.transport !== 'stdio' || stdioPresetOf(server)) {
+    delete server.localApproved;
+    return;
+  }
+  if (!changed) return;
+  if (!local && !config.mcpAllowStdio) throw new Error(STDIO_LOCAL_ONLY);
+  server.localApproved = true;
+}
+
+/** A built-in server only takes the secrets it declares, so its environment can't be bent into running something else. */
+function presetSecrets(server: McpServer, secrets: Record<string, string | null>) {
+  const preset = stdioPresetOf(server);
+  if (!preset) return secrets;
+  const allowed = new Set((preset.secrets ?? []).map((s) => s.name));
+  for (const name of Object.keys(secrets)) if (!allowed.has(name)) throw new Error(`${preset.name} 연결에는 ${name} 값을 넣을 수 없어요.`);
+  return secrets;
 }
 
 function checkedSecrets(raw: unknown): Record<string, string | null> {
@@ -934,7 +960,8 @@ app.post('/api/mcp-servers', (req, res) => {
     lastError: null,
   };
   applyMcp(server, { ...body, tools: undefined });
-  const secrets = checkedSecrets(body.secrets);
+  const secrets = presetSecrets(server, checkedSecrets(body.secrets));
+  checkStdio(server, isLocalRequest(req), true);
   store.mutate((s) => {
     s.mcpServers.push(server);
   });
@@ -949,7 +976,9 @@ app.put('/api/mcp-servers/:id', (req, res) => {
   const server = structuredClone(before);
   const body = req.body ?? {};
   applyMcp(server, body);
-  const secrets = checkedSecrets(body.secrets);
+  const secrets = presetSecrets(server, checkedSecrets(body.secrets));
+  const runs = server.transport !== before.transport || server.command !== before.command || server.args.join('\n') !== before.args.join('\n');
+  checkStdio(server, isLocalRequest(req), runs || Object.keys(secrets).length > 0);
   store.mutate((s) => {
     s.mcpServers = s.mcpServers.map((m) => (m.id === server.id ? server : m));
   });

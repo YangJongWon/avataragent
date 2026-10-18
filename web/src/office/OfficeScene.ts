@@ -1,5 +1,5 @@
 import { Application, Container, Graphics, Sprite, Text, type FederatedPointerEvent, type Texture } from 'pixi.js';
-import { currentLanguage, t, tpl } from '../../../shared/i18n.ts';
+import { currentLanguage, localize, t, tpl } from '../../../shared/i18n.ts';
 import { TEAMS, type TeamMeta } from '../../../shared/teams.ts';
 import { DEFAULT_EMOTES, DEFAULT_INTERACTIONS } from '../../../shared/theme-defaults.ts';
 import {
@@ -759,7 +759,7 @@ export class OfficeScene {
         break;
       }
       case 'team.applied':
-        this.floatText(String(p.summary ?? ''), 400, ARCHIVE.y - 20, '#6c3483', 13);
+        this.floatText(localize(String(p.summary ?? '')), 400, ARCHIVE.y - 20, '#6c3483', 13);
         break;
       case 'task.completed': {
         const manager = [...this.chars.values()].find((c) => c.agent.role === 'manager' && c.present);

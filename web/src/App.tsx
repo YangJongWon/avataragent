@@ -34,7 +34,7 @@ import { OfficeView } from './office/OfficeView.tsx';
 import { useDemoPlayback } from './demoPlayback.ts';
 import { useCompact, useStacked } from './useCompact.ts';
 import { useLanguage } from './LanguageProvider.tsx';
-import { tpl } from '../../shared/i18n.ts';
+import { localize, tpl } from '../../shared/i18n.ts';
 import { officeTheme } from '../../shared/theme-pack.ts';
 import { ThemesTab } from './components/ThemesTab.tsx';
 import { ThemeStudio } from './studio/ThemeStudio.tsx';
@@ -177,7 +177,7 @@ export function App() {
         if (event.type === 'budget.threshold_reached') toast(t('월 AI 예산의 80%를 사용했어요.'), 'error');
         if (event.type === 'budget.exceeded') toast(tpl('{v} 예산을 모두 써서 실행을 멈췄어요.', { v: officeName || t('회사') }), 'error');
         if (event.type === 'task.failed') toast(tpl('{officeName} 업무가 중단됐어요: {v}', { officeName, v: String(event.payload.reason ?? '') }), 'error');
-        if (event.type === 'team.applied') toast(`${officeName}: ${String(event.payload.summary ?? '')}`);
+        if (event.type === 'team.applied') toast(`${officeName}: ${localize(String(event.payload.summary ?? ''))}`);
         if (!here && event.type === 'agent.help_requested') toast(tpl('{officeName} 직원이 곤란해하고 있어요. 탭을 눌러 도와주세요.', { officeName }));
         if (!here && event.type === 'approval.requested') toast(tpl('{officeName}에서 승인을 기다리고 있어요.', { officeName }));
       }),

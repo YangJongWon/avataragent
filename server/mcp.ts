@@ -3,7 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { allowedModes, isOAuthClientSecret, type McpServer, type McpTool } from '../shared/mcp.ts';
+import { allowedModes, isOAuthClientSecret, stdioPresetOf, type McpServer, type McpTool } from '../shared/mcp.ts';
 import { config } from './config.ts';
 import { oauthProvider } from './mcp-oauth.ts';
 import { mcpSecretsFor } from './secrets.ts';
@@ -32,7 +32,9 @@ function withTimeout<T>(job: Promise<T>, ms: number, label: string): Promise<T> 
 async function open(server: McpServer): Promise<Connection> {
   const secrets = mcpSecretsFor(server.id);
   if (server.transport === 'stdio') {
-    if (!config.mcpAllowStdio) throw new Error('실행 명령(stdio) MCP는 .env에 MCP_ALLOW_STDIO=1을 넣어야 쓸 수 있어요.');
+    if (!config.mcpAllowStdio && !stdioPresetOf(server) && !server.localApproved) {
+      throw new Error('직접 입력한 실행 명령은 이 앱을 실행 중인 PC에서 다시 저장해야 쓸 수 있어요.');
+    }
     const transport = new StdioClientTransport({
       command: server.command,
       args: server.args,

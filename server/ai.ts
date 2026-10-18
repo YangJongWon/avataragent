@@ -1,4 +1,5 @@
 import { API_KINDS, companyOf, isFreeOpenRouterModel, isOpenRouterCompany, OPENROUTER_FREE_ROUTER, type ApiKind, type ModelEntry } from '../shared/models.ts';
+import type { Language } from '../shared/i18n.ts';
 import { config } from './config.ts';
 import { freeQuota, noteFreeExhausted, noteFreeRequest } from './free-quota.ts';
 import { apiKeyFor } from './secrets.ts';
@@ -48,7 +49,21 @@ interface Endpoint {
   baseUrl: string;
 }
 
-export async function complete(req: CompletionRequest): Promise<CompletionResult> {
+/**
+ * The prompts, templates and examples are Korean, so a model told once in the system prompt to write Japanese still
+ * answered in Korean. The last word of every request repeats it in the language asked for, which models follow.
+ */
+const LANGUAGE_REMINDER: Partial<Record<Language, string>> = {
+  ja: '【出力言語】上の指示は韓国語ですが、人が読む文章(報告書のタイトル・見出し・表の項目・JSONの文字列の値を含む)はすべて日本語で書いてください。韓国語の業務タイトルも日本語に訳してタイトルにしてください。JSONのキー名は指定どおりにしてください。',
+  zh: '【输出语言】上面的指示是韩语，但所有给人看的文字（包括报告标题、小标题、表格项目和 JSON 字符串值）都必须用简体中文书写。韩语的任务标题也要译成中文作为报告标题。JSON 键名保持指定的样子。',
+  en: '[Output language] The instructions above are in Korean, but write everything people will read (the report title, headings, table headers and JSON string values included) in English. Translate a Korean task title into English for the report title. Keep JSON keys exactly as specified.',
+};
+
+export async function complete(request: CompletionRequest): Promise<CompletionResult> {
+  const reminder = LANGUAGE_REMINDER[store.data.language];
+  const req = reminder ? { ...request, user: `${request.user}
+
+${reminder}` } : request;
   const provider = store.provider;
   if (provider === 'agents' || req.direct) {
     const company = companyOf(req.model.vendor);
@@ -198,8 +213,7 @@ async function requestJson(method: 'GET' | 'POST', url: string, headers: Record<
 async function openaiCompatible(endpoint: Endpoint, model: string, req: CompletionRequest): Promise<CompletionResult> {
   if (!isOpenRouterCompany(endpoint) || !isFreeOpenRouterModel(model)) return openaiCompatibleOnce(endpoint, model, req);
   try {
-    noteFreeRequest();
-    return await openaiCompatibleOnce(endpoint, model, req);
+    return await freeRequest(endpoint, model, req);
   } catch (error) {
     if (!(error instanceof ProviderRequestError)) throw error;
     if (error.status === 429 && /per[- ]day|free-models-per-day/i.test(error.message)) {
@@ -216,11 +230,20 @@ async function openaiCompatible(endpoint: Endpoint, model: string, req: Completi
     const gone = error.status === 404 || (error.status === 400 && /no endpoints|not a valid model|not available|does not exist/i.test(error.message));
     // A popular free model is often busy at its provider; the router picks another free one.
     const busy = error.status === 429 && /upstream|temporarily/i.test(error.message);
-    if ((gone || busy) && model !== OPENROUTER_FREE_ROUTER) {
-      noteFreeRequest();
-      return openaiCompatibleOnce(endpoint, OPENROUTER_FREE_ROUTER, req);
-    }
+    if ((gone || busy) && model !== OPENROUTER_FREE_ROUTER) return freeRequest(endpoint, OPENROUTER_FREE_ROUTER, req);
     throw error;
+  }
+}
+
+/** One counted free request; a model that can't switch its thinking off (the router may pick one) thinks briefly instead. */
+async function freeRequest(endpoint: Endpoint, model: string, req: CompletionRequest): Promise<CompletionResult> {
+  noteFreeRequest();
+  try {
+    return await openaiCompatibleOnce(endpoint, model, req, 'off');
+  } catch (error) {
+    if (!(error instanceof ProviderRequestError && error.status === 400 && /reasoning is mandatory/i.test(error.message))) throw error;
+    noteFreeRequest();
+    return openaiCompatibleOnce(endpoint, model, req, 'low');
   }
 }
 
@@ -229,7 +252,7 @@ async function openaiCompatible(endpoint: Endpoint, model: string, req: Completi
  * first: a research step took 2–3 minutes. Without the thinking it takes 20–60 seconds, so they skip it and get their own,
  * longer time limit.
  */
-async function openaiCompatibleOnce(endpoint: Endpoint, model: string, req: CompletionRequest): Promise<CompletionResult> {
+async function openaiCompatibleOnce(endpoint: Endpoint, model: string, req: CompletionRequest, thinking: 'off' | 'low' = 'off'): Promise<CompletionResult> {
   if (endpoint.api !== 'openai_compatible') requireKey(endpoint.key, endpoint.name);
   const free = isOpenRouterCompany(endpoint) && isFreeOpenRouterModel(model);
   const data = await postJson(
@@ -254,7 +277,7 @@ async function openaiCompatibleOnce(endpoint: Endpoint, model: string, req: Comp
         },
       ],
       ...(req.json ? { response_format: { type: 'json_object' } } : {}),
-      ...(free ? { reasoning: { enabled: false } } : {}),
+      ...(free ? { reasoning: thinking === 'off' ? { enabled: false } : { effort: 'low' } } : {}),
     },
     free ? store.aiTimeouts.freeSec * 1000 : undefined,
   );

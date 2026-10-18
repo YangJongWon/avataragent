@@ -4,6 +4,7 @@
  * Adding a language therefore never blanks a screen or shows a raw key.
  */
 import { THEME_CATALOGUE, THEME_TEMPLATES } from './i18n-themes.ts';
+import { SERVER_TEXT } from './server-text.ts';
 
 export type Language = 'ko' | 'zh' | 'ja' | 'en';
 
@@ -524,14 +525,11 @@ export const CATALOGUE: Catalogue = {
   '이 모델 선택': { zh: '选择此模型', ja: 'このモデルを選択', en: 'Select this model' },
   '선택하는 중…': { zh: '正在选择…', ja: '選択中…', en: 'Selecting…' },
   '선택한 모델이 처음이면 자동으로 모델 목록에 등록돼요.': { zh: '首次选择的模型会自动添加到模型列表。', ja: '初めて選ぶモデルはモデル一覧に自動登録されます。', en: 'A newly selected model is automatically added to the model catalogue.' },
-  '{name} 모델을 선택했어요.': { zh: '已选择 {name} 模型。', ja: '{name} モデルを選択しました。', en: 'Selected the {name} model.' },
-  '{name} 모델을 등록하고 선택했어요.': { zh: '已添加并选择 {name} 模型。', ja: '{name} モデルを登録して選択しました。', en: 'Added and selected the {name} model.' },
   '모델 추가': { zh: '添加模型', ja: 'モデルを追加', en: 'Add model' },
   '목록 새로고침': { zh: '刷新列表', ja: '一覧を更新', en: 'Refresh list' },
   '추가하는 중…': { zh: '正在添加…', ja: '追加中…', en: 'Adding…' },
   '모델 삭제': { zh: '删除模型', ja: 'モデルを削除', en: 'Delete model' },
   '{name} 모델 삭제': { zh: '删除 {name} 模型', ja: '{name} モデルを削除', en: 'Delete the {name} model' },
-  '{name} 모델을 지웠어요.': { zh: '已删除 {name} 模型。', ja: '{name} モデルを削除しました。', en: 'Deleted the {name} model.' },
   '{name} 모델을 기본값으로 초기화할까요?': { zh: '将 {name} 模型恢复为默认值吗？', ja: '{name} モデルを初期値に戻しますか？', en: 'Reset the {name} model to its defaults?' },
   '{name} 모델을 초기화했어요.': { zh: '已重置 {name} 模型。', ja: '{name} モデルを初期化しました。', en: 'Reset the {name} model.' },
   '삭제됨': { zh: '已删除', ja: '削除済み', en: 'Deleted' },
@@ -539,8 +537,6 @@ export const CATALOGUE: Catalogue = {
   '1. 서비스 회사 선택': { zh: '1. 选择服务公司', ja: '1. サービス会社を選択', en: '1. Select a service provider' },
   '2. API 모델 선택': { zh: '2. 选择 API 模型', ja: '2. APIモデルを選択', en: '2. Select an API model' },
   'API 모델 선택': { zh: '选择 API 模型', ja: 'APIモデルを選択', en: 'Select an API model' },
-  '{name} 회사의 기본 모델을 모두 초기화할까요?': { zh: '重置 {name} 的所有默认模型吗？', ja: '{name} の基本モデルをすべて初期化しますか？', en: 'Reset all default models for {name}?' },
-  '{name} 회사의 기본 모델을 초기화했어요.': { zh: '已重置 {name} 的默认模型。', ja: '{name} の基本モデルを初期化しました。', en: 'Reset the default models for {name}.' },
   '🎲 랜덤 고르기': { zh: '🎲 随机推荐', ja: '🎲 ランダムおすすめ', en: '🎲 Random picks' },
   '랜덤': { zh: '随机', ja: 'ランダム', en: 'Random' },
   '모자 모양 = AI 회사, 장식 = 등급': {
@@ -1474,6 +1470,17 @@ export const CATALOGUE: Catalogue = {
   'AI 디자인 적용됨': { zh: 'AI 设计已应用', ja: 'AI デザイン適用済み', en: 'AI design applied' },
   '✨ AI로 디자인': { zh: '✨ 用 AI 设计', ja: '✨ AI でデザイン', en: '✨ Design with AI' },
   '원문 그대로': { zh: '原文', ja: '原文のまま', en: 'Plain text' },
+  '추가': { zh: '添加', ja: '追加', en: 'Add' },
+  '직접 입력한 명령은 앱을 실행 중인 PC에서 열어야 등록할 수 있어요.': {
+    zh: '手动输入的命令需要在运行本应用的电脑上打开才能注册。',
+    ja: '手入力したコマンドは、アプリを実行中のPCで開いたときだけ登録できます。',
+    en: 'A command typed in by hand can only be added from the PC running the app.',
+  },
+  'ℹ 직접 입력한 실행 명령(npx·uvx)은 보안을 위해 이 앱을 실행 중인 PC에서 열어야 등록할 수 있어요. 기본 제공 연결은 어디서든 쓸 수 있어요.': {
+    zh: 'ℹ 为了安全，手动输入的执行命令（npx·uvx）只能在运行本应用的电脑上打开时注册。内置连接在任何地方都能用。',
+    ja: 'ℹ 安全のため、手入力の実行コマンド（npx·uvx）はアプリを実行中のPCで開いたときだけ登録できます。標準の接続はどこからでも使えます。',
+    en: 'ℹ For safety, run commands typed in by hand (npx·uvx) can only be added from the PC running the app. Built-in connections work from anywhere.',
+  },
   '승인을 기다리고 있어요': { zh: '正在等待批准', ja: '承認を待っています', en: 'Waiting for your approval' },
   '지금은 이번 여정을 바꿀 수 없어요. 저장하면 다음 업무에서 쓸 흐름이 돼요.': { zh: '现在无法更改本次流程。保存后将成为下次任务使用的流程。', ja: '今はこの流れを変えられません。保存すると次の業務で使う流れになります。', en: "This task's journey can't change now. Saving keeps it as a flow for the next task." },
   '알아서 진행': { zh: '自行推进', ja: 'おまかせで進める', en: 'Carry on with a guess' },
@@ -1492,6 +1499,13 @@ export const CATALOGUE: Catalogue = {
  */
 export const TEMPLATES: Record<string, Partial<Record<Language, string>>> = {
   ...THEME_TEMPLATES,
+  // HireTab: model list and company defaults.
+  '{name}에서 모델 {n}개를 불러왔어요.': { zh: '已从 {name} 读取 {n} 个模型。', ja: '{name} からモデルを {n} 件読み込みました。', en: 'Loaded {n} models from {name}.' },
+  '{name} 모델을 선택했어요.': { zh: '已选择 {name} 模型。', ja: '{name} モデルを選びました。', en: 'Picked the {name} model.' },
+  '{name} 모델을 등록하고 선택했어요.': { zh: '已注册并选择 {name} 模型。', ja: '{name} モデルを登録して選びました。', en: 'Added and picked the {name} model.' },
+  '{name} 모델을 지웠어요.': { zh: '已删除 {name} 模型。', ja: '{name} モデルを削除しました。', en: 'Removed the {name} model.' },
+  '{name} 회사의 기본 모델을 모두 초기화할까요?': { zh: '要把 {name} 的默认模型全部重置吗？', ja: '{name} の標準モデルをすべて初期化しますか？', en: "Reset all of {name}'s default models?" },
+  '{name} 회사의 기본 모델을 초기화했어요.': { zh: '已重置 {name} 的默认模型。', ja: '{name} の標準モデルを初期化しました。', en: "Reset {name}'s default models." },
   '{name}의 근무 정책을 저장했어요.': { zh: '已保存 {name} 的工作策略。', ja: '{name}の勤務ポリシーを保存しました。', en: 'Saved {name}’s work policy.' },
   // ── 업무 생성·진행 ──────────────────────────────────────────
   '대기열에 업무 추가': { zh: '已加入队列：{title}', ja: '待機列に追加：{title}', en: 'Queued: {title}' },
@@ -1941,3 +1955,38 @@ export const tpl = (source: string, vars: Vars) => translateTemplate(source, act
 
 /** Formats a number in the active language's grouping conventions. */
 export const num = (value: number) => value.toLocaleString(localeOf(active));
+
+/**
+ * Fixed sentences the server writes for the screen (staff lines, approval headlines) travel as their Korean source and
+ * values between invisible marks, so each viewer reads them in their own screen language. AI output never does.
+ */
+const VIEWER_MARK = '⁣';
+const VIEWER_TEXT = /⁣(\[[\s\S]*?\])⁣/g;
+
+export function viewerText(source: string, vars: Vars = {}): string {
+  // A value that is itself wrapped keeps its marks escaped inside the JSON, so the outer one still reads as one piece.
+  return `${VIEWER_MARK}${JSON.stringify([source, vars]).replace(/⁣/g, '\\u2063')}${VIEWER_MARK}`;
+}
+
+function viewerSentence(source: string, language: Language): string {
+  if (language === 'ko') return source;
+  return SERVER_TEXT[source]?.[language] ?? lookupTemplate(source, language) ?? translate(source, language);
+}
+
+/** Puts every wrapped sentence in `text` into `language`; anything else is left as it is. */
+export function localize(text: string, language: Language = active): string {
+  if (!text.includes(VIEWER_MARK)) return text;
+  return text.replace(VIEWER_TEXT, (whole, json: string) => {
+    try {
+      const [source, vars] = JSON.parse(json) as [string, Vars];
+      return viewerSentence(source, language).replace(PLACEHOLDER, (hole, key: string) => {
+        const value = vars[key];
+        if (value === undefined || value === null) return hole;
+        // Step names and categories are fixed words too; titles and AI text are not in the catalogue and stay as they are.
+        return typeof value === 'string' ? viewerSentence(localize(value, language), language) : String(value);
+      });
+    } catch {
+      return whole;
+    }
+  });
+}

@@ -147,7 +147,7 @@ function appState() {
   const mode = store.provider === 'mock' ? '시뮬레이션' : store.provider === 'agents' ? '직원별 실제 AI' : `${store.provider} (.env 설정)`;
   return [
     `실행 방식: ${mode}`,
-    `이 PC에서 명령으로 띄우는 MCP(MCP_ALLOW_STDIO): ${config.mcpAllowStdio ? '켜짐' : '꺼짐'}`,
+    `직접 입력한 실행 명령 MCP: ${config.mcpAllowStdio ? '어디서든 등록 가능(MCP_ALLOW_STDIO=1)' : '앱을 실행 중인 PC에서만 등록 가능 (기본 제공 연결은 어디서든)'}`,
     `고품질 화면 검수용 LibreOffice: ${canReview() ? '있음' : '없음'}`,
     `외부 주소(PUBLIC_URL): ${config.publicUrl ? '설정됨' : '없음'}`,
     `접속 비밀번호: ${config.accessPassword ? '설정됨' : '없음'}`,

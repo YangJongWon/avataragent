@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { TEAMS } from '../../../shared/teams.ts';
+import { localize } from '../../../shared/i18n.ts';
 import { officeTheme } from '../../../shared/theme-pack.ts';
 import type { Agent, Office, OfficeEvent, Snapshot } from '../../../shared/types.ts';
 import { OfficeScene, SCENE_H, SCENE_W } from './OfficeScene.ts';
@@ -163,7 +164,7 @@ export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
           <div className="bubble-name">
             {bubble.name} · {TEAMS[office.team].roleTitles[bubble.role]}
           </div>
-          <div>{bubble.activity}</div>
+          <div>{localize(bubble.activity)}</div>
           {bubble.status === 'help_requested' && (
             <button className="pixel-btn small primary" onClick={() => actions.onHelp(bubble.id)}>
               {t('도와주기')}

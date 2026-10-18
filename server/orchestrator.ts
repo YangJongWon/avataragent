@@ -21,7 +21,7 @@ import { config, ORGANIZATION_SAFETY_RULES } from './config.ts';
 import { callTool } from './mcp.ts';
 import { nextInquiry, nextMail } from './seed.ts';
 import { store } from './store.ts';
-import { L, LT } from './text.ts';
+import { L, LT, V } from './text.ts';
 import { systemPromptFor, TEAM_SPECS } from './teams.ts';
 import { agentAvailability, freshDailyUsage, usageDate } from '../shared/work-policy.ts';
 
@@ -75,7 +75,7 @@ function systemPrompt(agent: Agent) {
     systemPromptFor(store.office(agent.officeId).team, agent.role),
     '',
     `[출력 언어 - 반드시 준수]`,
-    `사용자가 다른 언어로 직접 쓴 고유명사와 인용문을 제외한 모든 결과물을 ${outputLanguage}로 작성한다.`,
+    `사용자가 다른 언어로 직접 쓴 고유명사와 인용문을 제외한 모든 결과물을 ${outputLanguage}로 작성한다. 업무 제목도 ${outputLanguage}로 옮겨서 보고서 제목으로 쓴다.`,
     '',
     `[일하는 스타일 - ${style.label}]`,
     style.prompt,
@@ -100,7 +100,7 @@ function setAgent(agent: Agent, status: Agent['status'], expression: Expression,
 }
 
 const availabilityActivity = (reason: 'schedule' | 'tokens' | 'work_time') =>
-  reason === 'schedule' ? '근무 시간이 끝나 퇴근했어요. 🏠' : reason === 'tokens' ? '오늘의 토큰 한도를 모두 사용했어요. 🔋' : '오늘의 작업 시간 한도를 모두 사용했어요. ⏰';
+  V(reason === 'schedule' ? '근무 시간이 끝나 퇴근했어요. 🏠' : reason === 'tokens' ? '오늘의 토큰 한도를 모두 사용했어요. 🔋' : '오늘의 작업 시간 한도를 모두 사용했어요. ⏰');
 
 /** Rolls over daily counters and synchronizes the visible attendance state. */
 export function enforceWorkPolicies(nowAt = new Date()) {
@@ -122,7 +122,7 @@ export function enforceWorkPolicies(nowAt = new Date()) {
         store.emit('agent.clocked_out', { agentId: agent.id, payload: { reason: availability.reason } });
       }
     } else if (availability.available && isAttendanceStatus) {
-      store.updateAgent(agent.id, { status: 'idle', expression: 'smile', activity: '출근했어요. 오늘도 시작해 볼게요! ☕' });
+      store.updateAgent(agent.id, { status: 'idle', expression: 'smile', activity: V('출근했어요. 오늘도 시작해 볼게요! ☕') });
       store.emit('agent.clocked_in', { agentId: agent.id, payload: {} });
     }
   }
@@ -241,7 +241,7 @@ function addArtifact(taskId: string, agent: Agent, step: WorkflowStep, kind: Art
 
 function handOff(taskId: string, from: Agent, to: Agent, label: string) {
   if (from.id === to.id) return;
-  setAgent(from, 'idle', 'smile', LT('{to}에게 {label}을(를) 넘겼어요.', { to: L(to.name), label: L(label) }));
+  setAgent(from, 'idle', 'smile', V('{to}에게 {label}을(를) 넘겼어요.', { to: to.name, label: label }));
   store.emit('task.handed_off', { taskId, agentId: from.id, payload: { from: from.id, to: to.id, label } });
 }
 
@@ -356,7 +356,7 @@ async function designAtStart(taskId: string) {
   const manager = agentOf(task, 'manager');
   await waitIfPaused(manager);
   setStep(taskId, task.plan[0].id, 'running');
-  setAgent(manager, 'working', 'focus', L('요청을 보고 업무 여정과 담당자를 정하고 있어요.'));
+  setAgent(manager, 'working', 'focus', V('요청을 보고 업무 여정과 담당자를 정하고 있어요.'));
   const { steps, note } = await designPlan(
     { officeId: task.officeId, title: task.title, description: task.description, taskType: task.taskType },
     task,
@@ -382,7 +382,7 @@ async function briefStep(taskId: string, step: WorkflowStep, feedback?: string) 
   const agent = agentOfStep(task, step);
   await waitIfPaused(agent);
   setStep(taskId, step.id, 'running');
-  setAgent(agent, 'working', 'focus', LT('칠판의 새 업무를 확인하고 있어요: {title}', { title: L(task.title) }));
+  setAgent(agent, 'working', 'focus', V('칠판의 새 업무를 확인하고 있어요: {title}', { title: task.title }));
   store.emit('task.assigned', { taskId, agentId: agent.id, payload: { step: step.id, label: step.label } });
 
   const brief = await callAI(
@@ -437,7 +437,7 @@ function mockToolCalls(tools: OfficeTool[], task: Task) {
 async function useTools(taskId: string, agent: Agent, context: string) {
   const tools = officeTools(store.task(taskId).officeId, 'auto');
   if (!tools.length) return { text: '', calls: 0, failures: 0 };
-  setAgent(agent, 'working', 'focus', L('연결된 도구로 무엇을 찾아볼지 정하고 있어요.'));
+  setAgent(agent, 'working', 'focus', V('연결된 도구로 무엇을 찾아볼지 정하고 있어요.'));
   const raw = await callAI(
     agent,
     store.task(taskId),
@@ -462,7 +462,7 @@ async function useTools(taskId: string, agent: Agent, context: string) {
     const picked = tools.find((t) => t.ref === call?.tool);
     if (!picked) continue;
     const args = argsOf(call.arguments);
-    setAgent(agent, 'working', 'focus', LT('{icon} {server}에서 찾아보고 있어요.', { icon: picked.server.icon, server: picked.server.name }));
+    setAgent(agent, 'working', 'focus', V('{icon} {server}에서 찾아보고 있어요.', { icon: picked.server.icon, server: picked.server.name }));
     const result = await invokeTool(taskId, agent, picked.server, picked.tool.name, args, false);
     const label = `[${picked.server.name} · ${picked.tool.name}]`;
     if (!result.ok) failures += 1;
@@ -508,7 +508,7 @@ async function researchStep(taskId: string, step: WorkflowStep, feedback?: strin
   await waitIfPaused(agent);
   const startedAt = Date.now();
   setStep(taskId, step.id, 'running');
-  setAgent(agent, 'working', 'focus', LT('{step} 중이에요.', { step: L(step.label) }));
+  setAgent(agent, 'working', 'focus', V('{step} 중이에요.', { step: step.label }));
   store.emit('tool.started', { taskId, agentId: agent.id, payload: { tool: 'research', label: step.label } });
 
   const earlier = researchNotes(task);
@@ -524,7 +524,7 @@ async function researchStep(taskId: string, step: WorkflowStep, feedback?: strin
     .join('\n\n');
   const tooling = await useTools(taskId, agent, context);
   const found = tooling.text;
-  setAgent(agent, 'working', 'focus', LT('{step} 중이에요.', { step: L(step.label) }));
+  setAgent(agent, 'working', 'focus', V('{step} 중이에요.', { step: step.label }));
   const notes = await callAI(
     agent,
     store.task(taskId),
@@ -599,7 +599,7 @@ async function raiseHelp(taskId: string, step: WorkflowStep, writer: Agent) {
   const task = store.task(taskId);
   let help = task.help;
   if (!help) {
-    setAgent(writer, 'working', 'focus', L('쓰기 전에 지시 내용을 다시 읽고 있어요.'));
+    setAgent(writer, 'working', 'focus', V('쓰기 전에 지시 내용을 다시 읽고 있어요.'));
     const raw = await callAI(
       writer,
       task,
@@ -653,7 +653,7 @@ async function raiseHelp(taskId: string, step: WorkflowStep, writer: Agent) {
       payload: { question: help.question, options: help.options, deadline: help.deadline },
     });
   }
-  setAgent(writer, 'help_requested', 'troubled', LT('{question} 조금만 도와주실 수 있을까요?', { question: help.question }));
+  setAgent(writer, 'help_requested', 'troubled', V('{question} 조금만 도와주실 수 있을까요?', { question: help.question }));
   return help;
 }
 
@@ -669,10 +669,10 @@ function settleHelp(taskId: string, step: WorkflowStep, writer: Agent, answer: s
   });
   setStep(taskId, step.id, 'running');
   if (answer) {
-    setAgent(writer, 'working', 'thanks', L('덕분에 방향이 잡혔어요. 다시 해볼게요!'));
+    setAgent(writer, 'working', 'thanks', V('덕분에 방향이 잡혔어요. 다시 해볼게요!'));
     store.emit('agent.help_received', { taskId, agentId: writer.id, payload: { answer: decided } });
   } else {
-    setAgent(writer, 'working', 'focus', LT('우선 "{decided}"(으)로 진행해 둘게요.', { decided }));
+    setAgent(writer, 'working', 'focus', V('우선 "{decided}"(으)로 진행해 둘게요.', { decided }));
     store.emit('agent.help_timed_out', { taskId, agentId: writer.id, payload: { assumption: decided } });
   }
 }
@@ -690,7 +690,7 @@ async function draftStep(taskId: string, step: WorkflowStep, attempt: number, cl
   const task = store.task(taskId);
   const lastReview = task.reviews.at(-1);
   const lastChange = task.userChangeRequests.at(-1);
-  setAgent(writer, 'working', attempt > 1 ? 'sweat' : 'focus', attempt > 1 ? L('지적받은 부분을 고쳐서 다시 쓰고 있어요.') : LT('{step} 중이에요.', { step: L(step.label) }));
+  setAgent(writer, 'working', attempt > 1 ? 'sweat' : 'focus', attempt > 1 ? V('지적받은 부분을 고쳐서 다시 쓰고 있어요.') : V('{step} 중이에요.', { step: step.label }));
   const draft = await callAI(
     writer,
     task,
@@ -740,7 +740,7 @@ async function reviewStep(taskId: string, step: WorkflowStep, attempt: number, r
   await waitIfPaused(reviewer);
   const startedAt = Date.now();
   setStep(taskId, step.id, 'running');
-  setAgent(reviewer, 'working', 'focus', LT('안경을 고쳐 쓰고 초안을 {step}하고 있어요.', { step: L(step.label) }));
+  setAgent(reviewer, 'working', 'focus', V('안경을 고쳐 쓰고 초안을 {step}하고 있어요.', { step: step.label }));
   store.emit('review.started', { taskId, agentId: reviewer.id, payload: { attempt, step: step.id } });
 
   const firstReview = task.plan.find((s) => s.kind === 'review')?.id === step.id;
@@ -814,21 +814,21 @@ async function reviewStep(taskId: string, step: WorkflowStep, attempt: number, r
 
   if (approved) {
     setStep(taskId, step.id, 'done');
-    setAgent(reviewer, 'idle', 'smile', LT('{step} 통과! {score}점이에요.', { step: L(step.label), score }));
+    setAgent(reviewer, 'idle', 'smile', V('{step} 통과! {score}점이에요.', { step: step.label, score }));
     store.emit('review.approved', { taskId, agentId: reviewer.id, payload: { score } });
     return { approved, reason: parsed.reason };
   }
 
   if (!returnTo) {
     setStep(taskId, step.id, 'done');
-    setAgent(reviewer, 'idle', 'normal', LT('의견을 남기고 넘길게요: {reason}', { reason: parsed.reason }));
+    setAgent(reviewer, 'idle', 'normal', V('의견을 남기고 넘길게요: {reason}', { reason: parsed.reason }));
     store.emit('review.rejected', { taskId, agentId: reviewer.id, payload: { reason: parsed.reason, score, returnTo: null } });
     return { approved, reason: parsed.reason };
   }
 
   setStep(taskId, step.id, 'rejected');
-  setAgent(reviewer, 'idle', 'normal', LT('{reason} 때문에 다시 해야 해요.', { reason: parsed.reason }));
-  if (writer.id !== reviewer.id) setAgent(writer, 'waiting', 'sweat', LT('반려됐어요. {step}부터 다시 할 준비를 하고 있어요.', { step: L(returnTo.label) }));
+  setAgent(reviewer, 'idle', 'normal', V('{reason} 때문에 다시 해야 해요.', { reason: parsed.reason }));
+  if (writer.id !== reviewer.id) setAgent(writer, 'waiting', 'sweat', V('반려됐어요. {step}부터 다시 할 준비를 하고 있어요.', { step: returnTo.label }));
   store.emit('review.rejected', {
     taskId,
     agentId: reviewer.id,
@@ -844,7 +844,7 @@ async function checkLoop(taskId: string, step: WorkflowStep) {
   const agent = agentOfStep(task, step);
   const output = step.kind === 'draft' ? latest(task, 'draft') : task.artifacts.filter((a) => a.stepId === step.id).at(-1);
   const taken = task.loopCounts?.[step.id] ?? 0;
-  setAgent(agent, 'working', 'focus', LT('"{when}"인지 확인하고 있어요.', { when: L(loop.when) }));
+  setAgent(agent, 'working', 'focus', V('"{when}"인지 확인하고 있어요.', { when: loop.when }));
   const raw = await callAI(
     agent,
     task,
@@ -882,7 +882,7 @@ function takeLoop(taskId: string, plan: WorkflowStep[], from: number, reason: st
   });
   const task = store.task(taskId);
   const owner = agentOfStep(task, step);
-  setAgent(owner, 'idle', 'normal', loop.to === from ? LT('{reason} 한 번 더 할게요.', { reason }) : LT('{reason} {step}(으)로 되돌아가요.', { reason, step: L(target.label) }));
+  setAgent(owner, 'idle', 'normal', loop.to === from ? V('{reason} 한 번 더 할게요.', { reason }) : V('{reason} {step}(으)로 되돌아가요.', { reason, step: target.label }));
   store.emit('workflow.looped', {
     taskId,
     agentId: owner.id,
@@ -931,7 +931,7 @@ async function planActions(taskId: string): Promise<PlannedAction[]> {
   const draftStepOf = task.plan.find((s) => s.kind === 'draft');
   const writer = draftStepOf ? agentOfStep(task, draftStepOf) : agentOf(task, 'manager');
   const report = splitDraft(latest(task, 'draft')?.content ?? '').body;
-  setAgent(writer, 'working', 'focus', L('승인받으면 실행할 외부 작업을 정리하고 있어요.'));
+  setAgent(writer, 'working', 'focus', V('승인받으면 실행할 외부 작업을 정리하고 있어요.'));
   const raw = await callAI(
     writer,
     task,
@@ -997,7 +997,7 @@ async function runActions(taskId: string) {
       continue;
     }
     set({ status: 'running' });
-    setAgent(manager, 'working', 'focus', LT('{icon} {server}에 반영하고 있어요.', { icon: server.icon, server: server.name }));
+    setAgent(manager, 'working', 'focus', V('{icon} {server}에 반영하고 있어요.', { icon: server.icon, server: server.name }));
     const result = await invokeTool(taskId, manager, server, action.tool, action.arguments, true);
     set(result.ok ? { status: 'done', result: result.output.slice(0, 500) } : { status: 'failed', result: result.reason });
   }
@@ -1009,7 +1009,7 @@ export async function requestApproval(taskId: string, stepId: string) {
   const step = stepById(task, stepId);
   const manager = agentOf(task, 'manager');
   if (task.status === 'awaiting_approval' && task.currentStepId === step.id) {
-    setAgent(manager, 'awaiting_approval', 'normal', L('결과물을 올렸어요. 사용자 승인을 기다리고 있어요.'));
+    setAgent(manager, 'awaiting_approval', 'normal', V('결과물을 올렸어요. 사용자 승인을 기다리고 있어요.'));
     return;
   }
   const actions = await planActions(taskId);
@@ -1021,7 +1021,7 @@ export async function requestApproval(taskId: string, stepId: string) {
     t.proposal = specOf(t).buildProposal(json, t);
     t.actions = actions;
   });
-  setAgent(manager, 'awaiting_approval', 'normal', L('결과물을 올렸어요. 사용자 승인을 기다리고 있어요.'));
+  setAgent(manager, 'awaiting_approval', 'normal', V('결과물을 올렸어요. 사용자 승인을 기다리고 있어요.'));
   store.emit('approval.requested', {
     taskId,
     agentId: manager.id,
@@ -1069,13 +1069,13 @@ function finish(taskId: string, applied: string) {
     t.completedAt = now();
   });
   for (const agent of officeAgents(task.officeId)) {
-    setAgent(agent, 'idle', 'celebrate', LT('업무 완료! {applied}', { applied }));
+    setAgent(agent, 'idle', 'celebrate', V('업무 완료! {applied}', { applied }));
   }
   store.emit('task.completed', { taskId, payload: { title: task.title } });
   setTimeout(() => {
     for (const agent of officeAgents(task.officeId)) {
       if (agent.status === 'idle' && agent.expression === 'celebrate') {
-        setAgent(agent, 'idle', 'normal', L('휴게실에서 쉬고 있어요. ☕'));
+        setAgent(agent, 'idle', 'normal', V('휴게실에서 쉬고 있어요. ☕'));
       }
     }
   }, 6000);
@@ -1170,7 +1170,7 @@ export function applyChangeRequest(taskId: string, stepId: string, comment: stri
     t.proposal = null;
     t.actions = [];
   });
-  setAgent(manager, 'idle', 'normal', L('수정 요청을 작성자에게 전달했어요.'));
+  setAgent(manager, 'idle', 'normal', V('수정 요청을 작성자에게 전달했어요.'));
   store.emit('approval.denied', { taskId, agentId: manager.id, payload: { comment } });
   store.emit('task.handed_off', {
     taskId,
@@ -1200,7 +1200,7 @@ function applyImprovementChange(item: Improvement, auto: boolean) {
   });
   const agent = store.agent(item.agentId);
   const to = item.field === 'personality' ? personalityOf(item.to as Personality).label : modelOf(item.to).label;
-  setAgent(agent, 'idle', 'smile', auto ? LT('지난 성과를 보고 {to}(으)로 바꿨어요.', { to }) : LT('요청대로 {to}(으)로 바꿨어요.', { to }));
+  setAgent(agent, 'idle', 'smile', auto ? V('지난 성과를 보고 {to}(으)로 바꿨어요.', { to }) : V('요청대로 {to}(으)로 바꿨어요.', { to }));
   store.emit('improvement.applied', { agentId: item.agentId, payload: { officeId: item.officeId, field: item.field, from: item.from, to: item.to, reasonKey: item.reasonKey, reasonVars: item.reasonVars, auto } });
 }
 
@@ -1240,8 +1240,8 @@ export async function completeTask(taskId: string, valueKrw?: number) {
     const missed = actions.filter((a) => a.status === 'failed' || a.status === 'unknown').length;
     const applied = [
       specOf(task).onApprove(json, store.task(taskId)),
-      done ? `외부 작업 ${done}건 실행` : '',
-      missed ? `외부 작업 ${missed}건 확인 필요` : '',
+      done ? V('외부 작업 {n}건 실행', { n: done }) : '',
+      missed ? V('외부 작업 {n}건 확인 필요', { n: missed }) : '',
     ]
       .filter(Boolean)
       .join(' · ');
@@ -1265,7 +1265,7 @@ export function failTask(taskId: string, reason: string) {
     if (current) current.status = 'error';
   });
   const agent = step ? agentOfStep(task, step) : agentOf(task, 'manager');
-  setAgent(agent, 'error', 'panic', LT('문제가 생겼어요: {reason}', { reason }));
+  setAgent(agent, 'error', 'panic', V('문제가 생겼어요: {reason}', { reason }));
   store.emit('task.failed', { taskId, agentId: agent.id, payload: { reason } });
 }
 
@@ -1382,7 +1382,7 @@ export function reopenTask(taskId: string): boolean {
     for (const step of t.plan) if (step.status === 'error') step.status = 'pending';
   });
   const agent = failedStep ? agentOfStep(task, failedStep) : agentOf(task, 'manager');
-  setAgent(agent, 'idle', 'normal', LT('다시 해 볼게요: {title}', { title: L(task.title) }));
+  setAgent(agent, 'idle', 'normal', V('다시 해 볼게요: {title}', { title: task.title }));
   store.emit('task.retried', { taskId, agentId: agent.id, payload: { step: failedStep?.label ?? null } });
   return started;
 }
@@ -1545,7 +1545,7 @@ export function setPaused(agentId: string, paused: boolean) {
   store.updateAgent(agentId, {
     paused,
     status: paused ? 'paused' : agent.status === 'paused' ? 'idle' : agent.status,
-    activity: paused ? '일시정지 중이에요. 지금 하던 호출이 끝나면 멈출게요.' : '다시 일할 준비가 됐어요.',
+    activity: V(paused ? '일시정지 중이에요. 지금 하던 호출이 끝나면 멈출게요.' : '다시 일할 준비가 됐어요.'),
   });
   store.emit(paused ? 'task.paused' : 'task.resumed', { agentId, payload: {} });
 }
