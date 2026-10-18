@@ -252,3 +252,7 @@ export function stdioPresetOf(server: Pick<McpServer, 'transport' | 'command' | 
     ) ?? null
   );
 }
+
+/** A connection that can read a Gmail inbox: Google's Gmail MCP server, or any offering search_threads and get_thread. */
+export const isGmailServer = (server: Pick<McpServer, 'url' | 'tools'>) =>
+  /gmailmcp\.googleapis\.com/i.test(server.url) || (server.tools.some((t) => t.name === 'search_threads') && server.tools.some((t) => t.name === 'get_thread'));

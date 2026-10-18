@@ -10,6 +10,7 @@ import { DEFAULT_THEME, type ThemeSummary } from '../../../shared/theme-pack.ts'
 import { t, tpl } from '../../../shared/i18n.ts';
 import { FlowTools } from './FlowTools.tsx';
 import { PlanEditor } from './PlanEditor.tsx';
+import { browserTimeZone, repeatOf, ScheduleFields, useScheduleDraft } from './ScheduleFields.tsx';
 import { AgentPortrait } from './AgentPortrait.tsx';
 
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
@@ -189,6 +190,8 @@ export function NewTaskModal({
   const [helping, setHelping] = useState<'prompt' | 'steps' | null>(null);
   const [promptIdea, setPromptIdea] = useState<{ title: string; description: string; tips: string[] } | null>(null);
   const [picking, setPicking] = useState(false);
+  const [schedule, setSchedule] = useScheduleDraft();
+  const repeat = repeatOf(schedule);
   const titleRequired = office.team === 'dev';
   const request = { title, description, taskType };
   const help = async (kind: 'prompt' | 'steps', work: () => Promise<void>) => {
@@ -242,6 +245,20 @@ export function NewTaskModal({
   const submit = async () => {
     setBusy(true);
     try {
+      if (repeat) {
+        await api.createSchedule({
+          officeId: office.id,
+          title,
+          description,
+          taskType,
+          planMode,
+          steps: planMode === 'custom' ? steps : undefined,
+          repeat,
+          timeZone: browserTimeZone(),
+        });
+        onClose();
+        return;
+      }
       await api.createTask({
         officeId: office.id,
         title,
@@ -419,12 +436,13 @@ export function NewTaskModal({
         </>
       )}
       </div>
+      <ScheduleFields draft={schedule} onChange={setSchedule} />
       <div className="row end">
         <button className="pixel-btn" onClick={onClose}>
           {t('취소')}
         </button>
-        <button className="pixel-btn primary" disabled={busy || noInput || Boolean(planError) || (titleRequired && !title.trim())} onClick={submit}>
-          {willQueue ? t('대기열에 추가') : t('칠판에 붙이기')}
+        <button className="pixel-btn primary" disabled={busy || (noInput && !repeat) || Boolean(planError) || (titleRequired && !title.trim())} onClick={submit}>
+          {repeat ? `⏰ ${t('예약하기')}` : willQueue ? t('대기열에 추가') : t('칠판에 붙이기')}
         </button>
       </div>
     </Modal>

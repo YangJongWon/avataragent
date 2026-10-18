@@ -70,7 +70,10 @@ export function eventLabel(event: OfficeEvent, agents: Map<string, Agent>) {
     case 'mcp.failed':
       return tpl('{who} 실패', { who, server: String(p.server ?? ''), tool: String(p.tool ?? ''), reason: String(p.reason ?? '') });
     case 'mcp.changed':
+    case 'schedule.changed':
       return String(p.summary ?? '');
+    case 'schedule.ran':
+      return p.error ? tpl('예약 업무를 시작하지 못했어요: {reason}', { reason: String(p.error) }) : tpl('예약 업무 시작: {title}', { title: String(p.title ?? '') });
     case 'task.designed': {
       const kind = p.kind === 'deck' ? t('슬라이드') : p.kind === 'sheet' ? 'Excel' : t('문서');
       const base = tpl('{who} {kind} 디자인 완료', { who, kind, version: Number(p.version ?? 1) });

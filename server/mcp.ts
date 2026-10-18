@@ -148,6 +148,30 @@ export async function discoverTools(server: McpServer): Promise<McpTool[]> {
   }
 }
 
+/**
+ * Calls a tool for its data rather than for a prompt: the structured result when the server gives one, else its text
+ * read as JSON. Nothing is trimmed.
+ */
+export async function callToolData(server: McpServer, name: string, args: Record<string, unknown>): Promise<unknown> {
+  let conn: Connection | undefined;
+  try {
+    conn = await connection(server);
+    const result = await withTimeout(conn.client.callTool({ name, arguments: args }), config.mcpTimeoutMs, `${server.name} ${name}`);
+    const parts = Array.isArray(result.content) ? result.content : [];
+    const text = parts.map((part: { type?: string; text?: string }) => (part.type === 'text' ? (part.text ?? '') : '')).join('');
+    if (result.isError) throw new Error(text || '도구가 오류를 돌려줬어요.');
+    if (result.structuredContent && typeof result.structuredContent === 'object') return result.structuredContent;
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error(`${name} 결과를 읽지 못했어요: ${text.slice(0, 200)}`);
+    }
+  } catch (error) {
+    if (!conn) closeConnection(server.id);
+    throw new Error(describe(error, conn));
+  }
+}
+
 /** Calls a tool and returns its text output, trimmed for the prompt. */
 export async function callTool(server: McpServer, name: string, args: Record<string, unknown>): Promise<string> {
   let conn: Connection | undefined;

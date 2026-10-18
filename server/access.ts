@@ -68,6 +68,7 @@ export function snapshotFor(viewer: Viewer): Snapshot {
     recommendations: hasTeam('welfare') ? full.recommendations : [],
     performance: full.performance.filter((r) => officeIds.has(r.officeId)),
     improvements: full.improvements.filter((i) => officeIds.has(i.officeId)),
+    schedules: full.schedules.filter((s) => officeIds.has(s.officeId)),
     chat: full.chat.filter((m) => canReadMessage(viewer, full.plan, m, officeOfTask)),
     people:
       viewer.kind === 'share'

@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { TEAMS } from '../../../shared/teams.ts';
 import type { Office, Recommendation, Snapshot } from '../../../shared/types.ts';
 import { api } from '../api.ts';
+import { MailAccountBox } from './MailAccountBox.tsx';
+import { SchedulesPanel } from './SchedulesPanel.tsx';
 import { krw, timeOf } from '../format.ts';
 import { useLanguage } from '../LanguageProvider.tsx';
 
@@ -39,6 +41,7 @@ export function TeamDataPanel(props: Props) {
           {t(team.autoRunLabel)} <span className="muted small">{t('(새 항목이 있으면 팀이 알아서 업무를 시작해요. 반영은 항상 승인 후)')}</span>
         </label>
       )}
+      <SchedulesPanel snapshot={props.snapshot} office={office} run={run} onNotice={props.onNotice} />
       {office.team === 'hr' && <HrData {...props} run={run} />}
       {office.team === 'support' && <SupportData {...props} run={run} />}
       {office.team === 'welfare' && <WelfareData {...props} run={run} />}
@@ -52,10 +55,11 @@ export function TeamDataPanel(props: Props) {
 
 type Run = { run: (fn: () => Promise<unknown>) => Promise<void> };
 
-function HrData({ snapshot, busy, onStart, run }: Props & Run) {
+function HrData({ snapshot, office, busy, onStart, onNotice, run }: Props & Run) {
   const pending = snapshot.mailbox.filter((m) => !m.processed);
   return (
     <>
+      <MailAccountBox snapshot={snapshot} office={office} run={run} onNotice={onNotice} />
       <div className="row">
         <button className="pixel-btn small" onClick={() => run(api.simulateMail)}>
           📨 {t('새 메일 도착 (시뮬레이션)')}
@@ -69,8 +73,9 @@ function HrData({ snapshot, busy, onStart, run }: Props & Run) {
         {snapshot.mailbox.map((m) => (
           <li key={m.id} className={m.processed ? 'done' : ''}>
             <span className="data-tag">{m.processed ? t('정리됨') : t('새 메일')}</span>
+            {m.source && <span className="data-tag real-mail">{m.source === 'gmail' ? 'Gmail' : t('실제 메일')}</span>}
             <b>{m.subject}</b>
-            <span className="muted small"> · {m.from.split('<')[0].trim()} · {timeOf(m.receivedAt)}</span>
+            <span className="muted small"> · {m.from.split('<')[0].trim()} · {m.source === 'gmail' ? m.receivedAt.slice(0, 10) : timeOf(m.receivedAt)}</span>
           </li>
         ))}
       </ul>

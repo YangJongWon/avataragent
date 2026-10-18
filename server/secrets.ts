@@ -47,3 +47,14 @@ export const mcpSecretsFor = (serverId: string): Record<string, string> => ({ ..
 
 export const mcpSecretInfo = (serverId: string) =>
   Object.entries(mcpSaved[serverId] ?? {}).map(([name, value]) => ({ name, hint: `••••${value.slice(-4)}` }));
+
+// Mail account passwords (app passwords), one per HR office, in their own row like API keys.
+const mailSaved: Record<string, string> = loadKv<Record<string, string>>('mail_secrets') ?? {};
+
+export function setMailPassword(officeId: string, password: string | null) {
+  if (password) mailSaved[officeId] = password;
+  else delete mailSaved[officeId];
+  saveKv('mail_secrets', mailSaved);
+}
+
+export const mailPasswordFor = (officeId: string) => mailSaved[officeId] ?? '';

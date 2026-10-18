@@ -212,7 +212,7 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
               {task.proposal.lines.length > 0 && (
                 <ul>
                   {task.proposal.lines.map((line, i) => (
-                    <li key={i}>{line}</li>
+                    <li key={i}>{localize(line)}</li>
                   ))}
                 </ul>
               )}

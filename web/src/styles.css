@@ -3394,3 +3394,56 @@ p.plan-note {
   width: 100%;
   box-sizing: border-box;
 }
+
+/* HR: the mail account the mailbox reads, and pulling from it now. */
+.mail-account {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border: 2px dashed var(--line);
+}
+.mail-account .row {
+  gap: 6px;
+  align-items: center;
+}
+.mail-account input:not(.mail-port) {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.mail-account .mail-port {
+  width: 70px;
+}
+.data-tag.real-mail {
+  background: #fdecea;
+  color: #c5221f;
+}
+
+/* Scheduled tasks: when to run in the new-task dialog, and the office's list in its team data. */
+.schedule-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.schedule-fields input[type='time'],
+.schedule-fields input[type='datetime-local'] {
+  max-width: 220px;
+}
+.schedule-days {
+  gap: 4px 10px;
+}
+.schedules {
+  margin-bottom: 10px;
+}
+.schedule-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.schedules .row {
+  gap: 4px;
+  margin-top: 4px;
+}

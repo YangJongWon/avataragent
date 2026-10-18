@@ -8,6 +8,10 @@ export type ServerTextEntry = Partial<Record<Exclude<Language, 'ko'>, string>>;
 
 export const SERVER_TEXT: Record<string, ServerTextEntry> = {
   // ── 직원 말풍선 ─────────────────────────────────────────────
+  '승인하면 실제 메일함에도 반영해요: {n}통 분류, 그중 {archived}통은 받은편지함에서 치워요. 삭제나 읽음 표시는 하지 않아요.': { zh: '批准后也会同步到真实邮箱：整理 {n} 封，其中 {archived} 封移出收件箱。不会删除或标记为已读。', ja: '承認すると実際のメールボックスにも反映します：{n} 通を分類し、そのうち {archived} 通を受信トレイから片付けます。削除や既読にはしません。', en: 'Approving also sorts your real inbox: {n} messages, {archived} of them moved out of the inbox. Nothing is deleted or marked read.' },
+  '실제 메일함: {labeled}통 분류, {archived}통 보관': { zh: '真实邮箱：整理 {labeled} 封，归档 {archived} 封', ja: '実際のメールボックス：{labeled} 通を分類、{archived} 通をアーカイブ', en: 'Real inbox: {labeled} sorted, {archived} archived' },
+  '{n}통은 메일함에서 찾지 못했어요': { zh: '有 {n} 封在邮箱中找不到', ja: '{n} 通はメールボックスで見つかりませんでした', en: "{n} couldn't be found in the mailbox" },
+  '실제 메일함 정리 실패: {reason}': { zh: '真实邮箱整理失败：{reason}', ja: '実際のメールボックスの整理に失敗：{reason}', en: "Couldn't sort the real inbox: {reason}" },
   '외부 작업 {n}건 실행': { zh: '已执行 {n} 项外部操作', ja: '外部作業 {n} 件を実行', en: 'Ran {n} external actions' },
   '외부 작업 {n}건 확인 필요': { zh: '{n} 项外部操作需要确认', ja: '外部作業 {n} 件は要確認', en: '{n} external actions need checking' },
   '근무 시간이 끝나 퇴근했어요. 🏠': { zh: '工作时间结束，下班了。🏠', ja: '勤務時間が終わって退勤しました。🏠', en: 'Work hours are over, so I went home. 🏠' },

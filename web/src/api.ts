@@ -20,6 +20,8 @@ import type {
   Office,
   OfficeEvent,
   PlanMode,
+  ScheduledTask,
+  ScheduleRepeat,
   Role,
   SavedFlow,
   ServerMessage,
@@ -61,7 +63,17 @@ export const api = {
   createShare: (input: { name: string; role: ShareRole; officeIds: string[] | 'all'; expiresInDays: number }) =>
     call<ShareLink>('POST', '/api/shares', input),
   deleteShare: (shareId: string) => call('DELETE', `/api/shares/${shareId}`),
-  updateOffice: (officeId: string, patch: { autoRun?: boolean; autoImprove?: boolean; budgetKrw?: number | null; theme?: string | null; themeCss?: boolean; name?: string; description?: string }) =>
+  createSchedule: (body: { officeId: string; title: string; description: string; taskType: string; planMode: PlanMode; steps?: WorkflowStepInput[]; repeat: ScheduleRepeat; timeZone: string }) =>
+    call<ScheduledTask>('POST', '/api/schedules', body),
+  updateSchedule: (id: string, patch: { enabled?: boolean; repeat?: ScheduleRepeat; timeZone?: string; title?: string; description?: string }) =>
+    call<ScheduledTask>('PUT', `/api/schedules/${id}`, patch),
+  deleteSchedule: (id: string) => call('DELETE', `/api/schedules/${id}`),
+  runSchedule: (id: string) => call<{ taskId: string | null }>('POST', `/api/schedules/${id}/run`),
+  importMail: (officeId: string) => call<{ added: number }>('POST', `/api/offices/${officeId}/mail/import`),
+  connectMailAccount: (officeId: string, body: { provider: string; user: string; password: string; host?: string; port?: number }) =>
+    call<Office>('PUT', `/api/offices/${officeId}/mail-account`, body),
+  disconnectMailAccount: (officeId: string) => call<Office>('DELETE', `/api/offices/${officeId}/mail-account`),
+  updateOffice: (officeId: string, patch: { autoRun?: boolean; autoImprove?: boolean; gmailServerId?: string | null; budgetKrw?: number | null; theme?: string | null; themeCss?: boolean; name?: string; description?: string }) =>
     call('PUT', `/api/offices/${officeId}`, patch),
   setCompanyTheme: (theme: string) => call<{ theme: string }>('PUT', '/api/theme', { theme }),
   setThemeBookings: (bookings: ThemeBooking[]) => call<{ bookings: ThemeBooking[] }>('PUT', '/api/theme-bookings', { bookings }),

@@ -1,3 +1,4 @@
+import type { MailAccount } from './mail-providers.ts';
 import type { TaskDesigns } from './design.ts';
 import type { McpServer, PlannedAction } from './mcp.ts';
 import type { ImprovementLog, PerfRecord } from './performance.ts';
@@ -52,6 +53,10 @@ export interface Office {
   /** Shown under the tabs instead of the team's standard description. */
   description?: string;
   autoRun: boolean;
+  /** HR: the mail account (IMAP, app password) whose inbox feeds the mailbox. The password stays on the server. */
+  mailAccount?: MailAccount;
+  /** HR, advanced: a Gmail MCP server read instead of an IMAP account. Neither keeps the simulated mail only. */
+  gmailServerId?: string | null;
   /** Applies safe improvement suggestions by itself after each completed task. */
   autoImprove?: boolean;
   budgetKrw: number | null;
@@ -262,6 +267,35 @@ export interface Task {
   completedAt: string | null;
 }
 
+/** When a scheduled task runs: once at a moment, every day or chosen weekdays at a wall-clock time, or every N hours. */
+export type ScheduleRepeat =
+  | { kind: 'once'; at: string }
+  | { kind: 'daily'; time: string }
+  | { kind: 'weekly'; days: number[]; time: string }
+  | { kind: 'hourly'; every: number };
+
+/** A task the office puts on its board by itself at set times. */
+export interface ScheduledTask {
+  id: string;
+  officeId: string;
+  title: string;
+  description: string;
+  taskType: string;
+  planMode: PlanMode;
+  /** The journey for planMode 'custom'. */
+  steps?: WorkflowStepInput[];
+  repeat: ScheduleRepeat;
+  /** Wall-clock times are read in this zone (the browser's when it was made). */
+  timeZone: string;
+  enabled: boolean;
+  /** Null once a one-off has run or nothing is left to run. */
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastTaskId: string | null;
+  lastError: string | null;
+  createdAt: string;
+}
+
 export interface Mail {
   id: string;
   from: string;
@@ -270,6 +304,10 @@ export interface Mail {
   receivedAt: string;
   processed: boolean;
   mockEvent?: { title: string; date: string; start: string; end: string; location: string };
+  /** Read from a real inbox: over IMAP, or Gmail through MCP (its receivedAt is the day only). Otherwise simulated. */
+  source?: 'imap' | 'gmail';
+  /** IMAP: where the message sits in the real inbox, so an approved sorting can label or archive it. */
+  remote?: { uid: number; uidValidity: string };
 }
 
 export interface CalendarEvent {
@@ -435,6 +473,8 @@ export interface Snapshot {
   companyLogo: string | null;
   /** Work journeys saved for reuse when making a task. */
   flows: SavedFlow[];
+  /** Tasks offices start by themselves at set times. */
+  schedules: ScheduledTask[];
   provider: string;
   model: string;
   /** Owner only. */

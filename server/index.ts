@@ -23,6 +23,12 @@ import {
 } from '../shared/models.ts';
 import { allowedModes, isToolMode, stdioPresetOf, type McpServer } from '../shared/mcp.ts';
 import { isLocalRequest } from './local-request.ts';
+import { gmailServers } from './gmail.ts';
+import { checkMailAccount } from './mail-imap.ts';
+import { importMail, mailTick } from './mail-sync.ts';
+import { mailProviderOf, type MailAccount } from '../shared/mail-providers.ts';
+import { setMailPassword } from './secrets.ts';
+import { createSchedule, deleteSchedule, runScheduleNow, scheduleOf, scheduleTick, updateSchedule } from './schedules.ts';
 import { isExportFormat } from '../shared/design.ts';
 import { isPersonality } from '../shared/personality.ts';
 import { parsePlaybook, playbookChanges } from '../shared/playbook.ts';
@@ -173,13 +179,17 @@ app.delete('/api/offices/:id', (req, res) => {
 
 app.put('/api/offices/:id', async (req, res) => {
   guard(res, 'manage', req.params.id);
-  const { autoRun, autoImprove, budgetKrw, theme, themeCss, name, description } = req.body ?? {};
+  const { autoRun, autoImprove, budgetKrw, theme, themeCss, name, description, gmailServerId } = req.body ?? {};
+  if (gmailServerId !== undefined && gmailServerId !== null && !gmailServers().some((s) => s.id === gmailServerId)) throw new Error('Gmail MCP 연결을 찾지 못했어요.');
+  if (gmailServerId !== undefined && store.office(req.params.id).team !== 'hr') throw new Error('Gmail은 인사팀 메일함에만 연결할 수 있어요.');
   if (budgetKrw !== undefined || name !== undefined || description !== undefined) guard(res, 'owner');
   if (name !== undefined && (typeof name !== 'string' || !name.trim())) throw new Error('사무실 이름을 적어 주세요.');
   if (theme !== undefined && theme !== null && !isUsableTheme(theme)) throw new Error('설치되지 않은 테마예요.');
   store.updateOffice(req.params.id, (o) => {
     if (typeof autoRun === 'boolean') o.autoRun = autoRun;
     if (typeof autoImprove === 'boolean') o.autoImprove = autoImprove;
+    if (gmailServerId === null) delete o.gmailServerId;
+    else if (typeof gmailServerId === 'string') o.gmailServerId = gmailServerId;
     // null goes back to the company theme; a theme id, even the built-in one, is this office's own pick.
     if (theme === null) delete o.theme;
     else if (typeof theme === 'string') o.theme = theme;
@@ -399,6 +409,75 @@ app.get('/themes/:id/*path', (req, res) => {
 app.post('/api/offices/:id/improvements', (req, res) => {
   guard(res, 'manage', req.params.id);
   res.json(applyImprovement(req.params.id, String(req.body?.id ?? '')));
+});
+
+app.post('/api/schedules', (req, res) => {
+  guard(res, 'operate', String(req.body?.officeId ?? ''));
+  const schedule = createSchedule(req.body ?? {});
+  store.emit('schedule.changed', { payload: { officeId: schedule.officeId, summary: `예약 업무 추가: ${schedule.title}` } });
+  res.json(schedule);
+});
+
+app.put('/api/schedules/:id', (req, res) => {
+  guard(res, 'operate', scheduleOf(req.params.id).officeId);
+  const schedule = updateSchedule(req.params.id, req.body ?? {});
+  store.emit('schedule.changed', { payload: { officeId: schedule.officeId, summary: `예약 업무 변경: ${schedule.title}` } });
+  res.json(schedule);
+});
+
+app.delete('/api/schedules/:id', (req, res) => {
+  const schedule = scheduleOf(req.params.id);
+  guard(res, 'operate', schedule.officeId);
+  deleteSchedule(schedule.id);
+  store.emit('schedule.changed', { payload: { officeId: schedule.officeId, summary: `예약 업무 삭제: ${schedule.title}` } });
+  res.json({ ok: true });
+});
+
+app.post('/api/schedules/:id/run', async (req, res) => {
+  guard(res, 'operate', scheduleOf(req.params.id).officeId);
+  res.json(await runScheduleNow(req.params.id, (input) => workflowRuntime.createTask(input)));
+});
+
+app.post('/api/offices/:id/mail/import', async (req, res) => {
+  guard(res, 'manage', req.params.id);
+  const added = await importMail(req.params.id);
+  await workflowRuntime.tick();
+  res.json({ added });
+});
+
+/** Connects the HR mailbox to a mail account: the login is tried first, and only a working one is saved. */
+app.put('/api/offices/:id/mail-account', async (req, res) => {
+  guard(res, 'manage', req.params.id);
+  const office = store.office(req.params.id);
+  if (office.team !== 'hr') throw new Error('메일 계정은 인사팀 메일함에만 연결할 수 있어요.');
+  const body = req.body ?? {};
+  const provider = mailProviderOf(String(body.provider ?? ''));
+  if (!provider) throw new Error('메일 종류를 골라 주세요.');
+  const user = text(body.user, 200);
+  if (!/^[^\s@]+@[^\s@]+$/.test(user)) throw new Error('메일 주소를 확인해 주세요.');
+  const password = String(body.password ?? '').trim();
+  if (!password) throw new Error('앱 비밀번호를 넣어 주세요.');
+  const host = provider.id === 'custom' ? text(body.host, 200) : provider.host;
+  const port = provider.id === 'custom' ? Number(body.port) || 993 : provider.port;
+  if (!/^[a-z0-9.-]+$/i.test(host)) throw new Error('IMAP 서버 주소를 확인해 주세요.');
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('포트 번호를 확인해 주세요.');
+  const account: MailAccount = { provider: provider.id, user, host, port };
+  await checkMailAccount(account, password);
+  setMailPassword(office.id, password);
+  store.updateOffice(office.id, (o) => {
+    o.mailAccount = account;
+  });
+  store.emit('office.updated', { payload: { officeId: office.id, summary: `메일 계정 연결: ${user}` } });
+  res.json(store.office(office.id));
+});
+
+app.delete('/api/offices/:id/mail-account', (req, res) => {
+  guard(res, 'manage', req.params.id);
+  store.updateOffice(req.params.id, (o) => {
+    delete o.mailAccount;
+  });
+  setMailPassword(req.params.id, null);
+  res.json(store.office(req.params.id));
 });
 
 app.post('/api/sim/mail', async (_req, res) => {
@@ -1345,7 +1424,13 @@ function background(job: () => Promise<void>, label: string): void {
 }
 
 setInterval(() => background(() => workflowRuntime.tick(), '자동 확인'), config.autoRunIntervalSec * 1000);
+// Scheduled tasks start within a quarter of a minute of their time.
+setInterval(() => background(() => scheduleTick((input) => workflowRuntime.createTask(input)), '예약 업무'), 15_000);
 setInterval(() => background(() => billingTick(), '구독 확인'), 60 * 60 * 1000);
+setInterval(() => background(async () => {
+  await mailTick();
+  await workflowRuntime.tick();
+}, '메일 확인'), 5 * 60 * 1000);
 // Today's free-model requests as OpenRouter counts them, for the badges in the office and staff screens.
 onFreeQuotaChange(() => store.announce());
 startFreeQuotaSync(() => {

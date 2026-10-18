@@ -23,6 +23,7 @@ import type {
   Agent,
   AiMode,
   AiTimeouts,
+  ScheduledTask,
   Budget,
   CalendarEvent,
   ChatMessage,
@@ -95,6 +96,7 @@ export interface PersistedState {
   /** The company's own logo as a data URL, for the top bar on the business plan. */
   companyLogo: string | null;
   flows: SavedFlow[];
+  schedules: ScheduledTask[];
 }
 
 const freshBilling = (): PersistedState['billing'] => ({ subscription: freeSubscription(config.billingProvider), invoices: [], checkouts: [], processedEvents: [] });
@@ -184,6 +186,7 @@ function fresh(): PersistedState {
     siteTheme: null,
     companyLogo: null,
     flows: [],
+    schedules: [],
   };
 }
 
@@ -254,6 +257,7 @@ function normalize(saved: PersistedState) {
   saved.siteTheme ??= null;
   saved.companyLogo ??= null;
   saved.flows ??= [];
+  saved.schedules ??= [];
   saved.performance ??= [];
   saved.improvements ??= [];
   if (!isPlan(saved.plan)) saved.plan = 'personal';
@@ -331,6 +335,7 @@ class Store {
       siteTheme: s.siteTheme,
       companyLogo: s.companyLogo,
       flows: s.flows,
+      schedules: s.schedules,
       provider,
       model: provider === 'mock' || provider === 'agents' ? '직원별 모델' : config.model,
       aiMode: s.aiMode,
@@ -476,6 +481,7 @@ class Store {
     this.state.tasks = this.state.tasks.filter((t) => t.officeId !== id);
     this.state.performance = this.state.performance.filter((r) => r.officeId !== id);
     this.state.improvements = this.state.improvements.filter((i) => i.officeId !== id);
+    this.state.schedules = this.state.schedules.filter((s) => s.officeId !== id);
     this.changed();
   }
 

@@ -22,6 +22,7 @@ import { callTool } from './mcp.ts';
 import { nextInquiry, nextMail } from './seed.ts';
 import { store } from './store.ts';
 import { L, LT, V } from './text.ts';
+import { applyMailSorting } from './mail-sync.ts';
 import { systemPromptFor, TEAM_SPECS } from './teams.ts';
 import { agentAvailability, freshDailyUsage, usageDate } from '../shared/work-policy.ts';
 
@@ -1238,8 +1239,10 @@ export async function completeTask(taskId: string, valueKrw?: number) {
     const actions = store.task(taskId).actions ?? [];
     const done = actions.filter((a) => a.status === 'done').length;
     const missed = actions.filter((a) => a.status === 'failed' || a.status === 'unknown').length;
+    const sorted = await applyMailSorting(store.task(taskId), json);
     const applied = [
       specOf(task).onApprove(json, store.task(taskId)),
+      sorted,
       done ? V('외부 작업 {n}건 실행', { n: done }) : '',
       missed ? V('외부 작업 {n}건 확인 필요', { n: missed }) : '',
     ]
