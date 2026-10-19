@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢你的贡献。本项目采用 AGPL-3.0 与商业许可的双重许可（[LICENSING.md](LICENSING.md)），因此贡献代码需要同意以下条款。
+感谢你的贡献。本项目采用 AGPL-3.0 与商业许可的双重许可（[LICENSING.zh-CN.md](LICENSING.zh-CN.md)），因此贡献代码需要同意以下条款。
 
 ## 贡献者许可协议（CLA）
 

@@ -99,13 +99,13 @@ npm run dev
 
 ## 初めてのインストール（別の PC）
 
-プログラミングを知らない人には README の「かんたんインストール」を案内します。`설치.cmd`（または `scripts\get.ps1` の1行コマンド）が Node.js のインストール（winget）、`npm install`、`.env` の作成（パスワードを質問）、ビルド、デスクトップのショートカット、初回起動まで行います。
+プログラミングを知らない人には README の「かんたんインストール」を案内します。`설치.cmd`（または `scripts\get.ps1` の1行コマンド）が Node.js のインストール（winget）、`npm install`、`.env` の作成（パスワードを質問）、ビルド、デスクトップのショートカット（起動用の 1 つだけ）、初回起動まで行います。停止・再起動・アップデートは、`open` が表示するトレイアイコン（`scripts/tray.ps1`）の右クリックメニューにあります。
 
 - `upgrade` は、git で取得したフォルダーでは `git pull --ff-only` を実行し、変更したファイルがあれば止まります。ZIP で取得したフォルダーでは GitHub の main ZIP を取得して上書きし、`.env`、`data`、`logs`、`node_modules` には触れません。
 - `.env` の `PORT` を変えると、`office` スクリプトもそのポートを使います。
 - `stop` はポートを開いているサーバーだけでなく、その上の tsx・npm ランチャーも一緒に止めます。
 
-macOS/Linux では `scripts/get.sh`（1行コマンド）または `scripts/install.sh` が同じことを行います。Node.js は、macOS で Homebrew があれば Homebrew で、なければ、また Linux では nvm でホームフォルダーにインストールします。起動アイコンは、macOS はデスクトップの `.command` ファイル、Linux は `~/.local/share/applications` の `.desktop` ファイルです。
+macOS/Linux では `scripts/get.sh`（1行コマンド）または `scripts/install.sh` が同じことを行います。Node.js は、macOS で Homebrew があれば Homebrew で、なければ、また Linux では nvm でホームフォルダーにインストールします。起動アイコンは、macOS はデスクトップの `.command` ファイル 1 つ（停止とアップデートはインストールフォルダーの `끄기.command`、`업데이트.command`）、Linux は `~/.local/share/applications` の `.desktop` ファイル 1 つで、停止とアップデートはその右クリックメニュー（Desktop Actions）にあります。
 
 - `scripts/office.sh` は `office.ps1` と同じコマンド（start、stop、restart、update、upgrade、open、status、public-on、public-off）に対応しています。
 - サーバーの PID は `logs/server.pid` に書き込みます。Linux は `setsid` で起動してプロセスグループごと、macOS は子プロセスを探して一緒に止めます。
@@ -167,7 +167,7 @@ New-NetFirewallRule -DisplayName "avataragent 8787 (Tailscale)" -Direction Inbou
   - 戻り先のアドレスは、`PUBLIC_URL` があれば `PUBLIC_URL/api/mcp-oauth/callback`、なければ今アクセスしているアドレスです。外部公開アドレスでログインした場合は、同じアドレスでアクセスした状態でログインし直す必要があります。
   - ログイントークンも `data/office.db` にだけ保存され、期限が切れると自動で更新します。更新に失敗するとカードに「ログインが必要」と表示されます。
   - ログインウィンドウはオフィスのオーナーとしてログインしたブラウザで開いてください。
-- **アドレスで接続（HTTP）** はすぐに使えます。**この PC で実行（npx・uvx）** はこの PC でコマンドを実行するので、`.env` に `MCP_ALLOW_STDIO=1` を入れて `restart` しないとオンになりません。外部公開中なら、先にパスワードを長いものに変えてください。
+- **アドレスで接続（HTTP）** と、標準で用意された **この PC で実行** の接続（Web 検索、Notion、Web ページ読み取り — 固定されたパッケージだけを実行）はすぐに使えます。コマンドを **直接入力** する接続はこの PC で任意のプログラムを実行できるため、アプリを実行している PC のブラウザー（localhost）からしか登録・変更できません。トンネル（Tailscale Funnel、cloudflared）や別の機器からのリクエストは、パスワードが正しくても拒否します。どこからでも登録できるようにするには、`.env` に `MCP_ALLOW_STDIO=1` を入れて `restart` します（外部公開中はおすすめしません）。
 - 用意された項目のうち Web 検索・Notion は Node.js（npx）、Web ページの読み取りは uv（uvx）がこの PC に必要です。
 - シミュレーションモードでも、オンにしたツールは実際に呼び出します（タスクのタイトルで最初の検索型ツールを1回呼び出し）。費用のかかる API なら注意してください。「承認後に実行」のツールもシミュレーションで最初のツールによる作業を1つ提案し、承認すると実際に実行するので、試すときはオフにするか作業のチェックを外してください。
 

@@ -66,7 +66,7 @@ AI 에이전트를 역할별 캐릭터 캐스트로 배치하고, 사무실·프
 3. 끝나면 브라우저로 사무실이 열립니다. 관리자 권한도, Node.js 설치도 필요 없습니다. 프로그램 안에 Node.js가 들어 있습니다.
 
 - 프로그램은 `%LOCALAPPDATA%\Programs\AvatarCast Office`, 설정(`.env`)·데이터·로그는 `%APPDATA%\AvatarCast Office`에 둡니다. 새 버전 설치 파일을 그대로 실행하면 업데이트되고, 설정과 데이터는 그대로 남습니다.
-- 시작 메뉴(와 바탕화면)에 **AvatarCast Office**(켜고 열기), **AvatarCast Office 끄기**가 생깁니다. 지울 때는 Windows 설정의 앱 제거에서 지우고, 데이터까지 지울지 묻습니다.
+- 시작 메뉴(와 바탕화면)에 **AvatarCast Office**가 생깁니다. 켜면 작업 표시줄 오른쪽 아래에 트레이 아이콘이 뜨고, 아이콘을 우클릭하면 사무실 열기·다시 시작·서버 끄기가 나옵니다(업데이트는 새 설치 파일을 실행). 지울 때는 Windows 설정의 앱 제거에서 지우고, 데이터까지 지울지 묻습니다.
 - 마지막 화면의 **Tailscale 설치하고 로그인**을 체크하면 휴대폰·외부에서 쓸 수 있게 Tailscale을 설치합니다. Tailscale 가입과 로그인은 직접 합니다.
 - 설치 파일 만들기: `powershell -File installer/build.ps1` (Inno Setup 6 필요). 버전 태그(`v0.2.0`)를 올리면 GitHub Actions가 만들어 Release에 붙입니다.
 
@@ -90,13 +90,16 @@ AI 에이전트를 역할별 캐릭터 캐스트로 배치하고, 사무실·프
 - Node.js가 없으면 설치합니다. 권한 확인 창이 뜨면 **예**를 누르세요.
 - 필요한 부품을 내려받고 화면을 만듭니다. 처음에는 5~10분쯤 걸립니다.
 - 접속 비밀번호를 물어봅니다. 이 PC에서만 쓴다면 그냥 Enter를 눌러도 됩니다.
-- 바탕화면에 바로가기 3개를 만들고, 브라우저로 사무실을 엽니다.
+- 바탕화면에 **AvatarCast Office** 바로가기 하나를 만들고, 브라우저로 사무실을 엽니다.
 
-| 바탕화면 바로가기 | 하는 일 |
+켜져 있는 동안 작업 표시줄 오른쪽 아래(시계 옆)에 트레이 아이콘이 뜹니다. 아이콘을 더블클릭하면 사무실이 열리고, 우클릭하면 메뉴가 나옵니다.
+
+| 트레이 메뉴 | 하는 일 |
 | --- | --- |
-| AvatarCast Office | 서버를 켜고 브라우저로 엽니다 |
-| AvatarCast Office 끄기 | 서버를 끕니다 |
-| AvatarCast Office 업데이트 | 새 버전을 받아 다시 켭니다. 설정(.env)과 데이터(data 폴더)는 그대로 둡니다 |
+| 사무실 열기 | 브라우저로 엽니다(꺼져 있으면 켭니다) |
+| 다시 시작 | 서버를 껐다 켭니다 |
+| 업데이트 | 새 버전을 받아 다시 켭니다. 설정(.env)과 데이터(data 폴더)는 그대로 둡니다 |
+| 서버 끄기 | 서버를 끄고 트레이 아이콘도 사라집니다 |
 
 설치 폴더에도 같은 일을 하는 `시작.cmd`, `끄기.cmd`, `업데이트.cmd`가 있습니다.
 
@@ -120,8 +123,8 @@ AI 에이전트를 역할별 캐릭터 캐스트로 배치하고, 사무실·프
 프로그램은 홈 폴더의 `avataragent`에 설치됩니다. Windows와 같은 순서로 Node.js, 부품, 설정 파일, 화면 만들기, 실행 아이콘, 첫 실행까지 알아서 합니다.
 
 - Node.js가 없으면 macOS는 Homebrew가 있을 때 Homebrew로, 그 밖에는 내 계정 폴더(nvm)에 설치합니다. 관리자 비밀번호는 필요 없습니다.
-- macOS는 바탕화면에 `AvatarCast Office.command`(켜기), `… 끄기.command`, `… 업데이트.command`를 만듭니다. 더블클릭하면 터미널 창이 잠깐 열리며 실행됩니다.
-- Linux는 앱 목록(과 바탕화면)에 같은 이름의 아이콘 3개를 만듭니다.
+- macOS는 바탕화면에 `AvatarCast Office.command`(켜기) 하나만 만듭니다. 더블클릭하면 터미널 창이 잠깐 열리며 실행됩니다. 끄기·업데이트는 설치 폴더의 `끄기.command`, `업데이트.command`로 합니다.
+- Linux는 앱 목록(과 바탕화면)에 실행 아이콘 하나를 만들고, 끄기·업데이트는 아이콘 우클릭 메뉴에 넣습니다.
 - ZIP으로 받았다면 macOS에서는 폴더의 `설치.command`를 오른쪽 클릭 → **열기**로 실행하고, Linux에서는 폴더에서 `bash scripts/install.sh`를 실행합니다.
 - 터미널에서 직접 다룰 때는 `scripts/office.sh start|stop|restart|status|update|upgrade`를 씁니다. 서버가 켜지지 않으면 `logs/server.err.log`를 확인하세요.
 
@@ -179,6 +182,7 @@ npm run build
 shared/   화면·서버 공통 타입, 팀·업무 여정·권한 규칙
 server/   API, 실시간 이벤트, 업무 오케스트레이터, AI 호출, 저장소
 web/      React 화면과 픽셀 사무실(pixi.js)
+site/     공개 웹사이트와 커뮤니티 갤러리
 scripts/  운영 스크립트 (office.ps1, office.sh), 설치 (install.ps1, get.ps1, install.sh, get.sh)
 ```
 
@@ -187,6 +191,9 @@ scripts/  운영 스크립트 (office.ps1, office.sh), 설치 (install.ps1, get.
 - [제품 기획서](AI_AGENT_OFFICE_PRODUCT_PLAN.md)
 - [개발 현황](DEVELOPMENT_STATUS.md)
 - [운영 가이드](OPERATIONS.md)
+- [도움말](docs/HELP.md)
+- [테마 가이드](docs/THEME_GUIDE.md)
+- [개인정보 처리](docs/PRIVACY.md)
 - [아키텍처 결정 기록](docs/ARCHITECTURE_DECISIONS.md)
 - [기여 안내](CONTRIBUTING.md)
 

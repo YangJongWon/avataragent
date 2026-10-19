@@ -99,13 +99,13 @@ npm run dev
 
 ## First install (another PC)
 
-Point people who don't program to "Easy install" in the README. `설치.cmd` (or the one-line `scripts\get.ps1` command) handles installing Node.js (winget), `npm install`, creating `.env` (it asks for a password), the build, a desktop shortcut and the first run.
+Point people who don't program to "Easy install" in the README. `설치.cmd` (or the one-line `scripts\get.ps1` command) handles installing Node.js (winget), `npm install`, creating `.env` (it asks for a password), the build, a desktop shortcut (just the one to start it) and the first run. Stop, restart and update are in the right-click menu of the tray icon (`scripts/tray.ps1`) that `open` starts.
 
 - In a folder cloned with git, `upgrade` runs `git pull --ff-only` and stops if you have modified files. In a folder from a ZIP, it downloads GitHub's main ZIP and overwrites, leaving `.env`, `data`, `logs` and `node_modules` alone.
 - If you change `PORT` in `.env`, the `office` script uses that port too.
 - `stop` stops not only the server holding the port but also the tsx and npm launchers above it.
 
-On macOS/Linux, `scripts/get.sh` (one-line command) or `scripts/install.sh` does the same. Node.js is installed with Homebrew on macOS if it's there; otherwise, and on Linux, with nvm in your home folder. The launcher is a `.command` file on the desktop on macOS, and a `.desktop` file in `~/.local/share/applications` on Linux.
+On macOS/Linux, `scripts/get.sh` (one-line command) or `scripts/install.sh` does the same. Node.js is installed with Homebrew on macOS if it's there; otherwise, and on Linux, with nvm in your home folder. The launcher is a single `.command` file on the desktop on macOS (stop and update are `끄기.command` and `업데이트.command` in the install folder), and a single `.desktop` file in `~/.local/share/applications` on Linux, with stop and update in its right-click menu (Desktop Actions).
 
 - `scripts/office.sh` supports the same commands as `office.ps1` (start, stop, restart, update, upgrade, open, status, public-on, public-off).
 - The server PID is written to `logs/server.pid`. On Linux it starts with `setsid` and stops as a whole process group; on macOS its child processes are found and stopped with it.
@@ -167,7 +167,7 @@ Connect outside features as MCP servers on the **MCP** tab at the top. Only the 
   - The return address is `PUBLIC_URL/api/mcp-oauth/callback` if `PUBLIC_URL` is set, otherwise the address you're currently on. If you signed in through the public address, sign in again while on that same address.
   - Sign-in tokens are also stored only in `data/office.db` and refreshed automatically when they expire. If a refresh fails, the card shows "Sign-in needed".
   - Open the sign-in window in a browser signed in as the office owner.
-- **Connect by address (HTTP)** works right away. **Run on this PC (npx/uvx)** runs commands on this PC, so it only turns on after you put `MCP_ALLOW_STDIO=1` in `.env` and `restart`. If public access is on, switch to a long password first.
+- **Connect by address (HTTP)** and the built-in **Run on this PC** connections (web search, Notion, web page reader — they only run fixed packages) work right away. A connection where you **type the command yourself** can run any program on this PC, so it can only be added or changed from a browser on the PC running the app (localhost). Requests coming through a tunnel (Tailscale Funnel, cloudflared) or from another device are refused even with the right password. To allow it from anywhere, put `MCP_ALLOW_STDIO=1` in `.env` and `restart` (not recommended while public access is on).
 - Among the ready-made entries, web search and Notion need Node.js (npx) on this PC, and the web page reader needs uv (uvx).
 - Tools you've turned on are really called even in simulation mode (the first search-type tool is called once with the task title). Be careful with paid APIs. "Run after approval" tools also propose one action with the first tool in simulation, and approving it really runs it, so switch them off or untick the action when testing.
 

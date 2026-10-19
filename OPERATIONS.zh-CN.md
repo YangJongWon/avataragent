@@ -99,13 +99,13 @@ npm run dev
 
 ## 首次安装（其他电脑）
 
-对不懂编程的人，请引导他们查看 README 中的“轻松安装”。`설치.cmd`（或 `scripts\get.ps1` 一行命令）会完成 Node.js 安装（winget）、`npm install`、创建 `.env`（会询问密码）、构建、桌面快捷方式和首次运行。
+对不懂编程的人，请引导他们查看 README 中的“轻松安装”。`설치.cmd`（或 `scripts\get.ps1` 一行命令）会完成 Node.js 安装（winget）、`npm install`、创建 `.env`（会询问密码）、构建、桌面快捷方式（只有一个启动用的）和首次运行。停止、重新启动和更新在 `open` 启动的托盘图标（`scripts/tray.ps1`）的右键菜单中。
 
 - 在用 git 获取的文件夹中，`upgrade` 会执行 `git pull --ff-only`，有修改过的文件时会停止。在用 ZIP 获取的文件夹中，会下载 GitHub 的 main ZIP 并覆盖，不会动 `.env`、`data`、`logs`、`node_modules`。
 - 修改 `.env` 中的 `PORT` 后，`office` 脚本也会使用该端口。
 - `stop` 不仅会停止占用端口的服务器，也会一并停止其上层的 tsx、npm 启动器。
 
-macOS/Linux 上由 `scripts/get.sh`（一行命令）或 `scripts/install.sh` 完成同样的工作。Node.js 在 macOS 上如有 Homebrew 则用 Homebrew 安装；没有 Homebrew 或在 Linux 上，则用 nvm 安装到主目录。启动图标在 macOS 上是桌面的 `.command` 文件，在 Linux 上是 `~/.local/share/applications` 中的 `.desktop` 文件。
+macOS/Linux 上由 `scripts/get.sh`（一行命令）或 `scripts/install.sh` 完成同样的工作。Node.js 在 macOS 上如有 Homebrew 则用 Homebrew 安装；没有 Homebrew 或在 Linux 上，则用 nvm 安装到主目录。启动图标在 macOS 上是桌面的一个 `.command` 文件（停止和更新使用安装文件夹中的 `끄기.command`、`업데이트.command`），在 Linux 上是 `~/.local/share/applications` 中的一个 `.desktop` 文件，停止和更新在它的右键菜单（Desktop Actions）中。
 
 - `scripts/office.sh` 支持与 `office.ps1` 相同的命令（start、stop、restart、update、upgrade、open、status、public-on、public-off）。
 - 服务器 PID 写入 `logs/server.pid`。Linux 上用 `setsid` 启动并按进程组整体停止，macOS 上会找到子进程一并停止。
@@ -167,7 +167,7 @@ New-NetFirewallRule -DisplayName "avataragent 8787 (Tailscale)" -Direction Inbou
   - 返回地址在设置了 `PUBLIC_URL` 时为 `PUBLIC_URL/api/mcp-oauth/callback`，否则为当前访问的地址。如果是通过对外公开地址登录的，需要在同一地址下重新登录。
   - 登录令牌同样只保存在 `data/office.db` 中，过期后会自动刷新。刷新失败时卡片上会显示“需要登录”。
   - 请在以办公室所有者身份登录的浏览器中打开登录窗口。
-- **通过地址连接（HTTP）** 可以直接使用。**在本机运行（npx·uvx）** 会在本机执行命令，需要在 `.env` 中加入 `MCP_ALLOW_STDIO=1` 并 `restart` 后才会启用。如果正在对外公开，请先把密码改长。
+- **通过地址连接（HTTP）** 和内置的 **在本机运行** 连接（网页搜索、Notion、网页读取——只运行固定的软件包）可以直接使用。**自己输入命令** 的连接可以在本机运行任意程序，因此只能在运行应用的电脑的浏览器（localhost）中添加或修改。通过隧道（Tailscale Funnel、cloudflared）或其他设备发来的请求，即使密码正确也会被拒绝。如果要允许从任何地方添加，请在 `.env` 中加入 `MCP_ALLOW_STDIO=1` 并 `restart`（对外公开时不建议这样做）。
 - 预设项目中，网页搜索和 Notion 需要本机安装 Node.js（npx），网页读取需要 uv（uvx）。
 - 即使在模拟模式下，已打开的工具也会被真实调用（用任务标题调用一次第一个搜索类工具）。如果是收费的 API，请注意。“批准后执行”的工具在模拟中也会用第一个工具提出一项操作，批准后会真实执行，所以测试时请关闭工具或取消勾选该操作。
 

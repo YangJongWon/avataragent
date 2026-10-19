@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for contributing. This project is dual-licensed under AGPL-3.0 and a commercial license ([LICENSING.md](LICENSING.md)), so code contributions require the agreement below.
+Thank you for contributing. This project is dual-licensed under AGPL-3.0 and a commercial license ([LICENSING.en.md](LICENSING.en.md)), so code contributions require the agreement below.
 
 ## Contributor license agreement (CLA)
 

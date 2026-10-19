@@ -30,6 +30,6 @@ Copyright (C) 2026 YangJongWon
 
 ## コントリビュート
 
-コントリビュートの条件は [CONTRIBUTING.md](CONTRIBUTING.md) をご覧ください。デュアルライセンスを維持するため、コントリビューターライセンス同意（CLA）が必要です。
+コントリビュートの条件は [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) をご覧ください。デュアルライセンスを維持するため、コントリビューターライセンス同意（CLA）が必要です。
 
 この翻訳と韓国語の原文が異なる場合は、韓国語の原文が優先します。

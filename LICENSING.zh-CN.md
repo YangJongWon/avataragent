@@ -30,6 +30,6 @@ Copyright (C) 2026 YangJongWon
 
 ## 贡献
 
-贡献条件请参阅 [CONTRIBUTING.md](CONTRIBUTING.md)。为维持双重许可，需要签署贡献者许可协议（CLA）。
+贡献条件请参阅 [CONTRIBUTING.zh-CN.md](CONTRIBUTING.zh-CN.md)。为维持双重许可，需要签署贡献者许可协议（CLA）。
 
 本译文与韩文原文不一致时，以韩文原文为准。

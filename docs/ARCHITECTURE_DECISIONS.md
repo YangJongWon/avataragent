@@ -1,5 +1,7 @@
 # 아키텍처 결정 기록
 
+한국어 | [English](ARCHITECTURE_DECISIONS.en.md) | [日本語](ARCHITECTURE_DECISIONS.ja.md) | [简体中文](ARCHITECTURE_DECISIONS.zh-CN.md)
+
 ## ADR-001: 현재 오케스트레이터를 유지하고 LangGraph는 실행기 선택지로 둔다
 
 상태: ADR-003에 의해 대체됨  

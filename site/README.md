@@ -1,5 +1,7 @@
 # 프로젝트 사이트
 
+한국어 | [English](README.en.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
+
 AvatarCast의 공개 사이트입니다. 소개·가격·설치·문서와 커뮤니티(테마·플로우·플레이북 공유), 플랜 판매(라이선스 발급)를 맡습니다. 각 회사가 설치해 쓰는 앱 AvatarCast Office(`server/`, `web/`)과는 따로 실행되고, 검증 코드 같은 공용 코드는 루트 `shared/`를 함께 씁니다.
 
 ## 브랜드 운영 메모

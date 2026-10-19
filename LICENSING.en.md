@@ -30,6 +30,6 @@ Contact: doc.corax@gmail.com
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the terms. A contributor license agreement (CLA) is required to keep the dual license.
+See [CONTRIBUTING.en.md](CONTRIBUTING.en.md) for the terms. A contributor license agreement (CLA) is required to keep the dual license.
 
 If this translation differs from the Korean original, the Korean original prevails.

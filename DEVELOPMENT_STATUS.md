@@ -1,5 +1,7 @@
 # 개발 현황과 백엔드 진행 순서
 
+한국어 | [English](DEVELOPMENT_STATUS.en.md) | [日本語](DEVELOPMENT_STATUS.ja.md) | [简体中文](DEVELOPMENT_STATUS.zh-CN.md)
+
 기준 문서: `AI_AGENT_OFFICE_PRODUCT_PLAN.md`
 작성일: 2026-10-03
 
