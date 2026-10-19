@@ -55,8 +55,14 @@ export async function checkMailAccount(account: MailAccount, password: string) {
   }
 }
 
-/** What was already read, per office and account: another account's message numbers mean other messages. */
-const seenKey = (officeId: string, account: MailAccount) => `mail_seen_${officeId}_${account.user}@${account.host}:${account.port}`;
+/** What was already read, per account: another account's message numbers mean other messages. */
+const seenKey = (account: MailAccount) => `mail_seen_${account.id}`;
+
+export function mailAccountOf(id: string) {
+  const account = store.data.mailAccounts.find((a) => a.id === id);
+  if (!account) throw new Error('알 수 없는 메일 계정이에요.');
+  return account;
+}
 
 export interface SortResult {
   labeled: number;
@@ -69,12 +75,11 @@ export interface SortResult {
  * Applies an approved sorting to the real inbox. Gmail gets real labels (X-GM-LABELS) and archiving drops only the
  * Inbox label; other services have no labels, so mail that is done moves into a folder and the rest stays put.
  */
-export async function sortMail(officeId: string, items: { uid: number; uidValidity: string; kind: MailKind }[]): Promise<SortResult> {
-  const account = store.office(officeId).mailAccount;
-  if (!account) throw new Error('연결된 메일 계정이 없어요.');
+export async function sortMail(accountId: string, items: { uid: number; uidValidity: string; kind: MailKind }[]): Promise<SortResult> {
+  const account = mailAccountOf(accountId);
   const result: SortResult = { labeled: 0, archived: 0, missing: 0 };
   if (!items.length) return result;
-  const client = clientFor(account, mailPasswordFor(officeId));
+  const client = clientFor(account, mailPasswordFor(account.id));
   client.on('error', () => {});
   try {
     await client.connect();
@@ -122,14 +127,12 @@ export async function sortMail(officeId: string, items: { uid: number; uidValidi
   return result;
 }
 
-/** Reads new inbox messages into the HR mailbox; returns how many arrived. */
-export async function importImap(officeId: string): Promise<number> {
-  const office = store.office(officeId);
-  const account = office.mailAccount;
-  if (!account) throw new Error('연결된 메일 계정이 없어요.');
-  const client = clientFor(account, mailPasswordFor(officeId));
+/** Reads one account's new inbox messages into its office's mailbox; returns how many arrived. */
+export async function importImap(accountId: string): Promise<number> {
+  const account = mailAccountOf(accountId);
+  const client = clientFor(account, mailPasswordFor(account.id));
   client.on('error', () => {});
-  const seen = new Set(loadKv<string[]>(seenKey(officeId, account)) ?? []);
+  const seen = new Set(loadKv<string[]>(seenKey(account)) ?? []);
   const mails: (Mail & { uid: number })[] = [];
   try {
     await client.connect();
@@ -152,14 +155,15 @@ export async function importImap(officeId: string): Promise<number> {
         const from = parsed.from?.value[0];
         const received = parsed.date ?? (message.internalDate ? new Date(message.internalDate) : new Date());
         mails.push({
-          id: `imap_${createHash('sha256').update(`${account.user}:${validity}:${uid}`).digest('hex').slice(0, 16)}`,
+          id: `imap_${createHash('sha256').update(`${account.id}:${validity}:${uid}`).digest('hex').slice(0, 16)}`,
+          officeId: account.officeId,
           from: from ? (from.name ? `${from.name} <${from.address}>` : (from.address ?? '')) : '',
           subject: parsed.subject || '(제목 없음)',
           body: (parsed.text ?? '').replace(/\n{3,}/g, '\n\n').trim().slice(0, MAX_BODY),
           receivedAt: received.toISOString(),
           processed: false,
           source: 'imap',
-          remote: { uid, uidValidity: validity },
+          remote: { accountId: account.id, uid, uidValidity: validity },
           uid,
         });
       }
@@ -171,7 +175,7 @@ export async function importImap(officeId: string): Promise<number> {
     client.close();
     throw new Error(explain(error, account));
   } finally {
-    saveKv(seenKey(officeId, account), [...seen].slice(-MAX_SEEN));
+    saveKv(seenKey(account), [...seen].slice(-MAX_SEEN));
   }
   if (!mails.length) return 0;
   // Newest on top of the mailbox; messages from the same moment by their order in the inbox.
@@ -179,7 +183,7 @@ export async function importImap(officeId: string): Promise<number> {
   store.mutate((s) => {
     s.mailbox = [...sorted, ...s.mailbox].slice(0, 100);
   });
-  const researcher = store.agentByRole(officeId, 'researcher');
+  const researcher = store.agentByRole(account.officeId, 'researcher');
   for (const mail of sorted) store.emit('mail.received', { agentId: researcher.id, payload: { subject: mail.subject } });
   return mails.length;
 }

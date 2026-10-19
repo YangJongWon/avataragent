@@ -53,9 +53,7 @@ export interface Office {
   /** Shown under the tabs instead of the team's standard description. */
   description?: string;
   autoRun: boolean;
-  /** HR: the mail account (IMAP, app password) whose inbox feeds the mailbox. The password stays on the server. */
-  mailAccount?: MailAccount;
-  /** HR, advanced: a Gmail MCP server read instead of an IMAP account. Neither keeps the simulated mail only. */
+  /** Mail office: a Gmail MCP server whose inbox also feeds this office's mailbox. */
   gmailServerId?: string | null;
   /** Applies safe improvement suggestions by itself after each completed task. */
   autoImprove?: boolean;
@@ -298,6 +296,8 @@ export interface ScheduledTask {
 
 export interface Mail {
   id: string;
+  /** Every mail office has its own mailbox. */
+  officeId: string;
   from: string;
   subject: string;
   body: string;
@@ -306,8 +306,8 @@ export interface Mail {
   mockEvent?: { title: string; date: string; start: string; end: string; location: string };
   /** Read from a real inbox: over IMAP, or Gmail through MCP (its receivedAt is the day only). Otherwise simulated. */
   source?: 'imap' | 'gmail';
-  /** IMAP: where the message sits in the real inbox, so an approved sorting can label or archive it. */
-  remote?: { uid: number; uidValidity: string };
+  /** IMAP: which account and where in its inbox, so an approved sorting can label or archive it. */
+  remote?: { accountId: string; uid: number; uidValidity: string };
 }
 
 export interface CalendarEvent {
@@ -481,6 +481,8 @@ export interface Snapshot {
   aiMode?: AiMode;
   /** Owner only. */
   aiTimeouts?: AiTimeouts;
+  /** Owner only: connected mail accounts, each feeding one mail office (no passwords). */
+  mailAccounts?: MailAccount[];
   /** Owner only: AI_PROVIDER from .env. */
   envProvider?: string;
   companies: Company[];

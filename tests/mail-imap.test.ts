@@ -27,17 +27,17 @@ const { TEAM_SPECS } = await import('../server/teams.ts');
 after(() => imap.close());
 
 test('a mail account is read over IMAP: new messages once, read-only, as outside material', async () => {
-  const account = { provider: 'custom' as const, user: 'me@company.com', host: '127.0.0.1', port: imap.port };
+  const account = { id: 'check', officeId: 'office_hr', provider: 'custom' as const, user: 'me@company.com', host: '127.0.0.1', port: imap.port };
   await assert.rejects(checkMailAccount(account, 'wrong'), /로그인에 실패/);
   // Google shows app passwords in groups of four; the spaces don't matter.
   await checkMailAccount(account, 'abcd efgh ijkl mnop');
 
-  store.updateOffice('office_hr', (o) => {
-    o.mailAccount = account;
+  store.mutate((s) => {
+    s.mailAccounts.push({ ...account, id: 'mail_a' });
   });
-  setMailPassword('office_hr', 'abcd efgh ijkl mnop');
+  setMailPassword('mail_a', 'abcd efgh ijkl mnop');
 
-  assert.equal(await importImap('office_hr'), 2);
+  assert.equal(await importImap('mail_a'), 2);
   const imported = store.data.mailbox.filter((m) => m.source === 'imap');
   assert.deepEqual(imported.map((m) => m.subject), ['견적서 회신 요청', '다음 주 협업 미팅 제안'], 'newest on top');
   const meeting = imported.find((m) => m.subject.includes('미팅'))!;
@@ -46,9 +46,9 @@ test('a mail account is read over IMAP: new messages once, read-only, as outside
   assert.ok(imap.commands.some((c) => c.startsWith('EXAMINE')), 'the inbox is opened read-only');
   assert.ok(!imap.commands.some((c) => /STORE|EXPUNGE|COPY|MOVE/.test(c)), 'nothing is changed on the mail side');
 
-  assert.equal(await importImap('office_hr'), 0, 'the same messages are not read twice');
+  assert.equal(await importImap('mail_a'), 0, 'the same messages are not read twice');
 
-  const inputs = TEAM_SPECS.hr.gatherInputs('');
+  const inputs = TEAM_SPECS.hr.gatherInputs('', 'office_hr');
   assert.match(inputs.text, /외부에서 온 내용/);
   assert.ok(inputs.ids.includes(meeting.id));
 });

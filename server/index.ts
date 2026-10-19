@@ -24,7 +24,7 @@ import {
 import { allowedModes, isToolMode, stdioPresetOf, type McpServer } from '../shared/mcp.ts';
 import { isLocalRequest } from './local-request.ts';
 import { gmailServers } from './gmail.ts';
-import { checkMailAccount } from './mail-imap.ts';
+import { checkMailAccount, importImap, mailAccountOf } from './mail-imap.ts';
 import { importMail, mailTick } from './mail-sync.ts';
 import { mailProviderOf, type MailAccount } from '../shared/mail-providers.ts';
 import { setMailPassword } from './secrets.ts';
@@ -445,12 +445,12 @@ app.post('/api/offices/:id/mail/import', async (req, res) => {
   res.json({ added });
 });
 
-/** Connects the HR mailbox to a mail account: the login is tried first, and only a working one is saved. */
-app.put('/api/offices/:id/mail-account', async (req, res) => {
-  guard(res, 'manage', req.params.id);
-  const office = store.office(req.params.id);
-  if (office.team !== 'hr') throw new Error('메일 계정은 인사팀 메일함에만 연결할 수 있어요.');
+/** Adds a mail account feeding a mail office: the login is tried first, and only a working one is saved. */
+app.post('/api/mail-accounts', async (req, res) => {
   const body = req.body ?? {};
+  const office = store.office(String(body.officeId ?? ''));
+  guard(res, 'manage', office.id);
+  if (office.team !== 'hr') throw new Error('메일 계정은 메일 관리 사무실에만 연결할 수 있어요.');
   const provider = mailProviderOf(String(body.provider ?? ''));
   if (!provider) throw new Error('메일 종류를 골라 주세요.');
   const user = text(body.user, 200);
@@ -461,28 +461,43 @@ app.put('/api/offices/:id/mail-account', async (req, res) => {
   const port = provider.id === 'custom' ? Number(body.port) || 993 : provider.port;
   if (!/^[a-z0-9.-]+$/i.test(host)) throw new Error('IMAP 서버 주소를 확인해 주세요.');
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('포트 번호를 확인해 주세요.');
-  const account: MailAccount = { provider: provider.id, user, host, port };
+  if (store.data.mailAccounts.some((a) => a.officeId === office.id && a.user.toLowerCase() === user.toLowerCase() && a.host === host)) {
+    throw new Error('이 사무실에 이미 연결한 메일 계정이에요.');
+  }
+  const account: MailAccount = { id: `mail_${randomUUID().slice(0, 8)}`, officeId: office.id, provider: provider.id, user, host, port };
   await checkMailAccount(account, password);
-  setMailPassword(office.id, password);
-  store.updateOffice(office.id, (o) => {
-    o.mailAccount = account;
+  setMailPassword(account.id, password);
+  store.mutate((s) => {
+    s.mailAccounts.push(account);
   });
-  store.emit('office.updated', { payload: { officeId: office.id, summary: `메일 계정 연결: ${user}` } });
-  res.json(store.office(office.id));
+  store.emit('mcp.changed', { payload: { summary: `메일 계정 연결: ${user} → ${office.name}` } });
+  res.json(account);
 });
 
-app.delete('/api/offices/:id/mail-account', (req, res) => {
-  guard(res, 'manage', req.params.id);
-  store.updateOffice(req.params.id, (o) => {
-    delete o.mailAccount;
+app.delete('/api/mail-accounts/:id', (req, res) => {
+  const account = mailAccountOf(req.params.id);
+  guard(res, 'manage', account.officeId);
+  store.mutate((s) => {
+    s.mailAccounts = s.mailAccounts.filter((a) => a.id !== account.id);
   });
-  setMailPassword(req.params.id, null);
-  res.json(store.office(req.params.id));
+  setMailPassword(account.id, null);
+  store.emit('mcp.changed', { payload: { summary: `메일 계정 연결 끊기: ${account.user}` } });
+  res.json({ ok: true });
 });
 
-app.post('/api/sim/mail', async (_req, res) => {
-  if (!teamOffice(res, 'hr')) guard(res, 'owner');
-  const mail = simulateMail();
+app.post('/api/mail-accounts/:id/import', async (req, res) => {
+  const account = mailAccountOf(req.params.id);
+  guard(res, 'manage', account.officeId);
+  const added = await importImap(account.id);
+  await workflowRuntime.tick();
+  res.json({ added });
+});
+
+app.post('/api/sim/mail', async (req, res) => {
+  const officeId = typeof req.body?.officeId === 'string' ? req.body.officeId : teamOffice(res, 'hr');
+  if (!officeId || store.office(officeId).team !== 'hr') throw new Error('메일은 메일 관리 사무실에만 보낼 수 있어요.');
+  guard(res, 'manage', officeId);
+  const mail = simulateMail(officeId);
   await workflowRuntime.tick();
   res.json(mail);
 });

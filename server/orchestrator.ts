@@ -1313,7 +1313,7 @@ const activeTaskOf = (officeId: string) =>
 const queuedOf = (officeId: string) =>
   store.data.tasks.filter((t) => t.officeId === officeId && t.status === 'queued').reverse();
 
-const sharesInbox = (team: TeamId) => team === 'hr' || team === 'support';
+const sharesInbox = (team: TeamId) => team === 'support';
 
 function canStart(officeId: string) {
   const office = store.office(officeId);
@@ -1331,7 +1331,7 @@ export function claimTask(taskId: string) {
   const task = store.task(taskId);
   const team = store.office(task.officeId).team;
   const spec = TEAM_SPECS[team];
-  const inputs = spec.gatherInputs(task.description);
+  const inputs = spec.gatherInputs(task.description, task.officeId);
   store.updateTask(taskId, (t) => {
     t.status = 'running';
     t.inputText = inputs.text;
@@ -1553,13 +1553,13 @@ export function setPaused(agentId: string, paused: boolean) {
   store.emit(paused ? 'task.paused' : 'task.resumed', { agentId, payload: {} });
 }
 
-export function simulateMail() {
-  const mail = nextMail(store.data.mailbox);
+export function simulateMail(officeId = store.data.offices.find((o) => o.team === 'hr')?.id ?? 'office_hr') {
+  const mail = nextMail(store.data.mailbox, officeId);
   store.mutate((s) => {
     s.mailbox.unshift(mail);
     s.mailbox = s.mailbox.slice(0, 100);
   });
-  store.emit('mail.received', { agentId: store.agentByRole('office_hr', 'researcher').id, payload: { subject: mail.subject } });
+  store.emit('mail.received', { agentId: store.agentByRole(officeId, 'researcher').id, payload: { subject: mail.subject } });
   return mail;
 }
 
@@ -1577,7 +1577,7 @@ export function simulateInquiry() {
 export function autoRunOffices() {
   return store.data.offices.filter((office) => {
     if (!office.autoRun || !canStart(office.id) || queuedOf(office.id).length > 0) return false;
-    if (office.team === 'hr') return store.data.mailbox.some((m) => !m.processed);
+    if (office.team === 'hr') return store.data.mailbox.some((m) => m.officeId === office.id && !m.processed);
     if (office.team === 'support') return store.data.inquiries.some((q) => q.status === 'new');
     return false;
   });

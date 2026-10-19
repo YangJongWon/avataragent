@@ -39,14 +39,13 @@ function approvedReport(subjectToId: Map<string, string>) {
 }
 
 async function connectAndRead(user: string, port: number) {
-  store.updateOffice('office_hr', (o) => {
-    o.mailAccount = { provider: 'custom', user, host: '127.0.0.1', port };
-  });
-  setMailPassword('office_hr', 'pw');
+  const id = `mail_${user}`;
   store.mutate((s) => {
+    s.mailAccounts = [{ id, officeId: 'office_hr', provider: 'custom', user, host: '127.0.0.1', port }];
     s.mailbox = [];
   });
-  await importImap('office_hr');
+  setMailPassword(id, 'pw');
+  await importImap(id);
   const ids = new Map(store.data.mailbox.map((m) => [m.subject, m.id]));
   return { ids, task: { officeId: 'office_hr', inputIds: [...ids.values()] } as never };
 }

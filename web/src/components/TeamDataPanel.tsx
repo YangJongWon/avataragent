@@ -55,11 +55,12 @@ export function TeamDataPanel(props: Props) {
 type Run = { run: (fn: () => Promise<unknown>) => Promise<void> };
 
 function HrData({ snapshot, office, busy, onStart, onNotice, run }: Props & Run) {
-  const pending = snapshot.mailbox.filter((m) => !m.processed);
+  const mailbox = snapshot.mailbox.filter((m) => m.officeId === office.id);
+  const pending = mailbox.filter((m) => !m.processed);
   return (
     <>
       <div className="row">
-        <button className="pixel-btn small" onClick={() => run(api.simulateMail)}>
+        <button className="pixel-btn small" onClick={() => run(() => api.simulateMail(office.id))}>
           📨 {t('새 메일 도착 (시뮬레이션)')}
         </button>
         <button className="pixel-btn small primary" disabled={busy || pending.length === 0} onClick={onStart}>
@@ -68,7 +69,7 @@ function HrData({ snapshot, office, busy, onStart, onNotice, run }: Props & Run)
       </div>
       <h4>{t('메일함')}</h4>
       <ul className="data-list">
-        {snapshot.mailbox.map((m) => (
+        {mailbox.map((m) => (
           <li key={m.id} className={m.processed ? 'done' : ''}>
             <span className="data-tag">{m.processed ? t('정리됨') : t('새 메일')}</span>
             {m.source && <span className="data-tag real-mail">{m.source === 'gmail' ? 'Gmail' : t('실제 메일')}</span>}

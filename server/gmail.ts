@@ -70,6 +70,7 @@ export async function importGmail(officeId: string): Promise<number> {
       from: message.sender ?? '',
       subject: message.subject || '(제목 없음)',
       body: body.replace(/\s+\n/g, '\n').slice(0, MAX_BODY),
+      officeId,
       receivedAt: message.date ? `${message.date}T00:00:00` : new Date().toISOString(),
       processed: false,
       source: 'gmail',

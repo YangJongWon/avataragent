@@ -9,7 +9,7 @@ const dateIn = (days: number) => {
 
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
 
-type MailSeed = Omit<Mail, 'id' | 'receivedAt' | 'processed'>;
+type MailSeed = Omit<Mail, 'id' | 'officeId' | 'receivedAt' | 'processed'>;
 type InquirySeed = Omit<Inquiry, 'id' | 'receivedAt' | 'status'>;
 
 const mailPool = (): MailSeed[] => [
@@ -87,10 +87,10 @@ const inquiryPool = (): InquirySeed[] => [
   },
 ];
 
-export function initialMails(): Mail[] {
+export function initialMails(officeId = 'office_hr'): Mail[] {
   return mailPool()
     .slice(0, 5)
-    .map((m, i) => ({ ...m, id: `mail_${randomUUID().slice(0, 8)}`, receivedAt: minutesAgo(90 - i * 15), processed: false }));
+    .map((m, i) => ({ ...m, id: `mail_${randomUUID().slice(0, 8)}`, officeId, receivedAt: minutesAgo(90 - i * 15), processed: false }));
 }
 
 export function initialInquiries(): Inquiry[] {
@@ -99,11 +99,11 @@ export function initialInquiries(): Inquiry[] {
     .map((q, i) => ({ ...q, id: `inq_${randomUUID().slice(0, 8)}`, receivedAt: minutesAgo(60 - i * 12), status: 'new' }));
 }
 
-export function nextMail(existing: Mail[]): Mail {
+export function nextMail(existing: Mail[], officeId: string): Mail {
   const pool = mailPool();
-  const unused = pool.filter((m) => !existing.some((e) => e.subject === m.subject));
+  const unused = pool.filter((m) => !existing.some((e) => e.officeId === officeId && e.subject === m.subject));
   const pick = unused[0] ?? pool[Math.floor(Math.random() * pool.length)];
-  return { ...pick, id: `mail_${randomUUID().slice(0, 8)}`, receivedAt: new Date().toISOString(), processed: false };
+  return { ...pick, id: `mail_${randomUUID().slice(0, 8)}`, officeId, receivedAt: new Date().toISOString(), processed: false };
 }
 
 export function nextInquiry(existing: Inquiry[]): Inquiry {

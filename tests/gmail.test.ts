@@ -85,7 +85,7 @@ test('the HR mailbox reads new Gmail messages once, with their bodies, as outsid
   assert.equal(await importGmail('office_hr'), 0, 'the same messages are not fetched twice');
 
   const { TEAM_SPECS } = await import('../server/teams.ts');
-  const inputs = TEAM_SPECS.hr.gatherInputs('');
+  const inputs = TEAM_SPECS.hr.gatherInputs('', 'office_hr');
   assert.match(inputs.text, /외부에서 온 내용/);
   assert.match(inputs.text, /받은 날짜: 2026-10-19/);
   assert.ok(inputs.ids.includes('gmail_m2'));

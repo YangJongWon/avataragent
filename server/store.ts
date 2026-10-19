@@ -50,6 +50,8 @@ import { appendEvent, loadKv, loadRelationalState, maxSeq, onStorageConflict, re
 import { loginInfo } from './mcp-oauth.ts';
 import { keyInfo, mcpSecretInfo } from './secrets.ts';
 import { freeQuota } from './free-quota.ts';
+import { renameMailPassword } from './secrets.ts';
+import type { MailAccount } from '../shared/mail-providers.ts';
 import { defaultInterests, initialInquiries, initialMails } from './seed.ts';
 
 const PROJECT_ID = 'company_alpha';
@@ -97,6 +99,7 @@ export interface PersistedState {
   companyLogo: string | null;
   flows: SavedFlow[];
   schedules: ScheduledTask[];
+  mailAccounts: MailAccount[];
 }
 
 const freshBilling = (): PersistedState['billing'] => ({ subscription: freeSubscription(config.billingProvider), invoices: [], checkouts: [], processedEvents: [] });
@@ -187,6 +190,7 @@ function fresh(): PersistedState {
     companyLogo: null,
     flows: [],
     schedules: [],
+    mailAccounts: [],
   };
 }
 
@@ -258,6 +262,17 @@ function normalize(saved: PersistedState) {
   saved.companyLogo ??= null;
   saved.flows ??= [];
   saved.schedules ??= [];
+  saved.mailAccounts ??= [];
+  // Mailboxes became per office: older mail belongs to the first mail office, and an office's one account joins the list.
+  const firstMailOffice = saved.offices.find((o) => o.team === 'hr')?.id ?? 'office_hr';
+  for (const mail of saved.mailbox) mail.officeId ??= firstMailOffice;
+  for (const office of saved.offices as (Office & { mailAccount?: Omit<MailAccount, 'id' | 'officeId'> })[]) {
+    if (!office.mailAccount) continue;
+    const id = `mail_${office.id}`;
+    saved.mailAccounts.push({ id, officeId: office.id, ...office.mailAccount });
+    renameMailPassword(office.id, id);
+    delete office.mailAccount;
+  }
   saved.performance ??= [];
   saved.improvements ??= [];
   if (!isPlan(saved.plan)) saved.plan = 'personal';
@@ -336,6 +351,7 @@ class Store {
       companyLogo: s.companyLogo,
       flows: s.flows,
       schedules: s.schedules,
+      mailAccounts: s.mailAccounts,
       provider,
       model: provider === 'mock' || provider === 'agents' ? '직원별 모델' : config.model,
       aiMode: s.aiMode,
@@ -482,6 +498,8 @@ class Store {
     this.state.performance = this.state.performance.filter((r) => r.officeId !== id);
     this.state.improvements = this.state.improvements.filter((i) => i.officeId !== id);
     this.state.schedules = this.state.schedules.filter((s) => s.officeId !== id);
+    this.state.mailbox = this.state.mailbox.filter((m) => m.officeId !== id);
+    this.state.mailAccounts = this.state.mailAccounts.filter((a) => a.officeId !== id);
     this.changed();
   }
 

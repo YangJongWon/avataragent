@@ -356,8 +356,10 @@ function ToolList({ server, onError }: { server: McpServer } & Pick<Notify, 'onE
 const ON_THIS_PC = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(location.hostname);
 
 export function McpTab({ snapshot, onError, onNotice }: { snapshot: Snapshot } & Notify) {
-  // The mail account feeds the HR office's mailbox; it is set up here with the other connections.
-  const hr = snapshot.offices.find((o) => o.team === 'hr');
+  // Mail accounts feed the mailboxes of mail offices; they are set up here with the other connections.
+  const mailOffices = snapshot.offices.filter((o) => o.team === 'hr');
+  const mailAccounts = snapshot.mailAccounts ?? [];
+  const [addingMail, setAddingMail] = useState(false);
   const runMail = async (fn: () => Promise<unknown>) => {
     try {
       await fn();
@@ -434,44 +436,51 @@ export function McpTab({ snapshot, onError, onNotice }: { snapshot: Snapshot } &
           <h3>{t('연결 추가')}</h3>
         </div>
         <div className="row wrap">
+          {mailOffices.length > 0 && (
+            <button
+              className={`pixel-btn small ${addingMail ? 'primary' : ''}`}
+              title={t('Gmail·네이버·다음·회사 메일을 앱 비밀번호로 연결해 메일 관리 사무실의 메일함으로 받아요. 여러 개 연결할 수 있어요.')}
+              onClick={() => {
+                setEditing(null);
+                setAddingMail(true);
+              }}
+            >
+              📮 {t('메일 계정')}
+            </button>
+          )}
           {MCP_PRESETS.map((preset) => (
             <button
               key={preset.id}
               className={`pixel-btn small ${editing?.id === 'new' && editing.preset?.id === preset.id ? 'primary' : ''}`}
               title={t(preset.note)}
-              onClick={() => setEditing({ id: 'new', preset })}
+              onClick={() => {
+                setAddingMail(false);
+                setEditing({ id: 'new', preset });
+              }}
             >
               {preset.icon} {t(preset.name)}
             </button>
           ))}
         </div>
-        {editing?.id === 'new' && editing.preset?.id === 'gmail' && hr ? (
-          // Gmail opens the app-password connection first; Google's MCP server is for the few who want agents to search it.
+        {addingMail && (
           <div className="company-card editing">
-            {hr.mailAccount ? (
-              <p className="muted small">{tpl('{user} 메일 계정이 이미 연결돼 있어요. 아래 연결된 목록에서 확인하세요.', { user: hr.mailAccount.user })}</p>
-            ) : (
-              <MailAccountForm office={hr} run={runMail} onNotice={onNotice} onDone={() => setEditing(null)} />
-            )}
-            <details className="small">
-              <summary className="muted">{t('고급: 구글 클라우드로 Gmail MCP 연결 (직원이 조사 중에 Gmail을 검색하거나 초안을 만들게 할 때)')}</summary>
-              <McpForm key="gmail-mcp" server={null} preset={editing.preset} {...formProps} />
-            </details>
+            <MailAccountForm offices={mailOffices} run={runMail} onNotice={onNotice} onDone={() => setAddingMail(false)} />
           </div>
-        ) : (
-          editing?.id === 'new' && (
-            <div className="company-card editing">
-              <McpForm key={editing.preset?.id ?? 'new'} server={null} preset={editing.preset} {...formProps} />
-            </div>
-          )
+        )}
+        {editing?.id === 'new' && (
+          <div className="company-card editing">
+            <McpForm key={editing.preset?.id ?? 'new'} server={null} preset={editing.preset} {...formProps} />
+          </div>
         )}
       </section>
 
       <section className="pixel-box section">
         <h3>{t('연결된 MCP 서버')}</h3>
-        {servers.length === 0 && !hr?.mailAccount && <p className="muted">{t('아직 연결한 MCP 서버가 없어요. 위에서 하나 골라 추가해 보세요.')}</p>}
+        {servers.length === 0 && mailAccounts.length === 0 && <p className="muted">{t('아직 연결한 MCP 서버가 없어요. 위에서 하나 골라 추가해 보세요.')}</p>}
         <div className="company-grid">
-          {hr?.mailAccount && <MailAccountCard office={hr} run={runMail} onNotice={onNotice} />}
+          {mailAccounts.map((account) => (
+            <MailAccountCard key={account.id} account={account} office={snapshot.offices.find((o) => o.id === account.officeId)} run={runMail} onNotice={onNotice} />
+          ))}
           {servers.map((server) =>
             editing?.id === server.id ? (
               <div key={server.id} className="company-card editing">
@@ -504,15 +513,21 @@ export function McpTab({ snapshot, onError, onNotice }: { snapshot: Snapshot } &
                 {server.lastError && <div className="small mcp-error">{server.lastError}</div>}
                 {(server.lastError || (server.oauth && !server.login?.loggedIn)) && <LinkRow links={presetOf(server)?.links} />}
                 <ToolList server={server} onError={onError} />
-                {hr && isGmailServer(server) && (
-                  <div className="row wrap">
-                    <label className="check small">
-                      <input type="checkbox" checked={hr.gmailServerId === server.id} onChange={(e) => void runMail(() => api.updateOffice(hr.id, { gmailServerId: e.target.checked ? server.id : null }))} />
-                      {tpl('{office} 메일함으로 가져오기', { office: t(hr.name) })}
-                    </label>
-                    {hr.gmailServerId === server.id && !hr.mailAccount && <MailPullButton office={hr} run={runMail} onNotice={onNotice} />}
-                  </div>
-                )}
+                {isGmailServer(server) &&
+                  mailOffices.map((office) => (
+                    // Optional: a Gmail MCP server can also feed a mail office's mailbox.
+                    <div key={office.id} className="row wrap">
+                      <label className="check small">
+                        <input
+                          type="checkbox"
+                          checked={office.gmailServerId === server.id}
+                          onChange={(e) => void runMail(() => api.updateOffice(office.id, { gmailServerId: e.target.checked ? server.id : null }))}
+                        />
+                        {tpl('{office} 메일함으로 가져오기', { office: t(office.name) })}
+                      </label>
+                      {office.gmailServerId === server.id && <MailPullButton pull={() => api.importMail(office.id)} run={runMail} onNotice={onNotice} />}
+                    </div>
+                  ))}
                 <div className="row end wrap">
                   <label className="check small">
                     <input type="checkbox" checked={server.enabled} onChange={() => toggle(server)} />

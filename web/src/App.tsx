@@ -276,7 +276,7 @@ export function App() {
   const officeBusy = view.tasks.some((t) => ACTIVE.includes(t.status));
   const pendingCount =
     office.team === 'hr'
-      ? snapshot.mailbox.filter((m) => !m.processed).length
+      ? snapshot.mailbox.filter((m) => m.officeId === office.id && !m.processed).length
       : office.team === 'support'
         ? snapshot.inquiries.filter((q) => q.status === 'new').length
         : 0;

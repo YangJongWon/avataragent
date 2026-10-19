@@ -17,7 +17,7 @@ export interface TeamSpec {
   allowClarify: boolean;
   rejectFirstInMock: boolean;
   defaultTitle: string;
-  gatherInputs(description: string): Inputs;
+  gatherInputs(description: string, officeId: string): Inputs;
   briefAsk: string;
   researchAsk: string;
   draftAsk: string;
@@ -144,8 +144,8 @@ const hr: TeamSpec = {
   allowClarify: false,
   rejectFirstInMock: false,
   defaultTitle: '메일함 정리와 일정 등록',
-  gatherInputs() {
-    const mails = store.data.mailbox.filter((m) => !m.processed);
+  gatherInputs(_description, officeId) {
+    const mails = store.data.mailbox.filter((m) => m.officeId === officeId && !m.processed);
     if (mails.length === 0) throw new Error('처리할 새 메일이 없어요. 팀 자료 탭에서 "새 메일 도착"을 눌러 보세요.');
     const text = mails
       // Gmail gives the day only, so a real message says just its date.

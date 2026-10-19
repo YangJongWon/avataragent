@@ -1,7 +1,10 @@
 /** Mail services the HR mailbox can read over IMAP with an app password, so nobody needs a developer console. */
 export type MailProvider = 'gmail' | 'naver' | 'daum' | 'custom';
 
+/** A connected mail account and the mail office whose mailbox it feeds. The password stays on the server. */
 export interface MailAccount {
+  id: string;
+  officeId: string;
   provider: MailProvider;
   /** The address; also the IMAP login. */
   user: string;

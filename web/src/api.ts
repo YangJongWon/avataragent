@@ -6,6 +6,7 @@ import type { McpServer, McpTool, McpToolMode, PlannedAction } from '../../share
 import { setCatalog, type ApiKind, type Company, type ModelEntry, type Tier } from '../../shared/models.ts';
 import type { Personality } from '../../shared/personality.ts';
 import type { Playbook, PlaybookChange } from '../../shared/playbook.ts';
+import type { MailAccount } from '../../shared/mail-providers.ts';
 import type { Plan } from '../../shared/plans.ts';
 import type { FlowPack } from '../../shared/flow-pack.ts';
 import type { ThemeBooking } from '../../shared/theme-pack.ts';
@@ -70,9 +71,10 @@ export const api = {
   deleteSchedule: (id: string) => call('DELETE', `/api/schedules/${id}`),
   runSchedule: (id: string) => call<{ taskId: string | null }>('POST', `/api/schedules/${id}/run`),
   importMail: (officeId: string) => call<{ added: number }>('POST', `/api/offices/${officeId}/mail/import`),
-  connectMailAccount: (officeId: string, body: { provider: string; user: string; password: string; host?: string; port?: number }) =>
-    call<Office>('PUT', `/api/offices/${officeId}/mail-account`, body),
-  disconnectMailAccount: (officeId: string) => call<Office>('DELETE', `/api/offices/${officeId}/mail-account`),
+  createMailAccount: (body: { officeId: string; provider: string; user: string; password: string; host?: string; port?: number }) =>
+    call<MailAccount>('POST', '/api/mail-accounts', body),
+  deleteMailAccount: (id: string) => call('DELETE', `/api/mail-accounts/${id}`),
+  importMailAccount: (id: string) => call<{ added: number }>('POST', `/api/mail-accounts/${id}/import`),
   updateOffice: (officeId: string, patch: { autoRun?: boolean; autoImprove?: boolean; gmailServerId?: string | null; budgetKrw?: number | null; theme?: string | null; themeCss?: boolean; name?: string; description?: string }) =>
     call('PUT', `/api/offices/${officeId}`, patch),
   setCompanyTheme: (theme: string) => call<{ theme: string }>('PUT', '/api/theme', { theme }),
@@ -99,7 +101,7 @@ export const api = {
   applyImprovement: (officeId: string, id: string) => call('POST', `/api/offices/${officeId}/improvements`, { id }),
   createOffice: (input: { team: TeamId; name?: string; theme?: string }) => call<Office>('POST', '/api/offices', input),
   deleteOffice: (officeId: string) => call('DELETE', `/api/offices/${officeId}`),
-  simulateMail: () => call('POST', '/api/sim/mail'),
+  simulateMail: (officeId: string) => call('POST', '/api/sim/mail', { officeId }),
   simulateInquiry: () => call('POST', '/api/sim/inquiry'),
   updateInterests: (patch: Partial<Interests>) => call('PUT', '/api/interests', patch),
   cancelTask: (taskId: string) => call('POST', `/api/tasks/${taskId}/cancel`),
