@@ -69,8 +69,16 @@ function Open-Office {
     Show-Popup '아직 설치가 끝나지 않았어요. 프로그램 폴더의 설치.cmd를 먼저 실행해 주세요.' 48
     return
   }
-  if (Start-Office) { Start-Process "http://localhost:$Port" }
+  if (Start-Office) { Start-Tray; Start-Process "http://localhost:$Port" }
   else { Show-Popup "서버를 켜지 못했어요.`n포트 $Port 을(를) 다른 프로그램이 쓰고 있다면 .env 파일의 PORT를 바꿔 주세요.`n그 밖에는 $Root\logs\server.err.log 파일 내용을 확인해 주세요." 16 }
+}
+
+# Stop, restart and update live in the tray icon's menu; tray.ps1 keeps a single icon per session.
+function Start-Tray {
+  $tray = Join-Path $PSScriptRoot 'tray.ps1'
+  if (-not (Test-Path $tray)) { return }
+  $argLine = "-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File `"$tray`" -Script `"$PSCommandPath`" -Port $Port -Icon `"$(Join-Path $Root 'installer\avatarcast.ico')`" -Upgrade upgrade"
+  Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -ArgumentList $argLine -WindowStyle Hidden
 }
 
 function Update-Office {

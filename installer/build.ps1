@@ -39,6 +39,7 @@ try {
   }
   Copy-Item (Join-Path $Root 'docs\HELP.md') (Join-Path $App 'docs\HELP.md')
   Copy-Item (Join-Path $PSScriptRoot 'launcher.ps1') (Join-Path $App 'launcher.ps1')
+  Copy-Item (Join-Path $Root 'scripts\tray.ps1') (Join-Path $App 'tray.ps1')
   Copy-Item (Join-Path $PSScriptRoot 'avatarcast.ico') (Join-Path $App 'avatarcast.ico')
 
   Step "server packages (npm install --omit=dev, versions from the lock file)"

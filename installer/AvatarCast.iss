@@ -51,8 +51,6 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 [CustomMessages]
 ko.DesktopIcon=바탕화면에 바로가기 만들기
 en.DesktopIcon=Create a desktop shortcut
-ko.StopName={#AppName} 끄기
-en.StopName=Stop {#AppName}
 ko.OpenNow={#AppName} 지금 열기
 en.OpenNow=Open {#AppName} now
 ko.Tailscale=휴대폰·외부에서 쓰기: Tailscale 설치하고 로그인 (가입·로그인은 직접)
@@ -75,7 +73,6 @@ Type: filesandordirs; Name: "{app}\node_modules"
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{#PowerShell}"; Parameters: "{#Run('open')}"; WorkingDir: "{app}"; IconFilename: "{app}\avatarcast.ico"
-Name: "{autoprograms}\{cm:StopName}"; Filename: "{#PowerShell}"; Parameters: "{#Run('stop')}"; WorkingDir: "{app}"; IconFilename: "{sys}\shell32.dll"; IconIndex: 27
 Name: "{autodesktop}\{#AppName}"; Filename: "{#PowerShell}"; Parameters: "{#Run('open')}"; WorkingDir: "{app}"; IconFilename: "{app}\avatarcast.ico"; Tasks: desktopicon
 
 [Run]

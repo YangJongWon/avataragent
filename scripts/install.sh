@@ -109,43 +109,61 @@ make_mac_launcher() {
   chmod +x "$file"
   echo "바탕화면에 '$1' 아이콘을 만들었어요."
 }
+# One launcher; stop and update are in its right-click menu (Desktop Actions) in the app list and dock.
 make_linux_launcher() {
   local apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
   local desktop
   desktop="$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")"
   mkdir -p "$apps"
-  local file="$apps/avataragent-$2.desktop"
+  local file="$apps/avataragent-open.desktop"
   cat > "$file" <<EOF
 [Desktop Entry]
 Type=Application
-Name=$1
-Comment=$3
-Exec="$ROOT/scripts/office.sh" $2
+Name=$APP_NAME
+Comment=서버를 켜고 브라우저로 열어요
+Exec="$ROOT/scripts/office.sh" open
 Path=$ROOT
-Icon=$4
-Terminal=$5
+Icon=applications-office
+Terminal=false
 Categories=Office;
+Actions=stop;upgrade;
+
+[Desktop Action stop]
+Name=서버 끄기
+Exec="$ROOT/scripts/office.sh" stop
+
+[Desktop Action upgrade]
+Name=업데이트
+Exec="$ROOT/scripts/office.sh" upgrade
 EOF
   chmod +x "$file"
   if [ -d "$desktop" ]; then
     cp "$file" "$desktop/"
     chmod +x "$desktop/$(basename "$file")"
     gio set "$desktop/$(basename "$file")" metadata::trusted true 2>/dev/null || true
-    echo "앱 목록과 바탕화면에 '$1' 아이콘을 만들었어요."
+    echo "앱 목록과 바탕화면에 '$APP_NAME' 아이콘을 만들었어요. 끄기와 업데이트는 아이콘을 우클릭하면 나와요."
   else
-    echo "앱 목록에 '$1' 아이콘을 만들었어요."
+    echo "앱 목록에 '$APP_NAME' 아이콘을 만들었어요. 끄기와 업데이트는 아이콘을 우클릭하면 나와요."
   fi
 }
+# Older versions made separate stop and update launchers; the menus above replace them.
+remove_old_launchers() {
+  rm -f "$HOME/Desktop/$APP_NAME 끄기.command" "$HOME/Desktop/$APP_NAME 업데이트.command"
+  local apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+  local desktop
+  desktop="$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")"
+  rm -f "$apps/avataragent-stop.desktop" "$apps/avataragent-upgrade.desktop" \
+    "$desktop/avataragent-stop.desktop" "$desktop/avataragent-upgrade.desktop"
+}
+remove_old_launchers
 if [ "$NO_SHORTCUTS" = 1 ]; then
   echo '아이콘 만들기를 건너뛰었어요.'
 elif [ "$(uname -s)" = 'Darwin' ]; then
   make_mac_launcher "$APP_NAME" open
-  make_mac_launcher "$APP_NAME 끄기" stop
-  make_mac_launcher "$APP_NAME 업데이트" upgrade
+  chmod +x "$ROOT/끄기.command" "$ROOT/업데이트.command" 2>/dev/null || true
+  echo "끄기와 업데이트는 설치 폴더($ROOT)의 '끄기.command', '업데이트.command'로 해요."
 else
-  make_linux_launcher "$APP_NAME" open '서버를 켜고 브라우저로 열어요' applications-office false
-  make_linux_launcher "$APP_NAME 끄기" stop '서버를 꺼요' system-shutdown false
-  make_linux_launcher "$APP_NAME 업데이트" upgrade '새 버전을 받아 다시 켜요' system-software-update true
+  make_linux_launcher
 fi
 
 step 6 '처음 켜기'

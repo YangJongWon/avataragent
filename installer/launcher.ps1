@@ -88,6 +88,14 @@ function Stop-Office {
   return $false
 }
 
+# Restart and stop live in the tray icon's menu; updates come from a newer installer, so "Update" opens the Releases page.
+function Start-Tray($port) {
+  $tray = Join-Path $Root 'tray.ps1'
+  if (-not (Test-Path $tray)) { return }
+  $argLine = "-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File `"$tray`" -Script `"$PSCommandPath`" -Port $port -Icon `"$(Join-Path $Root 'avatarcast.ico')`""
+  Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -ArgumentList $argLine -WindowStyle Hidden
+}
+
 # Optional remote access: Tailscale's own installer (it asks for permission), then its sign-in.
 function Install-Tailscale {
   if (-not (Test-Path $Tailscale)) {
@@ -110,6 +118,7 @@ try {
   switch ($Command) {
     'open' {
       $port = Start-Office
+      Start-Tray $port
       Start-Process "http://localhost:$port"
     }
     'start' { $null = Start-Office }

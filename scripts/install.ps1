@@ -76,23 +76,20 @@ try {
 
 Step 5 '바탕화면 바로가기 만들기'
 $desktop = [Environment]::GetFolderPath('Desktop')
-$shell = New-Object -ComObject WScript.Shell
 $office = Join-Path $Root 'scripts\office.ps1'
-$shortcuts = @(
-  @{ Name = $AppName; Command = 'open'; Icon = 'shell32.dll,13'; Note = '서버를 켜고 브라우저로 열어요' },
-  @{ Name = "$AppName 끄기"; Command = 'stop'; Icon = 'shell32.dll,27'; Note = '서버를 꺼요' },
-  @{ Name = "$AppName 업데이트"; Command = 'upgrade'; Icon = 'shell32.dll,238'; Note = '새 버전을 받아 다시 켜요' }
-)
-foreach ($s in $(if ($NoShortcuts) { @() } else { $shortcuts })) {
-  $link = $shell.CreateShortcut((Join-Path $desktop "$($s.Name).lnk"))
+# Stop and update moved into the tray icon's menu; remove the separate shortcuts older versions made.
+foreach ($old in @("$AppName 끄기", "$AppName 업데이트")) {
+  Remove-Item (Join-Path $desktop "$old.lnk") -ErrorAction SilentlyContinue
+}
+if (-not $NoShortcuts) {
+  $link = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $desktop "$AppName.lnk"))
   $link.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-  $hidden = if ($s.Command -eq 'upgrade') { '' } else { '-WindowStyle Hidden ' }
-  $link.Arguments = "-NoProfile -ExecutionPolicy Bypass $hidden-File `"$office`" $($s.Command)"
+  $link.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$office`" open"
   $link.WorkingDirectory = $Root
-  $link.IconLocation = Join-Path $env:SystemRoot "System32\$($s.Icon)"
-  $link.Description = $s.Note
+  $link.IconLocation = Join-Path $Root 'installer\avatarcast.ico'
+  $link.Description = '서버를 켜고 브라우저로 열어요'
   $link.Save()
-  Write-Host "바탕화면에 '$($s.Name)' 바로가기를 만들었어요."
+  Write-Host "바탕화면에 '$AppName' 바로가기를 만들었어요. 끄기와 업데이트는 작업 표시줄 트레이 아이콘을 우클릭하면 나와요."
 }
 
 Step 6 '처음 켜기'
