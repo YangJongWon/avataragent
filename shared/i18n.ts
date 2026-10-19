@@ -1540,6 +1540,11 @@ export const CATALOGUE: Catalogue = {
     en: 'No Google Cloud setup: put your Gmail address and an app password into "Mail account" at the top of this page. Approving also labels and archives in Gmail. The MCP connection below is for letting staff search Gmail or write drafts while researching.',
   },
   '메일 계정 연결로 가기': { zh: '前往邮箱账户连接', ja: 'メールアカウント連携へ', en: 'Go to mail account' },
+  '고급: 구글 클라우드로 Gmail MCP 연결 (직원이 조사 중에 Gmail을 검색하거나 초안을 만들게 할 때)': {
+    zh: '高级：通过 Google Cloud 连接 Gmail MCP（让员工在调研时搜索 Gmail 或创建草稿时使用）',
+    ja: '上級: Google Cloud で Gmail MCP を接続（スタッフが調査中に Gmail を検索したり下書きを作ったりする場合）',
+    en: 'Advanced: connect the Gmail MCP server through Google Cloud (to let staff search Gmail or write drafts while researching)',
+  },
   '승인을 기다리고 있어요': { zh: '正在等待批准', ja: '承認を待っています', en: 'Waiting for your approval' },
   '지금은 이번 여정을 바꿀 수 없어요. 저장하면 다음 업무에서 쓸 흐름이 돼요.': { zh: '现在无法更改本次流程。保存后将成为下次任务使用的流程。', ja: '今はこの流れを変えられません。保存すると次の業務で使う流れになります。', en: "This task's journey can't change now. Saving keeps it as a flow for the next task." },
   '알아서 진행': { zh: '自行推进', ja: 'おまかせで進める', en: 'Carry on with a guess' },
@@ -1966,6 +1971,13 @@ export const TEMPLATES: Record<string, Partial<Record<Language, string>>> = {
   '예약 업무 "{title}"을(를) 지울까요?': { zh: '要删除预约任务“{title}”吗？', ja: '予約業務「{title}」を削除しますか？', en: 'Delete the scheduled task "{title}"?' },
   '{user} 메일함을 연결했어요.': { zh: '已连接 {user} 的邮箱。', ja: '{user} のメールボックスを連携しました。', en: 'Connected the {user} inbox.' },
   '새 메일 {n}통을 가져왔어요.': { zh: '已获取 {n} 封新邮件。', ja: '新着メールを {n} 通取得しました。', en: 'Fetched {n} new messages.' },
+  '메일 주소와 앱 비밀번호만 넣으면 {office} 메일함으로 메일이 들어와요. 메일함은 읽기만 하고, 정리 보고서를 승인했을 때만 라벨·보관을 해요.': {
+    zh: '只要填入邮箱地址和应用密码，邮件就会进入{office}的邮箱。平时只读取邮箱，只有批准整理报告时才会添加标签或归档。',
+    ja: 'メールアドレスとアプリパスワードを入れるだけで、{office}のメールボックスにメールが届きます。普段は読むだけで、整理レポートを承認したときだけラベル付け・アーカイブをします。',
+    en: 'Just your email address and an app password, and mail comes into the {office} mailbox. The inbox is only read; labels and archiving happen only when you approve a sorting report.',
+  },
+  '{user} 메일 계정이 이미 연결돼 있어요. 아래 연결된 목록에서 확인하세요.': { zh: '{user} 邮箱账户已连接。请在下方的已连接列表中查看。', ja: '{user} のメールアカウントはすでに連携されています。下の接続済みリストで確認してください。', en: '{user} is already connected. See it in the list below.' },
+  '{office} 메일함으로 가져오기': { zh: '获取到{office}邮箱', ja: '{office}のメールボックスに取り込む', en: 'Fetch into the {office} mailbox' },
   '무료 모델 공용 · 오늘 {left}/{limit}회 남음': {
     zh: '免费模型共用 · 今日剩余 {left}/{limit} 次',
     ja: '無料モデル共通 · 本日残り {left}/{limit} 回',
