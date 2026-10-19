@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { TEAMS } from '../shared/teams.ts';
-import type { Proposal, Recommendation, Role, Task, TeamId } from '../shared/types.ts';
+import { calendarOf, type Proposal, type Recommendation, type Role, type Task, type TeamId } from '../shared/types.ts';
 import { parseJson } from './ai.ts';
 import { store } from './store.ts';
 import { L, LT, V } from './text.ts';
@@ -221,13 +221,15 @@ const hr: TeamSpec = {
   },
   onApprove(json, task) {
     const { events } = parseHr(json);
+    const office = store.office(task.officeId);
     let added = 0;
     store.mutate((s) => {
       for (const e of events) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(e.date)) continue;
-        if (s.calendar.some((c) => c.title === e.title && c.date === e.date)) continue;
+        if (calendarOf(s.calendar, office).some((c) => c.title === e.title && c.date === e.date)) continue;
         s.calendar.push({
           id: `cal_${randomUUID().slice(0, 8)}`,
+          ...(office.ownCalendar ? { officeId: office.id } : {}),
           title: e.title,
           date: e.date,
           start: e.start || '',
@@ -492,13 +494,15 @@ const parseWelfare = (json: string | null) => {
 const linkFor = (kind: Recommendation['kind'], query: string) =>
   !query ? '' : kind === 'youtube' ? youtubeSearch(query) : kind === 'rest' ? '' : naverSearch(query);
 
-function upcomingDays() {
+/** The next seven days of the calendar the office uses. */
+function upcomingDays(officeId: string) {
+  const events = calendarOf(store.data.calendar, store.office(officeId));
   const days: { date: string; events: string[] }[] = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date();
     d.setDate(d.getDate() + i);
     const date = d.toISOString().slice(0, 10);
-    days.push({ date, events: store.data.calendar.filter((c) => c.date === date).map((c) => `${c.start} ${c.title}`) });
+    days.push({ date, events: events.filter((c) => c.date === date).map((c) => `${c.start} ${c.title}`) });
   }
   return days;
 }
@@ -513,9 +517,9 @@ const welfare: TeamSpec = {
   allowClarify: false,
   rejectFirstInMock: false,
   defaultTitle: '이번 주 휴식·문화생활 추천',
-  gatherInputs(description) {
+  gatherInputs(description, officeId) {
     const { interests, recommendations } = store.data;
-    const days = upcomingDays();
+    const days = upcomingDays(officeId);
     const text = [
       `오늘 날짜: ${today()}`,
       `관심사: ${interests.keywords.join(', ') || '(없음)'}`,
@@ -541,18 +545,18 @@ const welfare: TeamSpec = {
   ].join('\n'),
   reviewAsk: '관심사와 무관한 추천, 일정과 겹치는 추천, 날짜를 단정한 행사, 지어낸 URL, JSON 형식 오류가 있으면 반려한다.',
   mock: {
-    brief: () => {
-      const busy = upcomingDays().filter((d) => d.events.length >= 2);
+    brief: (t) => {
+      const busy = upcomingDays(t.officeId).filter((d) => d.events.length >= 2);
       return `${LT('관심사: {keywords}', { keywords: store.data.interests.keywords.join(', ') })}\n${busy.length ? LT('일정이 몰린 날 {n}일 → 휴식 추천 우선', { n: busy.length }) : L('이번 주는 여유가 있어 문화생활 위주로 추천')}`;
     },
     research: () =>
       store.data.interests.keywords
         .map((k) => LT('- {keyword}: 관련 공연·전시 (날짜 확인 필요), 입문 영상, 주말 활동 후보', { keyword: k }))
         .join('\n'),
-    draft: () => {
+    draft: (t) => {
       const { interests } = store.data;
       const region = interests.region || L('서울');
-      const busy = upcomingDays().filter((d) => d.events.length >= 2);
+      const busy = upcomingDays(t.officeId).filter((d) => d.events.length >= 2);
       const recs: WelfareJson['recommendations'] = [];
       for (const d of busy.slice(0, 1)) {
         recs.push({

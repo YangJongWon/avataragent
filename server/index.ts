@@ -179,7 +179,7 @@ app.delete('/api/offices/:id', (req, res) => {
 
 app.put('/api/offices/:id', async (req, res) => {
   guard(res, 'manage', req.params.id);
-  const { autoRun, autoImprove, budgetKrw, theme, themeCss, name, description, gmailServerId } = req.body ?? {};
+  const { autoRun, autoImprove, budgetKrw, theme, themeCss, name, description, gmailServerId, ownCalendar } = req.body ?? {};
   if (gmailServerId !== undefined && gmailServerId !== null && !gmailServers().some((s) => s.id === gmailServerId)) throw new Error('Gmail MCP 연결을 찾지 못했어요.');
   if (gmailServerId !== undefined && store.office(req.params.id).team !== 'hr') throw new Error('Gmail은 인사팀 메일함에만 연결할 수 있어요.');
   if (budgetKrw !== undefined || name !== undefined || description !== undefined) guard(res, 'owner');
@@ -188,6 +188,8 @@ app.put('/api/offices/:id', async (req, res) => {
   store.updateOffice(req.params.id, (o) => {
     if (typeof autoRun === 'boolean') o.autoRun = autoRun;
     if (typeof autoImprove === 'boolean') o.autoImprove = autoImprove;
+    if (ownCalendar === true) o.ownCalendar = true;
+    else if (ownCalendar === false) delete o.ownCalendar;
     if (gmailServerId === null) delete o.gmailServerId;
     else if (typeof gmailServerId === 'string') o.gmailServerId = gmailServerId;
     // null goes back to the company theme; a theme id, even the built-in one, is this office's own pick.

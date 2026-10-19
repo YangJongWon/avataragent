@@ -75,7 +75,7 @@ export const api = {
     call<MailAccount>('POST', '/api/mail-accounts', body),
   deleteMailAccount: (id: string) => call('DELETE', `/api/mail-accounts/${id}`),
   importMailAccount: (id: string) => call<{ added: number }>('POST', `/api/mail-accounts/${id}/import`),
-  updateOffice: (officeId: string, patch: { autoRun?: boolean; autoImprove?: boolean; gmailServerId?: string | null; budgetKrw?: number | null; theme?: string | null; themeCss?: boolean; name?: string; description?: string }) =>
+  updateOffice: (officeId: string, patch: { autoRun?: boolean; autoImprove?: boolean; gmailServerId?: string | null; ownCalendar?: boolean; budgetKrw?: number | null; theme?: string | null; themeCss?: boolean; name?: string; description?: string }) =>
     call('PUT', `/api/offices/${officeId}`, patch),
   setCompanyTheme: (theme: string) => call<{ theme: string }>('PUT', '/api/theme', { theme }),
   setThemeBookings: (bookings: ThemeBooking[]) => call<{ bookings: ThemeBooking[] }>('PUT', '/api/theme-bookings', { bookings }),

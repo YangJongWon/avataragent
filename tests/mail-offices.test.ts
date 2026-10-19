@@ -71,3 +71,26 @@ test('several mail offices each keep their own mailbox, fed by any number of acc
   assert.equal(store.data.mailbox.some((m) => m.officeId === 'office_jobs'), false);
   assert.deepEqual(store.data.mailAccounts.map((a) => a.id), ['acc_company', 'acc_ceo']);
 });
+
+test('a mail office can keep its own calendar; the others keep sharing the company one', async () => {
+  const { calendarOf } = await import('../shared/types.ts');
+  const approve = (officeId: string, title: string) =>
+    TEAM_SPECS.hr.onApprove(
+      JSON.stringify({ summaries: [], events: [{ mailId: '', title, date: '2026-11-02', start: '10:00', end: '11:00', location: '' }] }),
+      { officeId, inputIds: [] } as never,
+    );
+  store.mutate((s) => {
+    s.calendar = [];
+    s.offices.push({ ...structuredClone(s.offices.find((o) => o.id === 'office_hr')!), id: 'office_sales_mail', name: '영업 메일', custom: true, ownCalendar: true });
+  });
+  approve('office_hr', '파트너 미팅');
+  approve('office_sales_mail', '고객사 방문');
+  approve('office_sales_mail', '고객사 방문');
+
+  const hr = store.office('office_hr');
+  const sales = store.office('office_sales_mail');
+  assert.deepEqual(calendarOf(store.data.calendar, hr).map((e) => e.title), ['파트너 미팅'], 'the company calendar');
+  assert.deepEqual(calendarOf(store.data.calendar, sales).map((e) => e.title), ['고객사 방문'], 'its own, without duplicates');
+  // Welfare reads the company calendar unless it keeps its own too.
+  assert.deepEqual(calendarOf(store.data.calendar, store.office('office_welfare')).map((e) => e.title), ['파트너 미팅']);
+});

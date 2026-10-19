@@ -3457,3 +3457,12 @@ p.plan-note {
   gap: 8px;
   margin-bottom: 8px;
 }
+
+/* A team's calendar heading with its company/own switch. */
+.calendar-head {
+  align-items: center;
+  margin-top: 8px;
+}
+.calendar-head h4 {
+  margin: 0;
+}

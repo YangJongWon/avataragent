@@ -55,6 +55,8 @@ export interface Office {
   autoRun: boolean;
   /** Mail office: a Gmail MCP server whose inbox also feeds this office's mailbox. */
   gmailServerId?: string | null;
+  /** The office keeps its own calendar instead of the company one. */
+  ownCalendar?: boolean;
   /** Applies safe improvement suggestions by itself after each completed task. */
   autoImprove?: boolean;
   budgetKrw: number | null;
@@ -312,6 +314,8 @@ export interface Mail {
 
 export interface CalendarEvent {
   id: string;
+  /** Set when the event is in an office's own calendar; unset is the company calendar every office shares. */
+  officeId?: string;
   title: string;
   date: string;
   start: string;
@@ -514,3 +518,7 @@ export interface Snapshot {
 export type ServerMessage =
   | { kind: 'snapshot'; data: Snapshot }
   | { kind: 'event'; data: OfficeEvent; replay: boolean };
+
+/** The calendar an office reads and writes: its own when it keeps one, else the company calendar. */
+export const calendarOf = (events: CalendarEvent[], office: Pick<Office, 'id' | 'ownCalendar'>) =>
+  events.filter((e) => (office.ownCalendar ? e.officeId === office.id : !e.officeId));

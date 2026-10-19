@@ -62,7 +62,8 @@ export function snapshotFor(viewer: Viewer): Snapshot {
           valueKrw: offices.reduce((sum, o) => sum + o.valueKrw, 0),
         },
     mailbox: full.mailbox.filter((m) => officeIds.has(m.officeId)),
-    calendar: hasTeam('hr') ? full.calendar : [],
+    // The company calendar for those who see a mail or welfare office; an office's own calendar for those who see that office.
+    calendar: full.calendar.filter((e) => (e.officeId ? officeIds.has(e.officeId) : hasTeam('hr') || hasTeam('welfare'))),
     inquiries: hasTeam('support') ? full.inquiries : [],
     outbox: hasTeam('support') ? full.outbox : [],
     interests: hasTeam('welfare') ? full.interests : { keywords: [], region: '', note: '' },

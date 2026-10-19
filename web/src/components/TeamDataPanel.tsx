@@ -1,7 +1,7 @@
 import { t, tpl } from '../../../shared/i18n.ts';
 import { useState } from 'react';
 import { TEAMS } from '../../../shared/teams.ts';
-import type { Office, Recommendation, Snapshot } from '../../../shared/types.ts';
+import { calendarOf, type Office, type Recommendation, type Snapshot } from '../../../shared/types.ts';
 import { api } from '../api.ts';
 import { SchedulesPanel } from './SchedulesPanel.tsx';
 import { krw, timeOf } from '../format.ts';
@@ -54,8 +54,22 @@ export function TeamDataPanel(props: Props) {
 
 type Run = { run: (fn: () => Promise<unknown>) => Promise<void> };
 
+/** The calendar heading, with the choice between the company calendar and one of the office's own. */
+function OfficeCalendarHead({ office, run }: { office: Office } & Run) {
+  return (
+    <div className="row between calendar-head">
+      <h4>{office.ownCalendar ? t('캘린더 (이 사무실 전용)') : t('캘린더 (회사 공용)')}</h4>
+      <label className="check small" title={t('켜면 이 사무실이 등록하는 일정은 전용 캘린더에 들어가요. 회사 캘린더의 일정은 그대로 남아요.')}>
+        <input type="checkbox" checked={Boolean(office.ownCalendar)} onChange={(e) => run(() => api.updateOffice(office.id, { ownCalendar: e.target.checked }))} />
+        {t('전용 캘린더 쓰기')}
+      </label>
+    </div>
+  );
+}
+
 function HrData({ snapshot, office, busy, onStart, onNotice, run }: Props & Run) {
   const mailbox = snapshot.mailbox.filter((m) => m.officeId === office.id);
+  const calendar = calendarOf(snapshot.calendar, office);
   const pending = mailbox.filter((m) => !m.processed);
   return (
     <>
@@ -78,10 +92,10 @@ function HrData({ snapshot, office, busy, onStart, onNotice, run }: Props & Run)
           </li>
         ))}
       </ul>
-      <h4>{t('캘린더')}</h4>
-      {snapshot.calendar.length ? (
+      <OfficeCalendarHead office={office} run={run} />
+      {calendar.length ? (
         <ul className="data-list">
-          {snapshot.calendar.map((c) => (
+          {calendar.map((c) => (
             <li key={c.id}>
               📅 <b>{c.date}</b> {c.start}~{c.end} {c.title}
               {c.location && <span className="muted small"> · {c.location}</span>}
@@ -145,7 +159,7 @@ function SupportData({ snapshot, busy, onStart, onNotice, run }: Props & Run) {
   );
 }
 
-function WelfareData({ snapshot, busy, onStart, onNotice, run }: Props & Run) {
+function WelfareData({ snapshot, office, busy, onStart, onNotice, run }: Props & Run) {
   const { interests } = snapshot;
   const [keywords, setKeywords] = useState(interests.keywords.join(', '));
   const [region, setRegion] = useState(interests.region);
@@ -156,7 +170,7 @@ function WelfareData({ snapshot, busy, onStart, onNotice, run }: Props & Run) {
       onNotice(t('관심사를 저장했어요.'));
     });
   const busyDays = new Map<string, number>();
-  for (const c of snapshot.calendar) busyDays.set(c.date, (busyDays.get(c.date) ?? 0) + 1);
+  for (const c of calendarOf(snapshot.calendar, office)) busyDays.set(c.date, (busyDays.get(c.date) ?? 0) + 1);
   const packed = [...busyDays.entries()].filter(([, n]) => n >= 2);
 
   return (
