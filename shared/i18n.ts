@@ -907,7 +907,6 @@ export const CATALOGUE: Catalogue = {
   'AI 추천': { zh: 'AI 推荐', ja: 'AI のおすすめ', en: 'AI pick' },
   '고르는 중…': { zh: '选择中…', ja: '選んでいます…', en: 'Picking…' },
   '이 흐름 쓰기': { zh: '使用此流程', ja: 'このフローを使う', en: 'Use this flow' },
-  '이 흐름\n쓰기': { zh: '使用此\n流程', ja: 'このフローを\n使う', en: 'Use this\nflow' },
   '이름·단계·태그로 찾기': { zh: '按名称、步骤、标签搜索', ja: '名前・段階・タグで検索', en: 'Search by name, step or tag' },
   '저장한 흐름 지우기': { zh: '删除保存的流程', ja: '保存したフローを削除', en: 'Delete saved flow' },
   '저장한 흐름과 커뮤니티 인기 흐름 중에서 이 요청에 맞는 것을 골라 줘요. AI 비용이 조금 들어요.': { zh: '从保存的流程和社区热门流程中挑选适合这个请求的。会产生少量 AI 费用。', ja: '保存したフローとコミュニティの人気フローから、この依頼に合うものを選びます。AI の費用が少しかかります。', en: 'Picks the saved or popular community flow that fits this request. Costs a little AI usage.' },

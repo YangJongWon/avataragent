@@ -3276,8 +3276,14 @@ p.plan-note {
 .flow-picker-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 260px; overflow-y: auto; }
 .flow-picker-list li { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 6px 8px; background: var(--surface); border: 1px solid var(--line); }
 .flow-picker-text { display: grid; gap: 2px; min-width: 0; }
-.flow-chain { color: var(--primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.flow-picker-list .pixel-btn, .flow-picks .pixel-btn { white-space: pre-line; text-align: center; line-height: 1.25; flex: 0 0 auto; }
+.flow-chain { color: var(--primary); white-space: normal; line-height: 1.45; }
+.flow-picker-list .pixel-btn, .flow-picks .pixel-btn {
+  flex: 0 0 auto;
+  min-width: 96px;
+  min-height: 32px;
+  white-space: nowrap;
+  text-align: center;
+}
 
 /* 업무 여정 영역 내부 스크롤(등록 다이얼로그): 다이얼로그 전체가 아니라 이 안에서만 스크롤 */
 .plan-scroll { max-height: min(44vh, 400px); overflow-y: auto; padding-right: 2px; }
@@ -3314,7 +3320,7 @@ p.plan-note {
 .flow-picker-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 260px; overflow-y: auto; }
 .flow-picker-list li { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 6px 8px; background: var(--surface); border: 1px solid var(--line); }
 .flow-picker-text { display: grid; gap: 2px; min-width: 0; }
-.flow-chain { color: var(--primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-chain { color: var(--primary); white-space: normal; line-height: 1.45; }
 
 /* Today's free OpenRouter requests left */
 .free-quota {

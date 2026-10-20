@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { flowToSteps } from '../../../shared/flow-pack.ts';
 import { TEAM_ORDER, TEAMS } from '../../../shared/teams.ts';
@@ -165,7 +165,7 @@ export function FlowPicker({ officeId, team, agents, flows, request, canManage, 
                     <span className="muted">{p.reason}</span>
                   </span>
                   <button type="button" className="pixel-btn small primary" disabled={busy !== null} onClick={() => usePick(p)}>
-                    {t('이 흐름\n쓰기')}
+                    {t('이 흐름 쓰기')}
                   </button>
                 </li>
               ))}
@@ -192,7 +192,16 @@ export function FlowPicker({ officeId, team, agents, flows, request, canManage, 
                     <div className="flow-picker-text">
                       <b>{e.name}</b>
                       {e.detail && <span className="small muted">{e.detail}</span>}
-                      {e.chain.length > 0 && <span className="small flow-chain">{e.chain.join(' → ')}</span>}
+                      {e.chain.length > 0 && (
+                        <span className="small flow-chain">
+                          {e.chain.map((step, index) => (
+                            <Fragment key={`${index}:${step}`}>
+                              {step}
+                              {index < e.chain.length - 1 && (e.chain.length >= 6 && (index + 1) % 3 === 0 ? <br /> : ' → ')}
+                            </Fragment>
+                          ))}
+                        </span>
+                      )}
                     </div>
                     <span className="row">
                       {e.remove && (
@@ -207,7 +216,7 @@ export function FlowPicker({ officeId, team, agents, flows, request, canManage, 
                         </button>
                       )}
                       <button type="button" className="pixel-btn small primary" disabled={busy !== null} onClick={() => void use(e)}>
-                        {busy === e.key ? t('불러오는 중…') : t('이 흐름\n쓰기')}
+                        {busy === e.key ? t('불러오는 중…') : t('이 흐름 쓰기')}
                       </button>
                     </span>
                   </li>
