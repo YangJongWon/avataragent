@@ -254,6 +254,7 @@ export function NewTaskModal({
           planMode,
           steps: planMode === 'custom' ? steps : undefined,
           repeat,
+          workHoursOnly: schedule.workHoursOnly && repeat.kind !== 'once',
           timeZone: browserTimeZone(),
         });
         onClose();

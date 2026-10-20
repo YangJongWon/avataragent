@@ -1,4 +1,4 @@
-import { currentLanguage, localeOf, t, tpl } from '../../../shared/i18n.ts';
+import { currentLanguage, localeOf, localize, t, tpl } from '../../../shared/i18n.ts';
 import type { Office, Snapshot } from '../../../shared/types.ts';
 import { api } from '../api.ts';
 import { describeRepeat } from './ScheduleFields.tsx';
@@ -30,19 +30,21 @@ export function SchedulesPanel({
               <div className="schedule-head">
                 <b>{s.title || t('(제목 없음)')}</b>
                 <span className="data-tag">{describeRepeat(s.repeat)}</span>
+                {s.workHoursOnly && <span className="data-tag">{t('근무 시간에만')}</span>}
               </div>
               <div className="muted small">
                 {s.enabled && s.nextRunAt ? tpl('다음 실행: {at}', { at: when(s.nextRunAt) }) : t('꺼져 있어요')}
                 {s.lastRunAt && ` · ${tpl('마지막 실행: {at}', { at: when(s.lastRunAt) })}`}
               </div>
               {s.lastError && <div className="small warn-line">⚠ {s.lastError}</div>}
+              {s.lastNote && <div className="small muted">↷ {localize(s.lastNote)}</div>}
               <div className="row">
                 <button
                   className="pixel-btn small primary"
                   onClick={() =>
                     run(async () => {
-                      await api.runSchedule(s.id);
-                      onNotice(tpl('"{title}"을(를) 칠판에 붙였어요.', { title: s.title || t('(제목 없음)') }));
+                      const { note } = await api.runSchedule(s.id);
+                      onNotice(note ? localize(note) : tpl('"{title}"을(를) 칠판에 붙였어요.', { title: s.title || t('(제목 없음)') }));
                     })
                   }
                 >

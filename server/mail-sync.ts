@@ -32,11 +32,18 @@ export async function importMail(officeId: string): Promise<number> {
   return added;
 }
 
-/** Every few minutes, mail offices that check on their own pull new mail; the next tick starts the work. */
-export async function mailTick() {
+const lastChecked = new Map<string, number>();
+
+/**
+ * Called every minute: mail offices that check on their own pull new mail at their chosen interval (5 minutes unless
+ * set); the next tick starts the work.
+ */
+export async function mailTick(now = Date.now()) {
   for (const office of store.data.offices) {
     if (office.team !== 'hr' || !office.autoRun) continue;
     if (!office.gmailServerId && !store.data.mailAccounts.some((a) => a.officeId === office.id)) continue;
+    if (now - (lastChecked.get(office.id) ?? 0) < (office.mailCheckMinutes ?? 5) * 60_000 - 5_000) continue;
+    lastChecked.set(office.id, now);
     try {
       await importMail(office.id);
     } catch (error) {

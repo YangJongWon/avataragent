@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { currentLanguage, localeOf, t, tpl } from '../../../shared/i18n.ts';
-import { MAX_EVERY_HOURS, MIN_EVERY_HOURS } from '../../../shared/schedule.ts';
+import { MAX_EVERY_HOURS, MAX_EVERY_MINUTES, MIN_EVERY_HOURS, MIN_EVERY_MINUTES } from '../../../shared/schedule.ts';
 import type { ScheduleRepeat } from '../../../shared/types.ts';
 
 export type When = 'now' | ScheduleRepeat['kind'];
@@ -25,9 +25,12 @@ export interface ScheduleDraft {
   time: string;
   days: number[];
   every: number;
+  everyMinutes: number;
+  workHoursOnly: boolean;
 }
 
-export const useScheduleDraft = () => useState<ScheduleDraft>({ when: 'now', at: soon(), time: '09:00', days: [1, 2, 3, 4, 5], every: 1 });
+export const useScheduleDraft = () =>
+  useState<ScheduleDraft>({ when: 'now', at: soon(), time: '09:00', days: [1, 2, 3, 4, 5], every: 1, everyMinutes: 30, workHoursOnly: false });
 
 /** The repeat rule the draft describes; null runs it now. */
 export function repeatOf(d: ScheduleDraft): ScheduleRepeat | null {
@@ -35,6 +38,7 @@ export function repeatOf(d: ScheduleDraft): ScheduleRepeat | null {
   if (d.when === 'once') return { kind: 'once', at: new Date(d.at).toISOString() };
   if (d.when === 'daily') return { kind: 'daily', time: d.time };
   if (d.when === 'weekly') return { kind: 'weekly', days: d.days, time: d.time };
+  if (d.when === 'minutes') return { kind: 'minutes', every: d.everyMinutes };
   return { kind: 'hourly', every: d.every };
 }
 
@@ -43,6 +47,7 @@ export function describeRepeat(r: ScheduleRepeat): string {
   if (r.kind === 'once') return tpl('{at} 한 번', { at: new Date(r.at).toLocaleString(localeOf(currentLanguage()), { dateStyle: 'medium', timeStyle: 'short' }) });
   if (r.kind === 'daily') return tpl('매일 {time}', { time: r.time });
   if (r.kind === 'weekly') return tpl('매주 {days} {time}', { days: r.days.map(dayName).join('·'), time: r.time });
+  if (r.kind === 'minutes') return tpl('{n}분마다', { n: r.every });
   return tpl('{n}시간마다', { n: r.every });
 }
 
@@ -54,6 +59,7 @@ export function ScheduleFields({ draft, onChange }: { draft: ScheduleDraft; onCh
     ['once', t('예약 (한 번)')],
     ['daily', t('매일')],
     ['weekly', t('매주')],
+    ['minutes', t('N분마다')],
     ['hourly', t('N시간마다')],
   ];
   return (
@@ -83,14 +89,27 @@ export function ScheduleFields({ draft, onChange }: { draft: ScheduleDraft; onCh
       )}
       {(draft.when === 'daily' || draft.when === 'weekly') && <input type="time" value={draft.time} onChange={(e) => set({ time: e.target.value })} />}
       {draft.when === 'hourly' && (
-        <label className="field-inline">
+        <label className="schedule-every">
           <input type="number" min={MIN_EVERY_HOURS} max={MAX_EVERY_HOURS} value={draft.every} onChange={(e) => set({ every: Number(e.target.value) })} />
           {t('시간마다')}
         </label>
       )}
+      {draft.when === 'minutes' && (
+        <label className="schedule-every">
+          <input type="number" min={MIN_EVERY_MINUTES} max={MAX_EVERY_MINUTES} step={5} value={draft.everyMinutes} onChange={(e) => set({ everyMinutes: Number(e.target.value) })} />
+          {tpl('분마다 (최소 {n}분)', { n: MIN_EVERY_MINUTES })}
+        </label>
+      )}
+      {draft.when !== 'now' && draft.when !== 'once' && (
+        <label className="check small">
+          <input type="checkbox" checked={draft.workHoursOnly} onChange={(e) => set({ workHoursOnly: e.target.checked })} />
+          {t('근무 시간에만 (직원 근무 정책의 출퇴근 시간 밖에는 건너뛰어요)')}
+        </label>
+      )}
       {draft.when !== 'now' && (
         <span className="small muted">
-          {t('정한 시각에 이 업무를 칠판에 붙여요. 다른 업무가 진행 중이면 대기열로 가고, 근무 시간 밖이면 출근 후에 시작해요. 앱이 꺼져 있던 동안 놓친 반복은 몰아서 하지 않아요.')}
+          {t('정한 시각에 이 업무를 칠판에 붙여요. 다른 업무가 진행 중이면 대기열로 가고, 근무 시간 밖이면 출근 후에 시작해요. 앱이 꺼져 있던 동안 놓친 반복은 몰아서 하지 않아요.')}{' '}
+          {t('메일·문의를 다루는 사무실은 그 시각에 새 메일을 먼저 가져오고, 새로 온 게 없으면 업무를 만들지 않고 건너뛰어요.')}
         </span>
       )}
     </div>

@@ -4,6 +4,11 @@ import type { ScheduleRepeat } from './types.ts';
 export const MIN_EVERY_HOURS = 1;
 export const MAX_EVERY_HOURS = 168;
 export const MAX_SCHEDULES_PER_OFFICE = 20;
+/** Every N minutes: no more often than a quarter of an hour, so a task can finish before the next one. */
+export const MIN_EVERY_MINUTES = 15;
+export const MAX_EVERY_MINUTES = 720;
+/** How often a mail office with auto-check reads its accounts. */
+export const MAIL_CHECK_MINUTES = [5, 15, 30, 60] as const;
 
 const TIME = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -64,6 +69,11 @@ export function parseRepeat(raw: unknown): ScheduleRepeat | string {
     const days = Array.isArray(r.days) ? [...new Set(r.days.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort() : [];
     return days.length ? { kind: 'weekly', days, time } : '실행할 요일을 하나 이상 골라 주세요.';
   }
+  if (r.kind === 'minutes') {
+    const every = Number(r.every);
+    if (!Number.isInteger(every) || every < MIN_EVERY_MINUTES || every > MAX_EVERY_MINUTES) return `반복 간격은 ${MIN_EVERY_MINUTES}~${MAX_EVERY_MINUTES}분 사이로 정해 주세요.`;
+    return { kind: 'minutes', every };
+  }
   if (r.kind === 'hourly') {
     const every = Number(r.every);
     if (!Number.isInteger(every) || every < MIN_EVERY_HOURS || every > MAX_EVERY_HOURS) return `반복 간격은 ${MIN_EVERY_HOURS}~${MAX_EVERY_HOURS}시간 사이로 정해 주세요.`;
@@ -82,8 +92,8 @@ export function nextRunAfter(repeat: ScheduleRepeat, timeZone: string, after: Da
     const at = new Date(repeat.at);
     return at > after ? at : null;
   }
-  if (repeat.kind === 'hourly') {
-    const step = repeat.every * 3_600_000;
+  if (repeat.kind === 'hourly' || repeat.kind === 'minutes') {
+    const step = repeat.every * (repeat.kind === 'hourly' ? 3_600_000 : 60_000);
     const passed = Math.max(0, Math.floor((after.getTime() - anchor.getTime()) / step) + 1);
     return new Date(anchor.getTime() + passed * step);
   }

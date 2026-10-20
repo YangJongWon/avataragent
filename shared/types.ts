@@ -57,6 +57,8 @@ export interface Office {
   gmailServerId?: string | null;
   /** The office keeps its own calendar instead of the company one. */
   ownCalendar?: boolean;
+  /** Mail office with auto-check: how often its mail accounts are read, in minutes (default 5). */
+  mailCheckMinutes?: number;
   /** Applies safe improvement suggestions by itself after each completed task. */
   autoImprove?: boolean;
   budgetKrw: number | null;
@@ -272,7 +274,8 @@ export type ScheduleRepeat =
   | { kind: 'once'; at: string }
   | { kind: 'daily'; time: string }
   | { kind: 'weekly'; days: number[]; time: string }
-  | { kind: 'hourly'; every: number };
+  | { kind: 'hourly'; every: number }
+  | { kind: 'minutes'; every: number };
 
 /** A task the office puts on its board by itself at set times. */
 export interface ScheduledTask {
@@ -285,6 +288,8 @@ export interface ScheduledTask {
   /** The journey for planMode 'custom'. */
   steps?: WorkflowStepInput[];
   repeat: ScheduleRepeat;
+  /** Runs only while the office's staff are on duty (their work policy); times outside are skipped. */
+  workHoursOnly?: boolean;
   /** Wall-clock times are read in this zone (the browser's when it was made). */
   timeZone: string;
   enabled: boolean;
@@ -293,6 +298,8 @@ export interface ScheduledTask {
   lastRunAt: string | null;
   lastTaskId: string | null;
   lastError: string | null;
+  /** Why the last time put nothing on the board (no new mail, off duty), as a viewer sentence. */
+  lastNote?: string | null;
   createdAt: string;
 }
 

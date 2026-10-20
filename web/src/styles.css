@@ -3472,3 +3472,12 @@ p.plan-note {
 .calendar-head h4 {
   margin: 0;
 }
+
+.schedule-every {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.schedule-every input {
+  width: 90px;
+}

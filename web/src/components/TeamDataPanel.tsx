@@ -2,6 +2,7 @@ import { t, tpl } from '../../../shared/i18n.ts';
 import { useState } from 'react';
 import { TEAMS } from '../../../shared/teams.ts';
 import { calendarOf, type Office, type Recommendation, type Snapshot } from '../../../shared/types.ts';
+import { MAIL_CHECK_MINUTES } from '../../../shared/schedule.ts';
 import { api } from '../api.ts';
 import { SchedulesPanel } from './SchedulesPanel.tsx';
 import { krw, timeOf } from '../format.ts';
@@ -38,6 +39,18 @@ export function TeamDataPanel(props: Props) {
         <label className="toggle">
           <input type="checkbox" checked={office.autoRun} onChange={(e) => run(() => api.updateOffice(office.id, { autoRun: e.target.checked }))} />
           {t(team.autoRunLabel)} <span className="muted small">{t('(새 항목이 있으면 팀이 알아서 업무를 시작해요. 반영은 항상 승인 후)')}</span>
+        </label>
+      )}
+      {office.team === 'hr' && office.autoRun && (
+        <label className="field-inline small">
+          {t('연결된 메일 확인 간격')}
+          <select value={office.mailCheckMinutes ?? 5} onChange={(e) => run(() => api.updateOffice(office.id, { mailCheckMinutes: Number(e.target.value) }))}>
+            {MAIL_CHECK_MINUTES.map((m) => (
+              <option key={m} value={m}>
+                {m < 60 ? tpl('{n}분마다', { n: m }) : tpl('{n}시간마다', { n: m / 60 })}
+              </option>
+            ))}
+          </select>
         </label>
       )}
       <SchedulesPanel snapshot={props.snapshot} office={office} run={run} onNotice={props.onNotice} />

@@ -29,6 +29,7 @@ import { importMail, mailTick } from './mail-sync.ts';
 import { mailProviderOf, type MailAccount } from '../shared/mail-providers.ts';
 import { setMailPassword } from './secrets.ts';
 import { createSchedule, deleteSchedule, runScheduleNow, scheduleOf, scheduleTick, updateSchedule } from './schedules.ts';
+import { MAIL_CHECK_MINUTES } from '../shared/schedule.ts';
 import { isExportFormat } from '../shared/design.ts';
 import { isPersonality } from '../shared/personality.ts';
 import { parsePlaybook, playbookChanges } from '../shared/playbook.ts';
@@ -179,7 +180,8 @@ app.delete('/api/offices/:id', (req, res) => {
 
 app.put('/api/offices/:id', async (req, res) => {
   guard(res, 'manage', req.params.id);
-  const { autoRun, autoImprove, budgetKrw, theme, themeCss, name, description, gmailServerId, ownCalendar } = req.body ?? {};
+  const { autoRun, autoImprove, budgetKrw, theme, themeCss, name, description, gmailServerId, ownCalendar, mailCheckMinutes } = req.body ?? {};
+  if (mailCheckMinutes !== undefined && !(MAIL_CHECK_MINUTES as readonly number[]).includes(mailCheckMinutes)) throw new Error('메일 확인 간격을 골라 주세요.');
   if (gmailServerId !== undefined && gmailServerId !== null && !gmailServers().some((s) => s.id === gmailServerId)) throw new Error('Gmail MCP 연결을 찾지 못했어요.');
   if (gmailServerId !== undefined && store.office(req.params.id).team !== 'hr') throw new Error('Gmail은 인사팀 메일함에만 연결할 수 있어요.');
   if (budgetKrw !== undefined || name !== undefined || description !== undefined) guard(res, 'owner');
@@ -188,6 +190,7 @@ app.put('/api/offices/:id', async (req, res) => {
   store.updateOffice(req.params.id, (o) => {
     if (typeof autoRun === 'boolean') o.autoRun = autoRun;
     if (typeof autoImprove === 'boolean') o.autoImprove = autoImprove;
+    if (typeof mailCheckMinutes === 'number') o.mailCheckMinutes = mailCheckMinutes;
     if (ownCalendar === true) o.ownCalendar = true;
     else if (ownCalendar === false) delete o.ownCalendar;
     if (gmailServerId === null) delete o.gmailServerId;
@@ -1447,7 +1450,7 @@ setInterval(() => background(() => billingTick(), '구독 확인'), 60 * 60 * 10
 setInterval(() => background(async () => {
   await mailTick();
   await workflowRuntime.tick();
-}, '메일 확인'), 5 * 60 * 1000);
+}, '메일 확인'), 60 * 1000);
 // Today's free-model requests as OpenRouter counts them, for the badges in the office and staff screens.
 onFreeQuotaChange(() => store.announce());
 startFreeQuotaSync(() => {
