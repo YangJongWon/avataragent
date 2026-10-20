@@ -4,7 +4,6 @@
 
 [한국어](README.md) | [English](README.en.md) | [日本語](README.ja.md) | 简体中文
 
-[avatarcast.app](https://avatarcast.app)
 
 一款把 AI 智能体按角色编排成角色阵容，并在办公室和项目室中直观展示其工作过程与业务流程的 Web 应用。
 登记任务后，管理者、调研员、撰写员和审核员会沿着 **工作流** 依次工作；最后由用户批准后，成果及其价值会反映到报告和损益中。
