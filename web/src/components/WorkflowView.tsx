@@ -221,6 +221,7 @@ function WorkflowInner({ task, agents, team, edit, dense, maxRows }: Props) {
   const gapX = dense ? 16 : GAP_X;
   const gapY = dense ? 32 : GAP_Y;
   const locked = task ? lockedStepCount(task) : 0;
+  const canPickFromMode = Boolean(edit && task && (!canEdit || locked === 0));
   const saved = task ? inputsOf(task) : [];
   const steps = task ? shownSteps(task, draft, locked) : [];
   const inputs = draft ?? saved;
@@ -410,11 +411,20 @@ function WorkflowInner({ task, agents, team, edit, dense, maxRows }: Props) {
         <span>
           {t('업무 여정')} {task ? `· ${t(task.title)}` : ''}
         </span>
-        {task && (
+        {task && canPickFromMode ? (
+          <button
+            type="button"
+            className={`pixel-btn small plan-mode plan-${task.planMode}`}
+            title={canEdit ? t('클릭해서 업무 흐름을 변경해요.') : t('클릭해서 다음 업무에 사용할 흐름을 골라요.')}
+            onClick={() => setPicking((value) => !value)}
+          >
+            {planModeLabel(task.planMode)} ▾
+          </button>
+        ) : task ? (
           <span className={`plan-mode plan-${task.planMode}`} title={task.planNote || undefined}>
             {planModeLabel(task.planMode)}
           </span>
-        )}
+        ) : null}
         {task && !draft && (
           <button
             className={`pixel-btn small ${editing ? 'primary' : ''}`}
@@ -543,7 +553,7 @@ function WorkflowInner({ task, agents, team, edit, dense, maxRows }: Props) {
           </div>,
           document.body,
         )}
-      {canEdit && task && edit && picking && locked === 0 && (
+      {canPickFromMode && task && edit && picking && (
         <FlowPicker
           officeId={edit.officeId}
           team={team}

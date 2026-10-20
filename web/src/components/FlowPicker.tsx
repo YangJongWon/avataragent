@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { flowToSteps } from '../../../shared/flow-pack.ts';
-import { TEAMS } from '../../../shared/teams.ts';
+import { TEAM_ORDER, TEAMS } from '../../../shared/teams.ts';
 import type { Agent, SavedFlow, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
 import { templatePlan } from '../../../shared/workflow.ts';
 import { api, type FlowPick, type PopularFlow, type TaskRequest } from '../api.ts';
@@ -60,17 +60,25 @@ export function FlowPicker({ officeId, team, agents, flows, request, canManage, 
 
   const entries = useMemo<Entry[]>(() => {
     const chainOf = (steps: { label: string }[]) => steps.map((s) => t(s.label));
-    const templates: Entry[] = TEAMS[team].taskTypes.map((type) => {
-      const steps = templatePlan(team, type.id, agents);
-      return {
-        key: `template:${type.id}`,
-        source: 'template',
-        name: t(type.label),
-        detail: tpl('{n}단계', { n: String(steps.length) }),
-        chain: chainOf(steps),
-        load: async () => ({ steps, taskType: type.id, note: tpl('유형 기본 흐름 "{name}"을(를) 썼어요.', { name: t(type.label) }) }),
-      };
-    });
+    const templateTeams = [team, ...TEAM_ORDER.filter((id) => id !== team)];
+    const templates: Entry[] = templateTeams.flatMap((sourceTeam) =>
+      TEAMS[sourceTeam].taskTypes.map((type) => {
+        const steps = templatePlan(sourceTeam, type.id, agents);
+        const name = sourceTeam === team ? t(type.label) : `${t(TEAMS[sourceTeam].name)} · ${t(type.label)}`;
+        return {
+          key: sourceTeam === team ? `template:${type.id}` : `template:${sourceTeam}:${type.id}`,
+          source: 'template' as const,
+          name,
+          detail: tpl('{n}단계', { n: String(steps.length) }),
+          chain: chainOf(steps),
+          load: async () => ({
+            steps,
+            ...(sourceTeam === team ? { taskType: type.id } : {}),
+            note: tpl('유형 기본 흐름 "{name}"을(를) 썼어요.', { name }),
+          }),
+        };
+      }),
+    );
     const saved: Entry[] = flows.map((f) => ({
       key: `saved:${f.id}`,
       source: 'saved',
@@ -157,7 +165,7 @@ export function FlowPicker({ officeId, team, agents, flows, request, canManage, 
                     <span className="muted">{p.reason}</span>
                   </span>
                   <button type="button" className="pixel-btn small primary" disabled={busy !== null} onClick={() => usePick(p)}>
-                    {t('이 흐름 쓰기')}
+                    {t('이 흐름\n쓰기')}
                   </button>
                 </li>
               ))}
@@ -199,7 +207,7 @@ export function FlowPicker({ officeId, team, agents, flows, request, canManage, 
                         </button>
                       )}
                       <button type="button" className="pixel-btn small primary" disabled={busy !== null} onClick={() => void use(e)}>
-                        {busy === e.key ? t('불러오는 중…') : t('이 흐름 쓰기')}
+                        {busy === e.key ? t('불러오는 중…') : t('이 흐름\n쓰기')}
                       </button>
                     </span>
                   </li>
