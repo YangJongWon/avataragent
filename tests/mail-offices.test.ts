@@ -94,3 +94,29 @@ test('a mail office can keep its own calendar; the others keep sharing the compa
   // Welfare reads the company calendar unless it keeps its own too.
   assert.deepEqual(calendarOf(store.data.calendar, store.office('office_welfare')).map((e) => e.title), ['파트너 미팅']);
 });
+
+test('an office that had one mail account keeps what it read, and its mail can still be sorted', async () => {
+  const { adoptOfficeMailAccounts } = await import('../server/store.ts');
+  const { saveKv, loadKv } = await import('../server/db.ts');
+  const { importImap } = await import('../server/mail-imap.ts');
+  const legacy = { provider: 'custom', user: 'ceo@gmail.com', host: '127.0.0.1', port: personal.port };
+  // As the one-account version left it: the account on the office, its password and read list keyed by the office.
+  const saved = {
+    offices: [{ ...structuredClone(store.office('office_hr')), id: 'office_old', mailAccount: legacy }],
+    mailbox: [{ id: 'imap_old', officeId: 'office_old', from: '', subject: '다음 주 미팅', body: '', receivedAt: '', processed: false, source: 'imap', remote: { uid: 7, uidValidity: '777' } }],
+    mailAccounts: [],
+  } as never as Parameters<typeof adoptOfficeMailAccounts>[0];
+  setMailPassword('office_old', 'pw');
+  saveKv(`mail_seen_office_old_ceo@gmail.com@127.0.0.1:${personal.port}`, ['777:7']);
+
+  adoptOfficeMailAccounts(saved);
+  store.mutate((s) => {
+    s.offices.push(saved.offices[0]);
+    s.mailAccounts.push(...saved.mailAccounts);
+  });
+
+  assert.deepEqual(saved.mailAccounts.map((a) => a.id), ['mail_office_old']);
+  assert.deepEqual(loadKv('mail_seen_mail_office_old'), ['777:7']);
+  assert.equal(saved.mailbox[0].remote?.accountId, 'mail_office_old');
+  assert.equal(await importImap('mail_office_old'), 0, 'the same message is not fetched again');
+});

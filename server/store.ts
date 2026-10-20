@@ -46,7 +46,7 @@ import type {
 import { reviewLoop, templatePlan } from '../shared/workflow.ts';
 import { DEFAULT_LANGUAGE, isLanguage, viewerText, type Language } from '../shared/i18n.ts';
 import { config, ORGANIZATION_SAFETY_RULES, type ProviderName } from './config.ts';
-import { appendEvent, loadKv, loadRelationalState, maxSeq, onStorageConflict, recentEvents, saveRelationalState } from './db.ts';
+import { appendEvent, loadKv, loadRelationalState, maxSeq, onStorageConflict, recentEvents, saveKv, saveRelationalState } from './db.ts';
 import { loginInfo } from './mcp-oauth.ts';
 import { keyInfo, mcpSecretInfo } from './secrets.ts';
 import { freeQuota } from './free-quota.ts';
@@ -254,6 +254,30 @@ function load(): PersistedState {
   return normalize(saved);
 }
 
+/**
+ * Mailboxes became per office: older mail belongs to the first mail office, and an office's one account joins the
+ * list. The account keeps what it already read (or the next fetch brings the same messages back under new ids) and
+ * its mail keeps a way back to the real mailbox (or approving a report can't label it).
+ */
+export function adoptOfficeMailAccounts(saved: Pick<PersistedState, 'offices' | 'mailbox' | 'mailAccounts'>) {
+  saved.mailAccounts ??= [];
+  const firstMailOffice = saved.offices.find((o) => o.team === 'hr')?.id ?? 'office_hr';
+  for (const mail of saved.mailbox) mail.officeId ??= firstMailOffice;
+  for (const office of saved.offices as (Office & { mailAccount?: Omit<MailAccount, 'id' | 'officeId'> })[]) {
+    if (!office.mailAccount) continue;
+    const id = `mail_${office.id}`;
+    const { user, host, port } = office.mailAccount;
+    saved.mailAccounts.push({ id, officeId: office.id, ...office.mailAccount });
+    renameMailPassword(office.id, id);
+    const seen = loadKv<string[]>(`mail_seen_${office.id}_${user}@${host}:${port}`);
+    if (seen && !loadKv(`mail_seen_${id}`)) saveKv(`mail_seen_${id}`, seen);
+    for (const mail of saved.mailbox) {
+      if (mail.officeId === office.id && mail.remote && !mail.remote.accountId) mail.remote.accountId = id;
+    }
+    delete office.mailAccount;
+  }
+}
+
 function normalize(saved: PersistedState) {
   fillCatalog(saved);
   if (typeof saved.theme !== 'string') saved.theme = adoptCompanyTheme(saved.offices);
@@ -262,17 +286,7 @@ function normalize(saved: PersistedState) {
   saved.companyLogo ??= null;
   saved.flows ??= [];
   saved.schedules ??= [];
-  saved.mailAccounts ??= [];
-  // Mailboxes became per office: older mail belongs to the first mail office, and an office's one account joins the list.
-  const firstMailOffice = saved.offices.find((o) => o.team === 'hr')?.id ?? 'office_hr';
-  for (const mail of saved.mailbox) mail.officeId ??= firstMailOffice;
-  for (const office of saved.offices as (Office & { mailAccount?: Omit<MailAccount, 'id' | 'officeId'> })[]) {
-    if (!office.mailAccount) continue;
-    const id = `mail_${office.id}`;
-    saved.mailAccounts.push({ id, officeId: office.id, ...office.mailAccount });
-    renameMailPassword(office.id, id);
-    delete office.mailAccount;
-  }
+  adoptOfficeMailAccounts(saved);
   saved.performance ??= [];
   saved.improvements ??= [];
   if (!isPlan(saved.plan)) saved.plan = 'personal';
