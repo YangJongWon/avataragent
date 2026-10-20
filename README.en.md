@@ -4,7 +4,6 @@
 
 [한국어](README.md) | English | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-[avatarcast.app](https://avatarcast.app)
 
 A web app that casts AI agents as a team of characters by role and shows them working, along with the flow of the work, inside offices and project rooms.
 When you add a task, the manager, researcher, writer and reviewer take turns along a **workflow**, and once you approve the result at the end, the result and its value are reflected in reports and the profit and loss.
