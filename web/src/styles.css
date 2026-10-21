@@ -3487,3 +3487,10 @@ p.plan-note {
 .schedule-every input {
   width: 90px;
 }
+
+/* A research step that runs at the same time as the one before it. */
+.flow-parallel {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--primary);
+}

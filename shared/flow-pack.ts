@@ -31,6 +31,8 @@ export interface FlowPackStep {
   role: Role | null;
   instructions: string;
   loop: StepLoop | null;
+  /** Research only: runs at the same time as the research step before it. */
+  parallel?: boolean;
 }
 
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
@@ -52,10 +54,10 @@ export function parseFlowPack(input: unknown): FlowPack {
     const kind = s.kind as StepKind;
     if (!KINDS.includes(kind)) throw new Error('알 수 없는 단계 종류가 있어요.');
     const role = kind === 'approval' ? null : ROLES.includes(s.role as Role) ? (s.role as Role) : STEP_KIND[kind].role;
-    return { kind, label: str(s.label, FLOW_LIMITS.label), role, instructions: str(s.instructions, FLOW_LIMITS.instructions), loop: parseLoop(s.loop) };
+    return { kind, label: str(s.label, FLOW_LIMITS.label), role, instructions: str(s.instructions, FLOW_LIMITS.instructions), loop: parseLoop(s.loop), ...(s.parallel === true ? { parallel: true } : {}) };
   });
   const error = validatePlan(
-    steps.map((s) => ({ kind: s.kind, label: s.label, agentId: s.role, instructions: s.instructions, loop: s.loop })),
+    steps.map((s) => ({ kind: s.kind, label: s.label, agentId: s.role, instructions: s.instructions, loop: s.loop, parallel: s.parallel })),
     roleAgents,
   );
   if (error) throw new Error(error);
@@ -89,12 +91,12 @@ export function flowFromPlan(
     author: meta.author ?? '',
     license: meta.license || 'CC-BY-4.0',
     exportedAt: new Date().toISOString(),
-    steps: steps.map((s) => ({ kind: s.kind, label: s.label, role: roleOf(s), instructions: s.instructions, loop: s.loop ?? null })),
+    steps: steps.map((s) => ({ kind: s.kind, label: s.label, role: roleOf(s), instructions: s.instructions, loop: s.loop ?? null, ...(s.parallel ? { parallel: true } : {}) })),
   });
 }
 
 /** Fits a flow to an office: each role goes to that office's agent with the role, or its first agent. */
 export function flowToSteps(flow: FlowPack, officeAgents: Agent[]): WorkflowStepInput[] {
   const agentFor = (role: Role | null) => (role ? (officeAgents.find((a) => a.role === role)?.id ?? officeAgents[0]?.id ?? null) : null);
-  return flow.steps.map((s) => ({ kind: s.kind, label: s.label, agentId: agentFor(s.role), instructions: s.instructions, loop: s.loop }));
+  return flow.steps.map((s) => ({ kind: s.kind, label: s.label, agentId: agentFor(s.role), instructions: s.instructions, loop: s.loop, ...(s.parallel ? { parallel: true } : {}) }));
 }

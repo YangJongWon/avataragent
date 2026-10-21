@@ -106,6 +106,8 @@ async function withRetry(run: () => Promise<CompletionResult>, requireJson = fal
   for (let attempt = 0; attempt <= config.aiMaxRetries; attempt++) {
     try {
       const result = await run();
+      // A model can finish without a word (seen with a free model on a long research prompt); that is a failed call, not a result.
+      if (!result.text.trim()) throw new ProviderRequestError('AI가 빈 응답을 돌려줬어요.', true);
       if (requireJson && !jsonObject(result.text)) {
         throw new ProviderRequestError('AI가 올바른 JSON 객체를 반환하지 않았습니다.', true);
       }
@@ -207,32 +209,40 @@ async function requestJson(method: 'GET' | 'POST', url: string, headers: Record<
 }
 
 /**
- * Free OpenRouter models come and go every few months and are often busy: one that is gone or busy upstream is retried
- * once through openrouter/free, and a used-up daily allowance is told plainly instead of being retried.
+ * Free OpenRouter models are often busy or failing at their provider, and come and go every few months. A call such a
+ * model can't take goes to the next free model of the catalog that writes real answers. The OpenRouter router
+ * (openrouter/free) is never the stand-in: it can pick a safety classifier that answers only "User Safety: safe".
+ * A used-up daily allowance is told plainly instead of being retried.
  */
 async function openaiCompatible(endpoint: Endpoint, model: string, req: CompletionRequest): Promise<CompletionResult> {
   if (!isOpenRouterCompany(endpoint) || !isFreeOpenRouterModel(model)) return openaiCompatibleOnce(endpoint, model, req);
-  try {
-    return await freeRequest(endpoint, model, req);
-  } catch (error) {
-    if (!(error instanceof ProviderRequestError)) throw error;
-    if (error.status === 429 && /per[- ]day|free-models-per-day/i.test(error.message)) {
-      noteFreeExhausted();
-      const { limit } = freeQuota();
-      throw new ProviderRequestError(
-        limit > 50
-          ? `OpenRouter 무료 모델의 오늘 사용 한도(하루 ${limit.toLocaleString()}회)를 다 썼어요. 한국 시간 오전 9시에 다시 채워져요.`
-          : 'OpenRouter 무료 모델의 오늘 사용 한도(하루 50회)를 다 썼어요. 한국 시간 오전 9시에 다시 채워지고, OpenRouter에 $10 이상 충전하면 무료 모델을 하루 1,000회까지 쓸 수 있어요.',
-        false,
-        429,
-      );
+  const standbys = store.data.models
+    .filter((m) => isFreeOpenRouterModel(m.apiModel) && m.apiModel !== OPENROUTER_FREE_ROUTER && isOpenRouterCompany(companyOf(m.vendor)))
+    .map((m) => m.apiModel);
+  let last: unknown;
+  for (const candidate of [model, ...standbys.filter((m) => m !== model)]) {
+    try {
+      return await freeRequest(endpoint, candidate, req);
+    } catch (error) {
+      if (!(error instanceof ProviderRequestError)) throw error;
+      if (error.status === 429 && /per[- ]day|free-models-per-day/i.test(error.message)) {
+        noteFreeExhausted();
+        const { limit } = freeQuota();
+        throw new ProviderRequestError(
+          limit > 50
+            ? `OpenRouter 무료 모델의 오늘 사용 한도(하루 ${limit.toLocaleString()}회)를 다 썼어요. 한국 시간 오전 9시에 다시 채워져요.`
+            : 'OpenRouter 무료 모델의 오늘 사용 한도(하루 50회)를 다 썼어요. 한국 시간 오전 9시에 다시 채워지고, OpenRouter에 $10 이상 충전하면 무료 모델을 하루 1,000회까지 쓸 수 있어요.',
+          false,
+          429,
+        );
+      }
+      const gone = error.status === 404 || (error.status === 400 && /no endpoints|not a valid model|not available|does not exist/i.test(error.message));
+      const busy = (error.status === 429 && /upstream|temporarily/i.test(error.message)) || (error.status !== undefined && error.status >= 500);
+      if (!gone && !busy) throw error;
+      last = error;
     }
-    const gone = error.status === 404 || (error.status === 400 && /no endpoints|not a valid model|not available|does not exist/i.test(error.message));
-    // A popular free model is often busy at its provider; the router picks another free one.
-    const busy = error.status === 429 && /upstream|temporarily/i.test(error.message);
-    if ((gone || busy) && model !== OPENROUTER_FREE_ROUTER) return freeRequest(endpoint, OPENROUTER_FREE_ROUTER, req);
-    throw error;
   }
+  throw last;
 }
 
 /** One counted free request; a model that can't switch its thinking off (the router may pick one) thinks briefly instead. */

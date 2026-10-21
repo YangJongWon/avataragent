@@ -38,7 +38,7 @@ const GAP_X = 24;
 const GAP_Y = 52;
 const PAD = 8;
 
-type StepData = { icon: string; label: string; status: StepStatus; owner: string; loop?: string; editing?: boolean; selected?: boolean; changed?: boolean };
+type StepData = { icon: string; label: string; status: StepStatus; owner: string; loop?: string; parallel?: boolean; editing?: boolean; selected?: boolean; changed?: boolean };
 
 const SIDES: [Position, string][] = [
   [Position.Left, 'l'],
@@ -60,6 +60,11 @@ function StepNode({ data }: NodeProps<Node<StepData>>) {
         <div className="flow-status">
           {view.icon} {t(view.text)}
         </div>
+        {data.parallel && (
+          <div className="flow-parallel" title={t('앞 조사 단계와 동시에 진행해요.')}>
+            ⇉ {t('앞 단계와 동시')}
+          </div>
+        )}
         {data.loop && (
           <div className="flow-loop" title={data.loop}>
             🔁 {data.loop}
@@ -132,6 +137,7 @@ function flowItems(task: Task | undefined, steps: ShownStep[], agents: Agent[], 
       status: s.status,
       owner: s.kind === 'approval' ? t('사용자') : (agents.find((a) => a.id === s.agentId)?.name ?? t('담당 없음')),
       loop: s.loop ? `${t(s.loop.when)} → ${t(loopTargetLabel(steps, i, s.loop))} (${task.loopCounts?.[s.id] ?? 0}/${s.loop.max})` : undefined,
+      parallel: Boolean(s.parallel),
       selected: selected === i,
       changed: changed.has(i),
     },
@@ -361,6 +367,8 @@ function WorkflowInner({ task, agents, team, edit, dense, maxRows }: Props) {
       targetHandle: `${inn}-in`,
       type: out === 'r' || out === 'l' ? 'default' : 'smoothstep',
       animated: item.data.status === 'done' && (next.data.status === 'running' || next.data.status === 'awaiting'),
+      // Steps that run together are tied by a dashed "at the same time" line, not an arrow of order.
+      ...(next.data.parallel ? { label: t('동시'), style: { strokeDasharray: '4 4' }, labelStyle: { fontWeight: 700 } } : {}),
     });
   });
   steps.forEach((step, i) => {

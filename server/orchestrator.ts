@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { splitDraft } from '../shared/draft.ts';
 import { taskTypeOf, TEAMS } from '../shared/teams.ts';
 import type { Agent, Artifact, Expression, Role, StepStatus, Task, TeamId, WorkflowStep, WorkflowStepInput } from '../shared/types.ts';
-import { lockedStepCount, MAX_LOOP, normalizePlan, parseLoop, PLAN_EDITABLE_STATUSES, remapLoops, STEP_KIND, templatePlan, validatePlan } from '../shared/workflow.ts';
+import { lockedStepCount, MAX_LOOP, normalizePlan, parallelGroup, parseLoop, PLAN_EDITABLE_STATUSES, remapLoops, STEP_KIND, templatePlan, validatePlan } from '../shared/workflow.ts';
 import { usableBy, type McpServer, type McpTool, type McpToolMode, type PlannedAction } from '../shared/mcp.ts';
 import { modelOf, tierScale } from '../shared/models.ts';
 import {
@@ -337,8 +337,9 @@ export async function designPlan(input: { officeId: string; title: string; descr
       '요청에 맞게 업무 여정을 설계하고 각 단계에 가장 알맞은 직원을 배정해라.',
       '순서 규칙: brief 1개로 시작, research 0개 이상, draft 1개, review 0개 이상, approval 1개로 끝. 전체 10단계 이하.',
       `조건 루프: research·draft·review 단계에는 "조건이 맞으면 앞 단계로 되돌아가기"를 붙일 수 있다. to는 steps 배열의 0부터 세는 번호이고, research·draft는 자기 자신 이하, review는 draft 이하만 된다. max는 1~${MAX_LOOP}. 필요 없으면 null.`,
+      '동시 진행: 같은 역할 직원이 여럿이면 research 단계에 "parallel": true를 붙여 바로 앞 research 단계와 동시에 맡길 수 있다(서로 다른 관점이나 모델로 비교할 때). 동시 진행 단계에는 루프를 붙이지 않는다.',
       '기본 여정으로 충분하면 그대로 써도 된다. 불필요한 단계와 루프는 비용만 늘린다.',
-      'JSON으로만 답한다: {"steps": [{"kind": string, "label": string (12자 이내), "agentId": string, "instructions": string, "loop": {"to": number, "when": string (조건, 20자 이내), "max": number} | null}], "note": string (설계 이유 한두 문장)}',
+      'JSON으로만 답한다: {"steps": [{"kind": string, "label": string (12자 이내), "agentId": string, "instructions": string, "loop": {"to": number, "when": string (조건, 20자 이내), "max": number} | null, "parallel": boolean}], "note": string (설계 이유 한두 문장)}',
     ]
       .filter(Boolean)
       .join('\n'),
@@ -1129,8 +1130,10 @@ export async function runStepAt(taskId: string, at: number, feedback: string | n
   const canLoop = Boolean(step.loop) && (store.task(taskId).loopCounts?.[step.id] ?? 0) < step.loop!.max;
   let loopReason: string | null = null;
 
+  // Research steps marked parallel run at the same time as this one, each by its own staff member.
+  const group = parallelGroup(plan, at);
   if (step.kind === 'brief') await briefStep(taskId, step, reason);
-  else if (step.kind === 'research') await researchStep(taskId, step, reason);
+  else if (step.kind === 'research') await Promise.all(group.map((s) => researchStep(taskId, s, reason)));
   else if (step.kind === 'draft') {
     if (!(await draftStep(taskId, step, drafts() + 1, clarify, reason))) {
       const help = store.task(taskId).help;
@@ -1149,9 +1152,11 @@ export async function runStepAt(taskId: string, at: number, feedback: string | n
     takeLoop(taskId, plan, at, loopReason);
     return { kind: 'next', at: step.loop!.to, feedback: loopReason };
   }
-  const label = HANDOFF_LABEL[step.kind] ?? step.label;
-  if (step.kind !== 'review') handOff(taskId, agentOfStep(store.task(taskId), step), agentOfStep(store.task(taskId), plan[at + 1]), label);
-  return { kind: 'next', at: at + 1, feedback: null };
+  const next = plan[at + group.length];
+  if (step.kind !== 'review' && next) {
+    for (const done of group) handOff(taskId, agentOfStep(store.task(taskId), done), agentOfStep(store.task(taskId), next), HANDOFF_LABEL[done.kind] ?? done.label);
+  }
+  return { kind: 'next', at: at + group.length, feedback: null };
 }
 
 /** Records the user's change request and returns the draft step index the journey restarts from. */
@@ -1414,6 +1419,7 @@ function checkedPlan(officeId: string, steps: unknown) {
     agentId: s?.kind === 'approval' ? null : typeof s?.agentId === 'string' ? s.agentId : null,
     instructions: String(s?.instructions ?? '').trim().slice(0, 300),
     loop: parseLoop(s?.loop),
+    ...(s?.parallel === true ? { parallel: true } : {}),
   }));
   const error = validatePlan(inputs, officeAgents(officeId));
   if (error) throw new Error(error);
@@ -1488,7 +1494,12 @@ export function recordTask(input: TaskInput) {
 }
 
 const sameStep = (a: WorkflowStepInput, b: WorkflowStepInput) =>
-  a.kind === b.kind && a.label === b.label && (a.agentId ?? null) === (b.agentId ?? null) && a.instructions === b.instructions && JSON.stringify(a.loop ?? null) === JSON.stringify(b.loop ?? null);
+  a.kind === b.kind &&
+  a.label === b.label &&
+  (a.agentId ?? null) === (b.agentId ?? null) &&
+  a.instructions === b.instructions &&
+  JSON.stringify(a.loop ?? null) === JSON.stringify(b.loop ?? null) &&
+  Boolean(a.parallel) === Boolean(b.parallel);
 
 /**
  * Replaces a task's journey. A queued task can change everything; a started one (local runtime only,

@@ -147,6 +147,11 @@ export interface WorkflowStepInput {
   instructions: string;
   /** A review without a loop only leaves its opinion and the journey moves on. */
   loop?: StepLoop | null;
+  /**
+   * Research only: runs at the same time as the research step before it, by its own staff member. Steps in such a
+   * group work independently (none sees the others' notes); the draft gets all of them.
+   */
+  parallel?: boolean;
 }
 
 export interface WorkflowStep extends WorkflowStepInput {

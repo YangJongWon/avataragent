@@ -110,6 +110,10 @@ export function validatePlan(steps: WorkflowStepInput[], officeAgents: Agent[]):
   const ids = new Set(officeAgents.map((a) => a.id));
   for (const [i, step] of steps.entries()) {
     if (!step.label.trim()) return '이름이 빈 단계가 있어요.';
+    if (step.parallel) {
+      if (step.kind !== 'research' || steps[i - 1]?.kind !== 'research') return `"${step.label}" 단계는 바로 앞의 조사·분석 단계와만 동시에 진행할 수 있어요.`;
+      if (step.loop || steps[i - 1].loop) return `동시에 진행하는 조사 단계("${step.label}")에는 되돌리기를 둘 수 없어요.`;
+    }
     if (step.loop) {
       if (!loopTargets(steps, i).includes(step.loop.to)) {
         return step.kind === 'review'
@@ -132,13 +136,14 @@ export function normalizePlan(steps: Partial<WorkflowStepInput>[], team: TeamId,
   const template = templatePlan(team, taskType, officeAgents);
   const ids = new Set(officeAgents.map((a) => a.id));
   const kinds = new Set(Object.keys(KIND_RANK));
-  type Item = { step: WorkflowStepInput; origin: number; rawLoop: StepLoop | null };
+  type Item = { step: WorkflowStepInput; origin: number; rawLoop: StepLoop | null; parallel?: boolean };
   const cleaned: Item[] = steps
     .map((s, origin) => ({ s, origin }))
     .filter((x): x is { s: Partial<WorkflowStepInput> & { kind: StepKind }; origin: number } => typeof x.s?.kind === 'string' && kinds.has(x.s.kind))
     .map(({ s, origin }) => ({
       origin,
       rawLoop: parseLoop(s.loop),
+      parallel: s.parallel === true,
       step: {
         kind: s.kind,
         label: String(s.label ?? '').trim().slice(0, 20) || STEP_KIND[s.kind].title,
@@ -166,7 +171,9 @@ export function normalizePlan(steps: Partial<WorkflowStepInput>[], team: TeamId,
         : item.step.kind === 'review'
           ? reviewLoop(plan)
           : null;
-    return { ...item.step, loop };
+    // Kept only where it can run: research right after research, neither with a loop.
+    const together = item.parallel && item.step.kind === 'research' && items[i - 1]?.step.kind === 'research' && !loop && !items[i - 1].rawLoop;
+    return { ...item.step, loop, ...(together ? { parallel: true } : {}) };
   });
 }
 
@@ -207,3 +214,11 @@ export const stepLabel = (label: string) => t(label);
 export const planModeLabel = (mode: keyof typeof PLAN_MODE_LABEL) => t(PLAN_MODE_LABEL[mode]);
 
 export const PLAN_MODE_LABEL = { template: '유형 기본', ai: 'AI 설계', custom: '직접 설계' } as const;
+
+/** The steps that run together starting at `at`: the step itself and the research steps after it marked parallel. */
+export function parallelGroup<T extends Pick<WorkflowStepInput, 'kind' | 'parallel'>>(steps: T[], at: number): T[] {
+  const group = [steps[at]];
+  if (steps[at]?.kind !== 'research') return group;
+  for (let i = at + 1; i < steps.length && steps[i].kind === 'research' && steps[i].parallel; i++) group.push(steps[i]);
+  return group;
+}

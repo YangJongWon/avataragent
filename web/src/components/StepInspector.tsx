@@ -184,6 +184,13 @@ export function StepInspector({ team, agents, steps, index, locked, template, ap
         </label>
       )}
 
+      {step.kind === 'research' && steps[index - 1]?.kind === 'research' && (
+        <label className="check small" title={t('같은 역할 직원 여럿이 각자 조사하고, 결과물 작성 단계에서 한꺼번에 비교해요.')}>
+          <input type="checkbox" checked={Boolean(step.parallel)} disabled={readOnly} onChange={(e) => update(e.target.checked ? { parallel: true, loop: null } : { parallel: undefined })} />
+          ⇉ {t('앞 조사와 동시에 진행')}
+        </label>
+      )}
+
       {LOOPABLE.includes(step.kind) && (
         <div className={`plan-step-loop ${step.loop ? 'on' : ''}`}>
           <label className="check small">
