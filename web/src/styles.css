@@ -3494,3 +3494,11 @@ p.plan-note {
   font-weight: 700;
   color: var(--primary);
 }
+
+/* The approval box's note that the reviewers rejected the draft. */
+.review-warning {
+  margin-bottom: 8px;
+}
+.review-warning .small {
+  margin-top: 4px;
+}

@@ -19,6 +19,16 @@ const GROUPS: { kind: DesignKind; title: string; formats: ExportFormat[] }[] = [
   { kind: 'sheet', title: '📊 표', formats: ['xlsx', 'csv'] },
 ];
 
+const CODE_EXT: Record<string, string> = { python: 'py', py: 'py', typescript: 'ts', ts: 'ts', javascript: 'js', js: 'js', tsx: 'tsx', jsx: 'jsx', java: 'java', go: 'go', rust: 'rs', c: 'c', cpp: 'cpp', csharp: 'cs', cs: 'cs', ruby: 'rb', php: 'php', sql: 'sql', bash: 'sh', sh: 'sh', shell: 'sh', powershell: 'ps1', html: 'html', css: 'css', json: 'json', yaml: 'yaml', yml: 'yml', kotlin: 'kt', swift: 'swift' };
+
+/** Code blocks of a result worth saving as files: a known language, or a file name written just above the block. */
+function codeBlocks(markdown: string) {
+  return [...markdown.matchAll(/(?:^|\n)(?:[#*`\s]*([\w.-]+\.\w{1,5})[`*\s:]*\n)?```(\w+)[^\n]*\n([\s\S]*?)```/g)]
+    .map((m) => ({ name: m[1] as string | undefined, lang: m[2].toLowerCase(), code: m[3] }))
+    .filter((b) => CODE_EXT[b.lang] && b.code.trim().split('\n').length >= 3)
+    .map((b) => ({ ...b, ext: CODE_EXT[b.lang] }));
+}
+
 function save(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -133,6 +143,16 @@ export function ExportBox({ task, draftVersion, markdown, canOperate, onError }:
           </section>
         );
       })}
+      {codeBlocks(markdown).length > 0 && (
+        <div className="export-row export-plain">
+          <span className="small muted">{t('코드')}</span>
+          {codeBlocks(markdown).map((block, i, all) => (
+            <button key={i} className="pixel-btn small" onClick={() => save(block.name ?? `${task.title}${all.length > 1 ? `-${i + 1}` : ''}.${block.ext}`, new Blob([block.code], { type: 'text/plain;charset=utf-8' }))}>
+              ⬇ {block.name ?? `${block.lang || 'code'}${all.length > 1 ? ` ${i + 1}` : ''}`}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="export-row export-plain">
         <span className="small muted">{t('원문 그대로')}</span>
         <button className="pixel-btn small" onClick={() => save(`${task.title}.md`, new Blob([markdown], { type: 'text/markdown;charset=utf-8' }))}>

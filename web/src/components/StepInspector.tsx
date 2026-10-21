@@ -184,10 +184,10 @@ export function StepInspector({ team, agents, steps, index, locked, template, ap
         </label>
       )}
 
-      {step.kind === 'research' && steps[index - 1]?.kind === 'research' && (
-        <label className="check small" title={t('같은 역할 직원 여럿이 각자 조사하고, 결과물 작성 단계에서 한꺼번에 비교해요.')}>
+      {(step.kind === 'research' || step.kind === 'review') && steps[index - 1]?.kind === step.kind && (
+        <label className="check small" title={step.kind === 'review' ? t('검토자 여럿이 같은 초안을 동시에 평가하고, 과반이 통과시키면 통과예요.') : t('같은 역할 직원 여럿이 각자 조사하고, 결과물 작성 단계에서 한꺼번에 비교해요.')}>
           <input type="checkbox" checked={Boolean(step.parallel)} disabled={readOnly} onChange={(e) => update(e.target.checked ? { parallel: true, loop: null } : { parallel: undefined })} />
-          ⇉ {t('앞 조사와 동시에 진행')}
+          ⇉ {step.kind === 'review' ? t('앞 검토와 동시에 진행 (다수결)') : t('앞 조사와 동시에 진행')}
         </label>
       )}
 

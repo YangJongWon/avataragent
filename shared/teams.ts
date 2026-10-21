@@ -66,6 +66,18 @@ export const TEAMS: Record<TeamId, TeamMeta> = {
         ],
       },
       {
+        id: 'code_write',
+        label: '코드 작성',
+        standardHours: 2,
+        flow: [
+          { kind: 'brief', label: '요구사항 접수', role: 'manager' },
+          { kind: 'research', label: '구현 방법 조사', role: 'researcher' },
+          { kind: 'draft', label: '코드 작성', role: 'writer' },
+          { kind: 'review', label: '코드 검토', role: 'reviewer' },
+          { kind: 'approval', label: '사용자 승인', role: null },
+        ],
+      },
+      {
         id: 'summary',
         label: '자료 요약',
         standardHours: 1,

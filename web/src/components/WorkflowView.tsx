@@ -61,7 +61,7 @@ function StepNode({ data }: NodeProps<Node<StepData>>) {
           {view.icon} {t(view.text)}
         </div>
         {data.parallel && (
-          <div className="flow-parallel" title={t('앞 조사 단계와 동시에 진행해요.')}>
+          <div className="flow-parallel" title={t('앞 단계와 동시에 진행해요.')}>
             ⇉ {t('앞 단계와 동시')}
           </div>
         )}

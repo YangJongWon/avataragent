@@ -111,8 +111,11 @@ export function validatePlan(steps: WorkflowStepInput[], officeAgents: Agent[]):
   for (const [i, step] of steps.entries()) {
     if (!step.label.trim()) return '이름이 빈 단계가 있어요.';
     if (step.parallel) {
-      if (step.kind !== 'research' || steps[i - 1]?.kind !== 'research') return `"${step.label}" 단계는 바로 앞의 조사·분석 단계와만 동시에 진행할 수 있어요.`;
-      if (step.loop || steps[i - 1].loop) return `동시에 진행하는 조사 단계("${step.label}")에는 되돌리기를 둘 수 없어요.`;
+      if (!PARALLEL_KINDS.includes(step.kind) || steps[i - 1]?.kind !== step.kind) {
+        return `"${step.label}" 단계는 바로 앞의 같은 종류(조사·분석 또는 검토) 단계와만 동시에 진행할 수 있어요.`;
+      }
+      // A review group keeps one loop, on its first review: the majority's rejection sends the draft back.
+      if (step.loop || (step.kind === 'research' && steps[i - 1].loop)) return `동시에 진행하는 단계("${step.label}")에는 되돌리기를 둘 수 없어요.`;
     }
     if (step.loop) {
       if (!loopTargets(steps, i).includes(step.loop.to)) {
@@ -172,8 +175,9 @@ export function normalizePlan(steps: Partial<WorkflowStepInput>[], team: TeamId,
           ? reviewLoop(plan)
           : null;
     // Kept only where it can run: research right after research, neither with a loop.
-    const together = item.parallel && item.step.kind === 'research' && items[i - 1]?.step.kind === 'research' && !loop && !items[i - 1].rawLoop;
-    return { ...item.step, loop, ...(together ? { parallel: true } : {}) };
+    const sameKind = items[i - 1]?.step.kind === item.step.kind && PARALLEL_KINDS.includes(item.step.kind);
+    const together = item.parallel && sameKind && (item.step.kind === 'review' ? !item.rawLoop : !loop && !items[i - 1].rawLoop);
+    return { ...item.step, loop: together ? null : loop, ...(together ? { parallel: true } : {}) };
   });
 }
 
@@ -215,10 +219,17 @@ export const planModeLabel = (mode: keyof typeof PLAN_MODE_LABEL) => t(PLAN_MODE
 
 export const PLAN_MODE_LABEL = { template: '유형 기본', ai: 'AI 설계', custom: '직접 설계' } as const;
 
-/** The steps that run together starting at `at`: the step itself and the research steps after it marked parallel. */
+/** Step kinds that can run several at once: research (notes compared in the draft) and review (a majority vote). */
+export const PARALLEL_KINDS: StepKind[] = ['research', 'review'];
+
+/** The steps that run together starting at `at`: the step itself and the steps of its kind after it marked parallel. */
 export function parallelGroup<T extends Pick<WorkflowStepInput, 'kind' | 'parallel'>>(steps: T[], at: number): T[] {
+  const kind = steps[at]?.kind;
   const group = [steps[at]];
-  if (steps[at]?.kind !== 'research') return group;
-  for (let i = at + 1; i < steps.length && steps[i].kind === 'research' && steps[i].parallel; i++) group.push(steps[i]);
+  if (!kind || !PARALLEL_KINDS.includes(kind)) return group;
+  for (let i = at + 1; i < steps.length && steps[i].kind === kind && steps[i].parallel; i++) group.push(steps[i]);
   return group;
 }
+
+/** A review group's verdict: more approvals than rejections passes; a tie sends the draft back. */
+export const majorityApproves = (votes: boolean[]) => votes.filter(Boolean).length * 2 > votes.length;

@@ -206,6 +206,7 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
       {task.status === 'awaiting_approval' && task.value && (
         <div className="approval">
           <div className="approval-title">🙋 {t('사용자 승인')}</div>
+          <ReviewWarning task={task} />
           {task.proposal && (
             <div className="proposal">
               <b>{t(localize(task.proposal.headline))}</b>
@@ -400,5 +401,20 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
         )}
       </div>
     </aside>
+  );
+}
+
+/**
+ * When the last review before approval rejected the draft (its loop ran out, or it had none), the approver is told
+ * before deciding: the score and the reason, so "approve as is" is a choice and not an oversight.
+ */
+function ReviewWarning({ task }: { task: Task }) {
+  const last = task.reviews.at(-1);
+  if (!last || last.approved) return null;
+  return (
+    <div className="callout callout-error review-warning">
+      ⚠ {tpl('검토에서 반려된 채로 올라왔어요 ({score}점). 그대로 승인하거나 수정 요청을 보내 주세요.', { score: last.score })}
+      <div className="small">{last.reason}</div>
+    </div>
   );
 }

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { splitDraft } from '../shared/draft.ts';
 import { taskTypeOf, TEAMS } from '../shared/teams.ts';
 import type { Agent, Artifact, Expression, Role, StepStatus, Task, TeamId, WorkflowStep, WorkflowStepInput } from '../shared/types.ts';
-import { lockedStepCount, MAX_LOOP, normalizePlan, parallelGroup, parseLoop, PLAN_EDITABLE_STATUSES, remapLoops, STEP_KIND, templatePlan, validatePlan } from '../shared/workflow.ts';
+import { lockedStepCount, MAX_LOOP, normalizePlan, parallelGroup, parseLoop, PLAN_EDITABLE_STATUSES, remapLoops, STEP_KIND, templatePlan, validatePlan, majorityApproves } from '../shared/workflow.ts';
 import { usableBy, type McpServer, type McpTool, type McpToolMode, type PlannedAction } from '../shared/mcp.ts';
 import { modelOf, tierScale } from '../shared/models.ts';
 import {
@@ -151,9 +151,32 @@ function agentOfStep(task: Task, step: WorkflowStep) {
   return agentOf(task, 'manager');
 }
 
+/**
+ * A question worth putting to the user: real words and at least two choices. A broken model answer (garbled text, a
+ * one-word label) is not shown; the writer goes on with its own assumption.
+ */
+/** The dev team's code task: the result is runnable code, written and reviewed as such. */
+const codeTask = (task: Task) => task.taskType === 'code_write';
+const CODE_DRAFT_ASK = [
+  '요청한 코드를 작성해라. 보고서를 쓰지 말고, 결과물은 아래 순서만 지킨다.',
+  '1. 한두 줄 설명 (무엇을 하는 코드인지, 실행 방법)',
+  '2. 요청한 언어의 코드 블록 하나 (```언어 로 시작). 구현과 테스트를 한 파일에 담아 그대로 실행되게 한다. 사용자가 여러 파일을 요청했을 때만 파일마다 블록을 나누고 블록 위에 파일 이름을 쓴다.',
+  '3. 가정한 점이 있으면 짧은 목록',
+  '외부 라이브러리는 요청에 있을 때만 쓴다.',
+].join('\n');
+const CODE_REVIEW_ASK =
+  '코드를 검토해라. 요청한 기능과 테스트가 모두 있는지, 그대로 실행되는지(빠진 import, 문법·타입 오류, 정의되지 않은 이름), 요청한 형식(코드 블록 수, 언어)을 지켰는지 본다. 실행되지 않거나 요청 기능이 빠졌으면 반려한다.';
+
+const usableQuestion = (question: unknown, options: unknown) =>
+  typeof question === 'string' &&
+  question.trim().length >= 8 &&
+  !/[\uFFFD]|[\u0C00-\u0DFF]/.test(question) &&
+  Array.isArray(options) &&
+  options.filter((o) => typeof o === 'string' && o.trim()).length >= 2;
+
 const stepNote = (step: WorkflowStep, feedback?: string) =>
   [
-    `[이번 단계] ${step.label}`,
+    `[이번 단계 이름] ${step.label} (화면에 보이는 이름일 뿐, 조사하거나 쓸 주제가 아니다)`,
     step.instructions ? `[단계 지시] ${step.instructions}` : '',
     feedback ? `[다시 하는 이유] ${feedback}` : '',
   ]
@@ -337,7 +360,7 @@ export async function designPlan(input: { officeId: string; title: string; descr
       '요청에 맞게 업무 여정을 설계하고 각 단계에 가장 알맞은 직원을 배정해라.',
       '순서 규칙: brief 1개로 시작, research 0개 이상, draft 1개, review 0개 이상, approval 1개로 끝. 전체 10단계 이하.',
       `조건 루프: research·draft·review 단계에는 "조건이 맞으면 앞 단계로 되돌아가기"를 붙일 수 있다. to는 steps 배열의 0부터 세는 번호이고, research·draft는 자기 자신 이하, review는 draft 이하만 된다. max는 1~${MAX_LOOP}. 필요 없으면 null.`,
-      '동시 진행: 같은 역할 직원이 여럿이면 research 단계에 "parallel": true를 붙여 바로 앞 research 단계와 동시에 맡길 수 있다(서로 다른 관점이나 모델로 비교할 때). 동시 진행 단계에는 루프를 붙이지 않는다.',
+      '동시 진행: 같은 역할 직원이 여럿이면 research나 review 단계에 "parallel": true를 붙여 바로 앞 같은 종류 단계와 동시에 맡길 수 있다. research는 서로 다른 관점이나 모델로 비교할 때, review는 여러 검토자가 다수결로 판정할 때 쓴다. 동시 진행 단계에는 루프를 붙이지 않는다(review 묶음의 루프는 첫 review에만).',
       '기본 여정으로 충분하면 그대로 써도 된다. 불필요한 단계와 루프는 비용만 늘린다.',
       'JSON으로만 답한다: {"steps": [{"kind": string, "label": string (12자 이내), "agentId": string, "instructions": string, "loop": {"to": number, "when": string (조건, 20자 이내), "max": number} | null, "parallel": boolean}], "note": string (설계 이유 한두 문장)}',
     ]
@@ -609,9 +632,12 @@ async function raiseHelp(taskId: string, step: WorkflowStep, writer: Agent) {
       [
         `[작업 지시서]\n${latest(task, 'brief')?.content}`,
         `[조사 메모]\n${researchNotes(task)}`,
+        `[사용자 요청 원문]\n${task.title}\n${task.description || '(설명 없음)'}`,
         '',
-        '결과물을 쓰기 전에, 사용자에게 꼭 물어봐야 결과가 크게 달라지는 모호한 점이 있는지 판단해라.',
-        '정말 필요한 경우에만 질문하고, 질문은 하나만 한다.',
+        '결과물을 쓰기 전에, 사용자에게 꼭 물어봐야 하는 점이 있는지 판단해라. 기본값은 needs_clarification: false 다.',
+        '묻는 경우는 둘 다 맞을 때뿐이다: (1) 사용자만 아는 정보가 요청에 없고, (2) 잘못 짐작하면 결과물을 쓸 수 없게 된다.',
+        '묻지 않는 경우: 요청이 형식·범위·조건을 이미 적었을 때, 일반적인 기본값으로 정할 수 있을 때(실행 환경, 도구, 분량 등), 조사로 알 수 있는 사실, 사용자가 당장 모를 내부 정보(계약사, 실측치 등). 이런 점은 결과물에 가정으로 적고 진행한다.',
+        '질문은 하나만, 사용자의 언어로 짧고 분명하게 쓴다.',
         'JSON으로만 답한다: {"needs_clarification": boolean, "question": string, "options": string[] (2~3개), "assumption": string (답이 없을 때 따를 가정)}',
       ].join('\n'),
       () =>
@@ -628,7 +654,7 @@ async function raiseHelp(taskId: string, step: WorkflowStep, writer: Agent) {
       true,
     );
     const parsed = parseJson(raw, { needs_clarification: false, question: '', options: [] as string[], assumption: '' });
-    if (!parsed.needs_clarification || !parsed.question) return null;
+    if (!parsed.needs_clarification || !usableQuestion(parsed.question, parsed.options)) return null;
 
     help = {
       id: `help_${randomUUID()}`,
@@ -710,7 +736,7 @@ async function draftStep(taskId: string, step: WorkflowStep, attempt: number, cl
       lessonBlock(task, 'draft'),
       stepNote(step, feedback),
       '',
-      spec.draftAsk,
+      codeTask(task) ? CODE_DRAFT_ASK : spec.draftAsk,
     ]
       .filter(Boolean)
       .join('\n\n'),
@@ -762,7 +788,8 @@ async function reviewStep(taskId: string, step: WorkflowStep, attempt: number, r
       chatNoteBlock(task),
       stepNote(step),
       '',
-      spec.reviewAsk,
+      codeTask(task) ? CODE_REVIEW_ASK : spec.reviewAsk,
+      '판정 기준: 요청한 내용과 형식을 지켰고 틀린 내용이 없으면 통과(approved: true, 80점 이상)다. 문장 다듬기, 있으면 좋을 내용, 확인할 수 없는 외부 수치처럼 결과물을 쓰는 데 지장 없는 점으로는 반려하지 않는다(통과시키고 reason에 적는다). 반려는 요청을 지키지 못했거나 틀린 내용이 있을 때만 하고, 고칠 점을 구체적으로 쓴다.',
       task.chatNotes?.length ? '사용자가 전달한 메모가 초안에 반영되지 않았으면 반려한다.' : '',
       step.instructions ? `추가 관점: ${step.instructions}` : '',
       step.loop ? `반려 조건: ${step.loop.when}` : '',
@@ -1130,7 +1157,7 @@ export async function runStepAt(taskId: string, at: number, feedback: string | n
   const canLoop = Boolean(step.loop) && (store.task(taskId).loopCounts?.[step.id] ?? 0) < step.loop!.max;
   let loopReason: string | null = null;
 
-  // Research steps marked parallel run at the same time as this one, each by its own staff member.
+  // Steps marked parallel run at the same time as this one, each by its own staff member.
   const group = parallelGroup(plan, at);
   if (step.kind === 'brief') await briefStep(taskId, step, reason);
   else if (step.kind === 'research') await Promise.all(group.map((s) => researchStep(taskId, s, reason)));
@@ -1140,8 +1167,11 @@ export async function runStepAt(taskId: string, at: number, feedback: string | n
       return { kind: 'needs_help', timeoutMs: Math.max(0, (help?.deadline ?? Date.now()) - Date.now()) };
     }
   } else if (step.kind === 'review') {
-    const result = await reviewStep(taskId, step, drafts(), canLoop ? plan[step.loop!.to] : null);
-    if (!result.approved && canLoop) loopReason = result.reason;
+    // Reviewers in a group judge the same draft at once; the majority decides, and a rejection carries every reason.
+    const results = await Promise.all(group.map((s) => reviewStep(taskId, s, drafts(), canLoop ? plan[step.loop!.to] : null)));
+    if (!majorityApproves(results.map((r) => r.approved)) && canLoop) {
+      loopReason = results.filter((r) => !r.approved).map((r) => r.reason).join(' / ');
+    }
   }
 
   if (canLoop && step.kind !== 'review') {
