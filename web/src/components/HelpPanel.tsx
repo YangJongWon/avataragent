@@ -7,12 +7,12 @@ import { api, type HelpAnswer, type HelpTurn } from '../api.ts';
 const renderMarkdown = (md: string) => DOMPurify.sanitize(marked.parse(md, { async: false }) as string);
 
 const SUGGESTIONS: Record<string, string[]> = {
-  office: [t('업무는 어떻게 맡겨?'), t('직원이 도움을 요청하면 어떻게 해?'), t('결과물을 PowerPoint로 받으려면?')],
-  hire: [t('직원 모델은 어떻게 바꿔?'), t('같은 역할 직원을 여럿 두면 뭐가 좋아?')],
-  models: [t('실제 AI로 바꾸려면?'), t('DeepSeek이나 Ollama를 연결하려면?'), t('키가 맞는지 확인하는 방법은?')],
-  mcp: [t('Slack 연결하려면?'), t('이 PC에서 실행(명령) MCP를 켜려면?'), t('도구의 "승인 후 실행"은 뭐야?')],
-  profit: [t('예산을 다 쓰면 어떻게 돼?'), t('사무실별 예산 상한은 어디서 바꿔?')],
-  settings: [t('화면 언어 바꾸려면?'), t('설정에서 무엇을 바꿀 수 있어?')],
+  office: ['업무는 어떻게 맡겨?', '직원이 도움을 요청하면 어떻게 해?', '결과물을 PowerPoint로 받으려면?'],
+  hire: ['직원 모델은 어떻게 바꿔?', '같은 역할 직원을 여럿 두면 뭐가 좋아?'],
+  models: ['실제 AI로 바꾸려면?', 'DeepSeek이나 Ollama를 연결하려면?', '키가 맞는지 확인하는 방법은?'],
+  mcp: ['Slack 연결하려면?', '이 PC에서 실행(명령) MCP를 켜려면?', '도구의 "승인 후 실행"은 뭐야?'],
+  profit: ['예산을 다 쓰면 어떻게 돼?', '사무실별 예산 상한은 어디서 바꿔?'],
+  settings: ['화면 언어 바꾸려면?', '설정에서 무엇을 바꿀 수 있어?'],
 };
 
 interface Turn extends HelpTurn {
@@ -72,8 +72,8 @@ export function HelpPanel({ tab, officeId, onClose }: { tab: string; officeId?: 
               <p className="muted small">{t('사용법을 물어보세요. 도움말 문서에서 찾아 답해요.')}</p>
               <div className="help-chips">
                 {(SUGGESTIONS[tab] ?? SUGGESTIONS.office).map((s) => (
-                  <button key={s} className="pixel-btn small" onClick={() => ask(s)}>
-                    {s}
+                  <button key={s} className="pixel-btn small" onClick={() => ask(t(s))}>
+                    {t(s)}
                   </button>
                 ))}
               </div>

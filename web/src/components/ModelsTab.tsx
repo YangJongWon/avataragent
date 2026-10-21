@@ -69,12 +69,12 @@ function tierChoices(current: Tier): Tier[] {
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 const PROVIDER_LABEL: Record<string, string> = {
-  mock: t('시뮬레이션'),
-  agents: t('직원별 실제 AI'),
-  openai: t('OpenAI 하나로 호출'),
-  anthropic: t('Anthropic 하나로 호출'),
-  gemini: t('Gemini 하나로 호출'),
-  xai: t('xAI 하나로 호출'),
+  mock: '시뮬레이션',
+  agents: '직원별 실제 AI',
+  openai: 'OpenAI 하나로 호출',
+  anthropic: 'Anthropic 하나로 호출',
+  gemini: 'Gemini 하나로 호출',
+  xai: 'xAI 하나로 호출',
 };
 
 function KeyBadge({ company }: { company: Company }) {

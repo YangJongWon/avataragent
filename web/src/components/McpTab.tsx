@@ -43,12 +43,12 @@ async function login(server: McpServer, popup: Window | null, onNotice: Notify['
     const { url } = await api.startMcpLogin(server.id);
     if (!url) {
       popup?.close();
-      onNotice(tpl('{name}은(는) 이미 로그인돼 있어요.', { name: server.name }));
+      onNotice(tpl('{name}은(는) 이미 로그인돼 있어요.', { name: t(server.name) }));
       return;
     }
     if (popup) popup.location.href = url;
     else window.location.href = url;
-    onNotice(tpl('{name} 로그인 창에서 허용을 눌러 주세요.', { name: server.name }));
+    onNotice(tpl('{name} 로그인 창에서 허용을 눌러 주세요.', { name: t(server.name) }));
   } catch (e) {
     popup?.close();
     throw e;
@@ -78,7 +78,7 @@ function McpForm({
   const [form, setForm] = useState<McpServerInput>(
     server
       ? {
-          name: server.name,
+          name: t(server.name),
           icon: server.icon,
           transport: server.transport,
           url: server.url,
@@ -89,7 +89,7 @@ function McpForm({
           oauth: Boolean(server.oauth),
         }
       : {
-          name: preset && preset.id !== 'custom' ? preset.name : '',
+          name: preset && preset.id !== 'custom' ? t(preset.name) : '',
           icon: preset?.icon ?? '🧩',
           transport: preset?.transport ?? 'http',
           url: preset?.url ?? '',
@@ -132,16 +132,19 @@ function McpForm({
     const popup = needsLogin ? window.open('', '_blank') : null;
     setBusy(true);
     try {
-      const saved = server ? await api.updateMcpServer(server.id, { ...form, secrets: values }) : await api.createMcpServer({ ...form, secrets: values });
+      const shown = form.name.trim();
+      const name = (known && shown === t(known.name) ? known.name : server && shown === t(server.name) ? server.name : shown);
+      const body = { ...form, name, secrets: values };
+      const saved = server ? await api.updateMcpServer(server.id, body) : await api.createMcpServer(body);
       onDone();
       if (needsLogin) {
         await login(saved, popup, onNotice);
         return;
       }
-      onNotice(tpl('{name}을(를) 저장했어요. 연결을 확인하고 있어요…', { name: saved.name }));
+      onNotice(tpl('{name}을(를) 저장했어요. 연결을 확인하고 있어요…', { name: t(saved.name) }));
       try {
         const { tools } = await api.checkMcpServer(saved.id);
-        onNotice(tpl('{name} 연결 확인: 도구 {toolsCount}개', { name: saved.name, toolsCount: tools.length }));
+        onNotice(tpl('{name} 연결 확인: 도구 {toolsCount}개', { name: t(saved.name), toolsCount: tools.length }));
       } catch (e) {
         onError(message(e));
       }
@@ -166,7 +169,7 @@ function McpForm({
 
   return (
     <div className="company-form">
-      {known && <p className="muted small">{known.note}</p>}
+      {known && <p className="muted small">{t(known.note)}</p>}
       <LinkRow links={known?.links} />
       <div className="row wrap">
         <label className="field">
@@ -233,7 +236,7 @@ function McpForm({
         <p className="muted small">
           {t('로그인 후 돌아올 주소(Redirect URL)')}: <code>{`${location.origin}/api/mcp-oauth/callback`}</code>
           <br />
-          {t('서비스에 앱을 직접 만들어야 하는 경우(Slack·Gmail 등) 이 주소를 앱 설정에 등록하고, 비밀값에')} <code>OAUTH_CLIENT_ID</code>·<code>OAUTH_CLIENT_SECRET</code>{t('을 넣어 주세요. 요청할 권한을 정해야 하면')} <code>OAUTH_SCOPES</code>에 띄어쓰기로 구분해 넣어요. 외부 주소(PUBLIC_URL)를 쓰면 그 주소 기준이에요.
+          {t('서비스에 앱을 직접 만들어야 하는 경우(Slack·Gmail 등) 이 주소를 앱 설정에 등록하고, 비밀값에')} <code>OAUTH_CLIENT_ID</code>·<code>OAUTH_CLIENT_SECRET</code>{t('을 넣어 주세요. 요청할 권한을 정해야 하면')} <code>OAUTH_SCOPES</code>{t('에 띄어쓰기로 구분해 넣어요. 외부 주소(PUBLIC_URL)를 쓰면 그 주소 기준이에요.')}
         </p>
       )}
 
@@ -243,7 +246,7 @@ function McpForm({
           <div key={i} className="row wrap mcp-secret">
             {field.label !== field.name || known?.secrets.some((s) => s.name === field.name) ? (
               <span className="small mcp-secret-name" title={field.name}>
-                {field.label} <code>{field.name}</code>
+                {t(field.label)} <code>{field.name}</code>
               </span>
             ) : (
               <input
@@ -288,7 +291,7 @@ function McpForm({
             offices.map((o) => (
               <label key={o.id} className="check">
                 <input type="checkbox" checked={chosen.has(o.id)} onChange={() => toggleOffice(o.id)} />
-                {o.name}
+                {t(o.name)}
               </label>
             ))}
         </div>
@@ -336,7 +339,7 @@ function ToolList({ server, onError }: { server: McpServer } & Pick<Notify, 'onE
               <select value={tool.mode} onChange={(e) => choose(tool, e.target.value as McpToolMode)}>
                 {allowedModes(tool).map((mode) => (
                   <option key={mode} value={mode}>
-                    {TOOL_MODE_LABEL[mode]}
+                    {t(TOOL_MODE_LABEL[mode])}
                   </option>
                 ))}
               </select>
@@ -378,7 +381,7 @@ export function McpTab({ snapshot, onError, onNotice }: { snapshot: Snapshot } &
     setChecking(server.id);
     try {
       const { tools } = await api.checkMcpServer(server.id);
-      onNotice(tpl('{name} 연결 확인: 도구 {toolsCount}개', { name: server.name, toolsCount: tools.length }));
+      onNotice(tpl('{name} 연결 확인: 도구 {toolsCount}개', { name: t(server.name), toolsCount: tools.length }));
     } catch (e) {
       onError(message(e));
     } finally {
@@ -396,10 +399,10 @@ export function McpTab({ snapshot, onError, onNotice }: { snapshot: Snapshot } &
   };
 
   const signOut = async (server: McpServer) => {
-    if (!window.confirm(tpl('{name} 로그인을 해제할까요? 저장된 토큰이 지워져요.', { name: server.name }))) return;
+    if (!window.confirm(tpl('{name} 로그인을 해제할까요? 저장된 토큰이 지워져요.', { name: t(server.name) }))) return;
     try {
       await api.logoutMcp(server.id);
-      onNotice(tpl('{name} 로그인을 해제했어요.', { name: server.name }));
+      onNotice(tpl('{name} 로그인을 해제했어요.', { name: t(server.name) }));
     } catch (e) {
       onError(message(e));
     }
@@ -414,10 +417,10 @@ export function McpTab({ snapshot, onError, onNotice }: { snapshot: Snapshot } &
   };
 
   const remove = async (server: McpServer) => {
-    if (!window.confirm(tpl('{name} 연결과 저장한 비밀값을 지울까요?', { name: server.name }))) return;
+    if (!window.confirm(tpl('{name} 연결과 저장한 비밀값을 지울까요?', { name: t(server.name) }))) return;
     try {
       await api.deleteMcpServer(server.id);
-      onNotice(tpl('{name}을(를) 지웠어요.', { name: server.name }));
+      onNotice(tpl('{name}을(를) 지웠어요.', { name: t(server.name) }));
     } catch (e) {
       onError(message(e));
     }
@@ -489,7 +492,7 @@ export function McpTab({ snapshot, onError, onNotice }: { snapshot: Snapshot } &
             ) : (
               <div key={server.id} className={`company-card ${server.enabled ? '' : 'mcp-off'}`}>
                 <div className="company-name">
-                  {server.icon} {server.name}
+                  {server.icon} {t(server.name)}
                 </div>
                 <div className="muted small ellipsis" title={server.transport === 'http' ? server.url : [server.command, ...server.args].join(' ')}>
                   {server.transport === 'http' ? server.url : `$ ${[server.command, ...server.args].join(' ')}`}

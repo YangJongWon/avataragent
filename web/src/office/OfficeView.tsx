@@ -162,7 +162,7 @@ export function OfficeView({ snapshot, office, onEvent, ...actions }: Props) {
       {bubble && bubblePos && (
         <Bubble x={bubblePos.x} y={bubblePos.y} onClick={() => setBubbleAgent(null)}>
           <div className="bubble-name">
-            {bubble.name} · {TEAMS[office.team].roleTitles[bubble.role]}
+            {bubble.name} · {t(TEAMS[office.team].roleTitles[bubble.role])}
           </div>
           <div>{localize(bubble.activity)}</div>
           {bubble.status === 'help_requested' && (

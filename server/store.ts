@@ -44,7 +44,7 @@ import type {
   TeamId,
 } from '../shared/types.ts';
 import { reviewLoop, templatePlan } from '../shared/workflow.ts';
-import { DEFAULT_LANGUAGE, isLanguage, viewerText, type Language } from '../shared/i18n.ts';
+import { DEFAULT_LANGUAGE, isLanguage, translate, viewerText, type Language } from '../shared/i18n.ts';
 import { config, ORGANIZATION_SAFETY_RULES, type ProviderName } from './config.ts';
 import { appendEvent, loadKv, loadRelationalState, maxSeq, onStorageConflict, recentEvents, saveKv, saveRelationalState } from './db.ts';
 import { loginInfo } from './mcp-oauth.ts';
@@ -117,7 +117,6 @@ function defaultOffices(): Office[] {
   }));
 }
 
-const EXTRA_NAMES = ['서연', '지호', '하린', '유나', '민준', '채원', '도현', '수아', '시우', '지안', '예준', '나은', '건우', '다인', '주원', '서아'];
 
 function newAgent(office: Office, role: Role, id: string, name: string): Agent {
   return {
@@ -449,12 +448,13 @@ class Store {
     this.changed();
   }
 
-  hireAgent(officeId: string, role: Role, name?: string) {
+  hireAgent(officeId: string, role: Role, name?: string, language: Language = 'ko') {
     const office = this.office(officeId);
     const staff = this.state.agents.filter((a) => a.officeId === officeId);
     if (staff.length >= MAX_STAFF_PER_OFFICE) throw new Error(`한 사무실에는 최대 ${MAX_STAFF_PER_OFFICE}명까지 일할 수 있어요.`);
     const used = new Set(this.state.agents.map((a) => a.name));
-    const fallback = EXTRA_NAMES.find((n) => !used.has(n)) ?? `${TEAMS[office.team].roleTitles[role]} ${staff.length + 1}`;
+    const roleName = translate(TEAMS[office.team].roleTitles[role], language);
+    const fallback = `${roleName} ${staff.filter((a) => a.role === role).length + 1}`;
     const agent = newAgent(office, role, `agent_${office.id}_${role}_${randomUUID().slice(0, 6)}`, name?.trim().slice(0, 20) || fallback);
     const last = this.state.agents.findLastIndex((a) => a.officeId === officeId);
     this.state.agents.splice(last + 1, 0, agent);
@@ -480,7 +480,7 @@ class Store {
     return agent;
   }
 
-  addOffice(team: TeamId, name: string) {
+  addOffice(team: TeamId, name: string, language: Language = 'ko') {
     const office: Office = {
       id: `office_${team}_${randomUUID().slice(0, 6)}`,
       team,
@@ -492,11 +492,9 @@ class Store {
       valueKrw: 0,
       milestones: defaultMilestones(team),
     };
-    const used = new Set(this.state.agents.map((a) => a.name));
-    const pool = EXTRA_NAMES.filter((n) => !used.has(n));
     this.state.offices.push(office);
     ROLES.forEach((role, i) => {
-      const name = pool[i] ?? `${TEAMS[team].roleTitles[role]} ${this.state.agents.length + 1}`;
+      const name = `${translate(TEAMS[team].roleTitles[role], language)} ${i + 1}`;
       this.state.agents.push(newAgent(office, role, `agent_${office.id}_${role}`, name));
     });
     this.changed();

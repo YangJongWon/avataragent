@@ -1,3 +1,4 @@
+import { generalTaskType } from './task-types.ts';
 import type { Role, StepId, TaskTypeEntry, TeamId } from './types.ts';
 
 export interface TeamMeta {
@@ -58,22 +59,10 @@ export const TEAMS: Record<TeamId, TeamMeta> = {
             kind: 'research',
             label: '비교 기준 정리',
             role: 'reviewer',
-            loop: { to: 1, when: '비교할 후보가 2개 미만이면', max: 1 },
+            loop: { to: 1, when: '비교할 후보가 모자라면', max: null },
           },
           { kind: 'draft', label: '비교표 작성', role: 'writer' },
           { kind: 'review', label: '검토', role: 'reviewer' },
-          { kind: 'approval', label: '사용자 승인', role: null },
-        ],
-      },
-      {
-        id: 'code_write',
-        label: '코드 작성',
-        standardHours: 2,
-        flow: [
-          { kind: 'brief', label: '요구사항 접수', role: 'manager' },
-          { kind: 'research', label: '구현 방법 조사', role: 'researcher' },
-          { kind: 'draft', label: '코드 작성', role: 'writer' },
-          { kind: 'review', label: '코드 검토', role: 'reviewer' },
           { kind: 'approval', label: '사용자 승인', role: null },
         ],
       },
@@ -201,6 +190,10 @@ export const TEAMS: Record<TeamId, TeamMeta> = {
   },
 };
 
+/** A type of the team's own, or one any office can take on; unknown ids fall back to the team's first type. */
 export function taskTypeOf(team: TeamId, taskTypeId: string): TaskTypeEntry {
-  return TEAMS[team].taskTypes.find((t) => t.id === taskTypeId) ?? TEAMS[team].taskTypes[0];
+  return TEAMS[team].taskTypes.find((t) => t.id === taskTypeId) ?? generalTaskType(taskTypeId) ?? TEAMS[team].taskTypes[0];
 }
+
+/** True for the team's own types, the ones that read the team's inputs (mail, inquiries) and act on approval. */
+export const isTeamTaskType = (team: TeamId, taskTypeId: string) => TEAMS[team].taskTypes.some((t) => t.id === taskTypeId) || !generalTaskType(taskTypeId);

@@ -35,11 +35,11 @@ const renderMarkdown = (md: string) => DOMPurify.sanitize(marked.parse(md, { asy
 
 const ACTION_STATUS: Record<PlannedAction['status'], string> = {
   proposed: '',
-  running: t('⏳ 실행 중'),
-  done: t('✅ 완료'),
-  failed: t('❌ 실패'),
-  unknown: t('⚠️ 결과 확인 필요'),
-  skipped: t('⏭️ 건너뜀'),
+  running: '⏳ 실행 중',
+  done: '✅ 완료',
+  failed: '❌ 실패',
+  unknown: '⚠️ 결과 확인 필요',
+  skipped: '⏭️ 건너뜀',
 };
 
 function ActionList({ actions, editable, onToggle }: { actions: PlannedAction[]; editable: boolean; onToggle?: (id: string, enabled: boolean) => void }) {
@@ -55,7 +55,7 @@ function ActionList({ actions, editable, onToggle }: { actions: PlannedAction[];
             <label className="check">
               {pending && <input type="checkbox" checked={a.enabled} disabled={!editable} onChange={(e) => onToggle?.(a.id, e.target.checked)} />}
               <span>
-                {a.icon} <b>{a.serverName}</b> · <code>{a.tool}</code> {ACTION_STATUS[a.status] && t(ACTION_STATUS[a.status])}
+                {a.icon} <b>{t(a.serverName)}</b> · <code>{a.tool}</code> {ACTION_STATUS[a.status] && t(ACTION_STATUS[a.status])}
               </span>
             </label>
             <div>{a.summary}</div>

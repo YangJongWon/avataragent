@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { splitDraft } from '../shared/draft.ts';
-import { taskTypeOf, TEAMS } from '../shared/teams.ts';
+import { isTeamTaskType, taskTypeOf, TEAMS } from '../shared/teams.ts';
 import type { Agent, Artifact, Expression, Role, StepStatus, Task, TeamId, WorkflowStep, WorkflowStepInput } from '../shared/types.ts';
-import { lockedStepCount, MAX_LOOP, normalizePlan, parallelGroup, parseLoop, PLAN_EDITABLE_STATUSES, remapLoops, STEP_KIND, templatePlan, validatePlan, majorityApproves } from '../shared/workflow.ts';
+import { lockedStepCount, loopOpen, normalizePlan, parseLoop, PLAN_EDITABLE_STATUSES, remapLoops, STEP_KIND, templatePlan, validatePlan, parallelGroup, majorityApproves } from '../shared/workflow.ts';
 import { usableBy, type McpServer, type McpTool, type McpToolMode, type PlannedAction } from '../shared/mcp.ts';
 import { modelOf, tierScale } from '../shared/models.ts';
 import {
@@ -23,7 +23,7 @@ import { nextInquiry, nextMail } from './seed.ts';
 import { store } from './store.ts';
 import { L, LT, V } from './text.ts';
 import { applyMailSorting } from './mail-sync.ts';
-import { systemPromptFor, TEAM_SPECS } from './teams.ts';
+import { specFor, systemPromptFor } from './teams.ts';
 import { agentAvailability, freshDailyUsage, usageDate } from '../shared/work-policy.ts';
 
 class BudgetExceededError extends Error {}
@@ -36,7 +36,7 @@ const approvalWaiters = new Map<string, (decision: ApprovalDecision) => void>();
 const ACTIVE: Task['status'][] = ['running', 'awaiting_help', 'awaiting_approval'];
 const now = () => new Date().toISOString();
 const teamOf = (task: Task) => store.office(task.officeId).team;
-const specOf = (task: Task) => TEAM_SPECS[teamOf(task)];
+const specOf = (task: Task) => specFor(teamOf(task), task.taskType);
 const agentOf = (task: Task, role: Role) => store.agentByRole(task.officeId, role);
 const officeAgents = (officeId: string) => store.data.agents.filter((a) => a.officeId === officeId);
 /** Office staff with each role's best performer first, so templates and the simulation pick them. */
@@ -64,7 +64,7 @@ const lessonBlock = (task: Task, kind: 'draft' | 'research') => {
 const chatNoteBlock = (task: Task) =>
   task.chatNotes?.length ? `[팀 대화에서 사용자가 전달한 메모 - 반영할 것]\n${task.chatNotes.map((n) => `- ${n.author}: ${n.text}`).join('\n')}` : '';
 
-function systemPrompt(agent: Agent) {
+function systemPrompt(agent: Agent, task: Task | null) {
   const style = personalityOf(agent.personality);
   const outputLanguage = {
     ko: '한국어',
@@ -73,7 +73,7 @@ function systemPrompt(agent: Agent) {
     en: 'English',
   }[store.data.language];
   return [
-    systemPromptFor(store.office(agent.officeId).team, agent.role),
+    systemPromptFor(store.office(agent.officeId).team, agent.role, task?.taskType),
     '',
     `[출력 언어 - 반드시 준수]`,
     `사용자가 다른 언어로 직접 쓴 고유명사와 인용문을 제외한 모든 결과물을 ${outputLanguage}로 작성한다. 업무 제목도 ${outputLanguage}로 옮겨서 보고서 제목으로 쓴다.`,
@@ -155,18 +155,6 @@ function agentOfStep(task: Task, step: WorkflowStep) {
  * A question worth putting to the user: real words and at least two choices. A broken model answer (garbled text, a
  * one-word label) is not shown; the writer goes on with its own assumption.
  */
-/** The dev team's code task: the result is runnable code, written and reviewed as such. */
-const codeTask = (task: Task) => task.taskType === 'code_write';
-const CODE_DRAFT_ASK = [
-  '요청한 코드를 작성해라. 보고서를 쓰지 말고, 결과물은 아래 순서만 지킨다.',
-  '1. 한두 줄 설명 (무엇을 하는 코드인지, 실행 방법)',
-  '2. 요청한 언어의 코드 블록 하나 (```언어 로 시작). 구현과 테스트를 한 파일에 담아 그대로 실행되게 한다. 사용자가 여러 파일을 요청했을 때만 파일마다 블록을 나누고 블록 위에 파일 이름을 쓴다.',
-  '3. 가정한 점이 있으면 짧은 목록',
-  '외부 라이브러리는 요청에 있을 때만 쓴다.',
-].join('\n');
-const CODE_REVIEW_ASK =
-  '코드를 검토해라. 요청한 기능과 테스트가 모두 있는지, 그대로 실행되는지(빠진 import, 문법·타입 오류, 정의되지 않은 이름), 요청한 형식(코드 블록 수, 언어)을 지켰는지 본다. 실행되지 않거나 요청 기능이 빠졌으면 반려한다.';
-
 const usableQuestion = (question: unknown, options: unknown) =>
   typeof question === 'string' &&
   question.trim().length >= 8 &&
@@ -211,7 +199,7 @@ export async function callAI(agent: Agent, task: Task | null, purpose: Purpose, 
   const styledMock =
     purpose === 'brief' || purpose === 'research' ? () => `${mockText()}\n\n_${personalityOf(current.personality).mockNote}_` : mockText;
   const startedAt = Date.now();
-  const result = await complete({ purpose, system: systemPrompt(current), user, json, model, mockText: styledMock, attachments });
+  const result = await complete({ purpose, system: systemPrompt(current, task), user, json, model, mockText: styledMock, attachments });
   const elapsedMs = Date.now() - startedAt;
   const amount = costKrw(result, model);
 
@@ -305,7 +293,7 @@ function mockPlan(officeId: string, taskType: string, description: string) {
       label: L('비교 기준 정리'),
       agentId: pick('reviewer'),
       instructions: L('비교 대상과 평가 기준을 표로 정리한다.'),
-      loop: { to: firstResearch >= 0 ? firstResearch : draftAt, when: L('비교할 후보가 2개 미만이면'), max: 1 },
+      loop: { to: firstResearch >= 0 ? firstResearch : draftAt, when: L('비교할 후보가 모자라면'), max: null },
     });
     notes.push(L('비교가 필요해 보여서 검토자에게 비교 기준 정리를 먼저 맡겼어요. 후보가 모자라면 조사로 되돌아가요.'));
   }
@@ -320,7 +308,7 @@ function mockPlan(officeId: string, taskType: string, description: string) {
       label: L('최종 점검'),
       agentId: pick('manager'),
       instructions: L('의사결정자가 바로 읽을 수 있는지 마지막으로 점검한다.'),
-      loop: { to: research >= 0 ? research : plan.findIndex((s) => s.kind === 'draft'), when: L('근거가 부족하거나 결론이 흐리면'), max: 1 },
+      loop: { to: research >= 0 ? research : plan.findIndex((s) => s.kind === 'draft'), when: L('근거가 부족하거나 결론이 흐리면'), max: null },
     });
     notes.push(L('중요한 업무라서 팀장이 최종 점검을 한 번 더 하고, 근거가 부족하면 조사부터 다시 해요.'));
   }
@@ -354,15 +342,15 @@ export async function designPlan(input: { officeId: string; title: string; descr
       '[기본 여정]',
       ...template.map(
         (s, i) =>
-          `${i}. ${s.kind} | ${s.label} | ${s.agentId ?? '사용자'}${s.loop ? ` | 루프: "${s.loop.when}"이면 ${s.loop.to}번으로 (최대 ${s.loop.max}회)` : ''}`,
+          `${i}. ${s.kind} | ${s.label} | ${s.agentId ?? '사용자'}${s.loop ? ` | 루프: "${s.loop.when}"이면 ${s.loop.to}번으로${s.loop.max != null ? ` (최대 ${s.loop.max}회)` : ''}` : ''}`,
       ),
       '',
       '요청에 맞게 업무 여정을 설계하고 각 단계에 가장 알맞은 직원을 배정해라.',
       '순서 규칙: brief 1개로 시작, research 0개 이상, draft 1개, review 0개 이상, approval 1개로 끝. 전체 10단계 이하.',
-      `조건 루프: research·draft·review 단계에는 "조건이 맞으면 앞 단계로 되돌아가기"를 붙일 수 있다. to는 steps 배열의 0부터 세는 번호이고, research·draft는 자기 자신 이하, review는 draft 이하만 된다. max는 1~${MAX_LOOP}. 필요 없으면 null.`,
+      '조건 루프: research·draft·review 단계에는 "조건이 맞으면 앞 단계로 되돌아가기"를 붙일 수 있다. to는 지금 여정 steps 배열의 0부터 세는 번호이고, 자기 자신이나 그 앞 단계여야 한다. max는 횟수 상한이며, 생략하거나 null이면 조건이 맞을 때까지 되돌린다. 루프가 필요 없으면 loop 자체를 null.',
       '동시 진행: 같은 역할 직원이 여럿이면 research나 review 단계에 "parallel": true를 붙여 바로 앞 같은 종류 단계와 동시에 맡길 수 있다. research는 서로 다른 관점이나 모델로 비교할 때, review는 여러 검토자가 다수결로 판정할 때 쓴다. 동시 진행 단계에는 루프를 붙이지 않는다(review 묶음의 루프는 첫 review에만).',
       '기본 여정으로 충분하면 그대로 써도 된다. 불필요한 단계와 루프는 비용만 늘린다.',
-      'JSON으로만 답한다: {"steps": [{"kind": string, "label": string (12자 이내), "agentId": string, "instructions": string, "loop": {"to": number, "when": string (조건, 20자 이내), "max": number} | null, "parallel": boolean}], "note": string (설계 이유 한두 문장)}',
+      'JSON으로만 답한다: {"steps": [{"kind": string, "label": string (12자 이내), "agentId": string, "instructions": string, "loop": {"to": number, "when": string (조건, 20자 이내), "max": number | null} | null, "parallel": boolean}], "note": string (설계 이유 한두 문장)}',
     ]
       .filter(Boolean)
       .join('\n'),
@@ -736,7 +724,7 @@ async function draftStep(taskId: string, step: WorkflowStep, attempt: number, cl
       lessonBlock(task, 'draft'),
       stepNote(step, feedback),
       '',
-      codeTask(task) ? CODE_DRAFT_ASK : spec.draftAsk,
+      spec.draftAsk,
     ]
       .filter(Boolean)
       .join('\n\n'),
@@ -788,7 +776,7 @@ async function reviewStep(taskId: string, step: WorkflowStep, attempt: number, r
       chatNoteBlock(task),
       stepNote(step),
       '',
-      codeTask(task) ? CODE_REVIEW_ASK : spec.reviewAsk,
+      spec.reviewAsk,
       '판정 기준: 요청한 내용과 형식을 지켰고 틀린 내용이 없으면 통과(approved: true, 80점 이상)다. 문장 다듬기, 있으면 좋을 내용, 확인할 수 없는 외부 수치처럼 결과물을 쓰는 데 지장 없는 점으로는 반려하지 않는다(통과시키고 reason에 적는다). 반려는 요청을 지키지 못했거나 틀린 내용이 있을 때만 하고, 고칠 점을 구체적으로 쓴다.',
       task.chatNotes?.length ? '사용자가 전달한 메모가 초안에 반영되지 않았으면 반려한다.' : '',
       step.instructions ? `추가 관점: ${step.instructions}` : '',
@@ -1154,7 +1142,7 @@ export async function runStepAt(taskId: string, at: number, feedback: string | n
   if (step.kind === 'approval') throw new Error('승인 단계는 requestApproval로 처리해야 해요.');
   const reason = feedback ?? undefined;
   const drafts = () => store.task(taskId).artifacts.filter((artifact) => artifact.kind === 'draft').length;
-  const canLoop = Boolean(step.loop) && (store.task(taskId).loopCounts?.[step.id] ?? 0) < step.loop!.max;
+  const canLoop = Boolean(step.loop) && loopOpen(step.loop!, store.task(taskId).loopCounts?.[step.id] ?? 0);
   let loopReason: string | null = null;
 
   // Steps marked parallel run at the same time as this one, each by its own staff member.
@@ -1262,12 +1250,13 @@ export async function completeTask(taskId: string, valueKrw?: number) {
   if (store.task(taskId).status === 'completed' || completing.has(taskId)) return;
   completing.add(taskId);
   try {
+    if (!store.task(taskId).plan.some((s) => s.kind === 'approval')) await planActions(taskId);
     await runActions(taskId);
     const task = store.task(taskId);
     const manager = agentOf(task, 'manager');
-    const approval = task.plan.find((s) => s.kind === 'approval')!;
-    setStep(taskId, approval.id, 'done');
-    store.emit('approval.granted', { taskId, agentId: manager.id, payload: {} });
+    const approval = task.plan.find((s) => s.kind === 'approval');
+    if (approval) setStep(taskId, approval.id, 'done');
+    store.emit('approval.granted', { taskId, agentId: manager.id, payload: { automatic: !approval } });
     setVerdict(taskId, 'approved');
     recognizeValue(taskId, valueKrw);
     const { json } = splitDraft(latest(task, 'draft')?.content ?? '');
@@ -1332,6 +1321,10 @@ async function runTask(taskId: string) {
       const outcome = await runStepAt(taskId, at, feedback);
       if (outcome.kind === 'needs_help') throw new Error('도움 요청 응답을 받지 못했어요.');
       ({ at, feedback } = outcome);
+      if (at >= store.task(taskId).plan.length) {
+        await completeTask(taskId);
+        return;
+      }
     }
   } catch (error) {
     failTask(taskId, error instanceof Error ? error.message : String(error));
@@ -1365,7 +1358,7 @@ function startTask(taskId: string) {
 export function claimTask(taskId: string) {
   const task = store.task(taskId);
   const team = store.office(task.officeId).team;
-  const spec = TEAM_SPECS[team];
+  const spec = specOf(task);
   const inputs = spec.gatherInputs(task.description, task.officeId);
   store.updateTask(taskId, (t) => {
     t.status = 'running';
@@ -1374,7 +1367,7 @@ export function claimTask(taskId: string) {
     if (t.autoTitle) t.title = inputs.ids.length > 1 ? `${spec.defaultTitle} (${inputs.ids.length}건)` : spec.defaultTitle;
   });
   store.emit('queue.started', { taskId, agentId: agentOf(task, 'manager').id, payload: { title: store.task(taskId).title } });
-  if (TEAMS[team].inputLabel && inputs.ids.length === 0) {
+  if (TEAMS[team].inputLabel && isTeamTaskType(team, task.taskType) && inputs.ids.length === 0) {
     store.updateTask(taskId, (t) => {
       t.status = 'failed';
       t.failureReason = `${TEAMS[team].inputLabel}이(가) 없어서 건너뛰었어요.`;
@@ -1478,10 +1471,10 @@ export function recordTask(input: TaskInput) {
   const office = store.office(input.officeId);
   if (queuedOf(office.id).length >= MAX_QUEUE) throw new Error(`${office.name}의 대기 업무가 ${MAX_QUEUE}건이 넘었어요. 몇 개 끝낸 뒤 추가해 주세요.`);
 
-  const spec = TEAM_SPECS[office.team];
   const description = (input.description ?? '').trim();
   const title = input.title?.trim() ?? '';
   const taskType = taskTypeOf(office.team, input.taskType ?? '').id;
+  const spec = specFor(office.team, taskType);
   const milestoneId = office.milestones?.some((milestone) => milestone.id === input.milestoneId) ? input.milestoneId : null;
   const planMode = input.planMode === 'ai' || input.planMode === 'custom' ? input.planMode : 'template';
   const plan = planMode === 'custom' ? checkedPlan(office.id, input.steps) : templatePlan(office.team, taskType, rankedAgents(office.id));

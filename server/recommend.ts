@@ -1,3 +1,4 @@
+import { GENERAL_TASK_TYPES, generalTaskType } from '../shared/task-types.ts';
 import { TEAMS, taskTypeOf } from '../shared/teams.ts';
 import type { WorkflowStepInput } from '../shared/types.ts';
 import { STEP_KIND, templatePlan } from '../shared/workflow.ts';
@@ -21,7 +22,7 @@ export interface RequestInput {
 
 export interface FlowPick {
   source: 'saved' | 'community' | 'template';
-  /** Saved flow id, community item id, or 'template'. */
+  /** Saved flow id, community item id, or the task type id of a type default. */
   id: string;
   name: string;
   reason: string;
@@ -46,8 +47,15 @@ async function candidates(input: RequestInput): Promise<Candidate[]> {
   const type = taskTypeOf(office.team, input.taskType);
   const template = templatePlan(office.team, input.taskType, store.data.agents.filter((a) => a.officeId === office.id));
   const list: Candidate[] = [
-    { key: 't', source: 'template', id: 'template', name: `${type.label} 기본 여정`, text: `${type.label} ${template.map((s) => s.label).join(' ')}` },
+    { key: 't', source: 'template', id: type.id, name: `${type.label} 기본 여정`, text: `${type.label} ${template.map((s) => s.label).join(' ')}` },
   ];
+  // The other type defaults: the team's own and those any office can take on, so a request can find a better fit.
+  [...TEAMS[office.team].taskTypes, ...GENERAL_TASK_TYPES]
+    .filter((other) => other.id !== type.id)
+    .forEach((other, i) => {
+      const extra = generalTaskType(other.id);
+      list.push({ key: `g${i + 1}`, source: 'template', id: other.id, name: other.label, text: [other.label, extra?.summary, ...(extra?.tags ?? [])].filter(Boolean).join(' ') });
+    });
   store.data.flows.slice(-12).forEach((f, i) => {
     list.push({
       key: `s${i + 1}`,

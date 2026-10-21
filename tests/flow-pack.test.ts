@@ -37,7 +37,8 @@ test('broken flows are refused with a reason', () => {
   };
   assert.throws(bad((f) => (f.format = 'other')), /플로우 파일이 아니에요/);
   assert.throws(bad((f) => (f.license = '')), /라이선스/);
-  assert.throws(bad((f) => f.steps.pop()), /마지막 단계는 사용자 승인/);
+  assert.doesNotThrow(bad((f) => f.steps.pop()), '승인 단계가 없으면 자동 승인 흐름이다');
+  assert.throws(bad((f) => f.steps.splice(2, 0, f.steps.pop())), /사용자 승인은 마지막 단계/);
   assert.throws(bad((f) => (f.steps[3].loop.to = 4)), /되돌아갈 수 있어요/);
   assert.throws(bad((f) => (f.steps[1].kind = 'hack')), /알 수 없는 단계/);
   assert.throws(bad((f) => (f.steps = Array.from({ length: 11 }, () => f.steps[1]))), /10단계/);

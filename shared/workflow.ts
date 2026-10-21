@@ -25,25 +25,37 @@ export const STEP_KIND: Record<StepKind, { icon: string; title: string; role: Ro
 /** Steps must follow this order; research and review may repeat. */
 const KIND_RANK: Record<StepKind, number> = { brief: 0, research: 1, draft: 2, review: 3, approval: 4 };
 
-export const MAX_LOOP = 3;
+/** Upper bound when a loop names a count; omit the count to keep going while the condition holds. */
+export const MAX_LOOP = 20;
 export const LOOPABLE: StepKind[] = ['research', 'draft', 'review'];
 export const LOOP_PLACEHOLDER: Partial<Record<StepKind, string>> = {
-  research: '예: 근거 자료가 3개 미만이면',
+  research: '예: 근거 자료가 부족하면',
   draft: '예: 조사 메모로는 내용을 채우기 부족하면',
   review: '예: 검토 기준에 못 미치면',
 };
 const REVIEW_LOOP_WHEN = '검토 기준에 못 미치면';
-const REVIEW_LOOP_MAX = 2;
 
-/** Steps a loop on steps[index] may return to: anything up to itself, or up to the draft for reviews. */
+/** Steps a loop on steps[index] may return to: this step and every earlier step in the current flow. */
 export function loopTargets(steps: { kind: StepKind }[], index: number): number[] {
-  if (!LOOPABLE.includes(steps[index].kind)) return [];
-  const last = steps[index].kind === 'review' ? steps.findIndex((s) => s.kind === 'draft') : index;
-  return Array.from({ length: last + 1 }, (_, i) => i);
+  if (!LOOPABLE.includes(steps[index]?.kind)) return [];
+  return Array.from({ length: index + 1 }, (_, i) => i);
 }
 
 export function reviewLoop(steps: { kind: StepKind }[]): StepLoop {
-  return { to: steps.findIndex((s) => s.kind === 'draft'), when: REVIEW_LOOP_WHEN, max: REVIEW_LOOP_MAX };
+  return { to: steps.findIndex((s) => s.kind === 'draft'), when: REVIEW_LOOP_WHEN, max: null };
+}
+
+/** Reads an optional loop cap: empty/missing is unlimited, a number is clamped to 1…MAX_LOOP. */
+export function parseLoopMax(raw: unknown): number | null {
+  if (raw == null || raw === '') return null;
+  const n = Math.round(Number(raw));
+  if (!Number.isFinite(n) || n < 1) return null;
+  return Math.min(MAX_LOOP, n);
+}
+
+/** True while this loop may still fire. */
+export function loopOpen(loop: StepLoop, taken = 0) {
+  return loop.max == null || taken < loop.max;
 }
 
 export function parseLoop(raw: unknown): StepLoop | null {
@@ -52,7 +64,7 @@ export function parseLoop(raw: unknown): StepLoop | null {
   const to = Number(loop.to);
   const when = String(loop.when ?? '').trim().slice(0, 60);
   if (!Number.isInteger(to) || to < 0 || !when) return null;
-  return { to, when, max: Math.max(1, Math.min(MAX_LOOP, Math.round(Number(loop.max) || 1))) };
+  return { to, when, max: parseLoopMax(loop.max) };
 }
 
 /** Keeps loop targets pointing at the same steps after the editor moves, inserts or removes steps. */
@@ -96,11 +108,13 @@ export function templatePlan(team: TeamId, taskType: string, officeAgents: Agent
 
 /** Returns a Korean error message, or null when the plan can run. */
 export function validatePlan(steps: WorkflowStepInput[], officeAgents: Agent[]): string | null {
-  if (steps.length < 3) return '업무 여정에는 최소 3단계(접수·작성·승인)가 필요해요.';
+  if (steps.length < 2) return '업무 여정에는 최소 2단계(접수·작성)가 필요해요.';
   if (steps.length > MAX_PLAN_STEPS) return `업무 여정은 ${MAX_PLAN_STEPS}단계까지 만들 수 있어요.`;
   const count = (kind: StepKind) => steps.filter((s) => s.kind === kind).length;
   if (steps[0].kind !== 'brief' || count('brief') !== 1) return '첫 단계는 접수·지시 하나여야 해요.';
-  if (steps.at(-1)!.kind !== 'approval' || count('approval') !== 1) return '마지막 단계는 사용자 승인 하나여야 해요.';
+  if (count('approval') > 1 || (count('approval') === 1 && steps.at(-1)!.kind !== 'approval')) {
+    return '사용자 승인은 마지막 단계에 하나만 둘 수 있어요.';
+  }
   if (count('draft') !== 1) return '결과물 작성 단계는 정확히 하나여야 해요.';
   for (let i = 1; i < steps.length; i++) {
     if (KIND_RANK[steps[i].kind] < KIND_RANK[steps[i - 1].kind]) {
@@ -119,13 +133,11 @@ export function validatePlan(steps: WorkflowStepInput[], officeAgents: Agent[]):
     }
     if (step.loop) {
       if (!loopTargets(steps, i).includes(step.loop.to)) {
-        return step.kind === 'review'
-          ? `"${step.label}" 단계는 결과물 작성이나 그 앞 단계로만 되돌아갈 수 있어요.`
-          : `"${step.label}" 단계는 자기 자신이나 앞 단계로만 되돌아갈 수 있어요.`;
+        return `"${step.label}" 단계는 지금 여정의 자기 자신이나 앞 단계로만 되돌아갈 수 있어요.`;
       }
       if (!step.loop.when.trim()) return `"${step.label}" 단계의 반복 조건을 적어 주세요.`;
-      if (!Number.isInteger(step.loop.max) || step.loop.max < 1 || step.loop.max > MAX_LOOP) {
-        return `반복 횟수는 1~${MAX_LOOP}회로 정해 주세요.`;
+      if (step.loop.max != null && (!Number.isInteger(step.loop.max) || step.loop.max < 1 || step.loop.max > MAX_LOOP)) {
+        return `반복 횟수는 1~${MAX_LOOP}회로 적어 주세요. 비워 두면 조건이 맞을 때까지 돌아가요.`;
       }
     }
     if (step.kind === 'approval') continue;

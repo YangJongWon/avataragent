@@ -36,7 +36,7 @@ An app where AI staff handle tasks in an office and you approve the results. The
 - **Set workflow**: use the default order for the task type as is.
 - **AI designs it**: the lead AI looks at the task, decides the steps and who does them, and leaves its reasons. You can also get the design in advance before adding the task.
 - **Design it yourself**: decide adding and removing steps, the order, who does each step and the instructions yourself. Up to 10 steps.
-- **Conditional loops**: attach "if the condition is met, go back to an earlier step" to a step. For example: "if it falls short of the review criteria, back to writing, up to 2 times". Review steps have one by default.
+- **Conditional loops**: attach "if the condition is met, go back to an earlier step" to a step. The step to go back to is chosen from the current journey; leave the count empty to keep going while the condition holds. Review steps have one by default.
 - Turn on "✋ Adjust layout" in the workflow view to drag boxes around and resize them; "↺ Auto layout" puts them back.
 
 ## When staff ask for help

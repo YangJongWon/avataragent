@@ -207,13 +207,18 @@ export function StepInspector({ team, agents, steps, index, locked, template, ap
                   </option>
                 ))}
               </select>
-              <select value={step.loop.max} disabled={readOnly} onChange={(e) => updateLoop({ max: Number(e.target.value) })} aria-label={t('최대 반복')}>
-                {Array.from({ length: MAX_LOOP }, (_, n) => n + 1).map((n) => (
-                  <option key={n} value={n}>
-                    {tpl('최대 {n}회', { n: String(n) })}
-                  </option>
-                ))}
-              </select>
+              <input
+                className="plan-loop-max"
+                type="number"
+                min={1}
+                max={MAX_LOOP}
+                disabled={readOnly}
+                value={step.loop.max ?? ''}
+                placeholder={t('제한 없음')}
+                title={t('비우면 조건이 맞을 때까지 돌아가요')}
+                onChange={(e) => updateLoop({ max: e.target.value === '' ? null : Number(e.target.value) })}
+                aria-label={t('최대 반복')}
+              />
             </div>
           )}
         </div>

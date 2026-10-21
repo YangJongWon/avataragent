@@ -172,9 +172,10 @@ function AgentEditor({
 
   const save = async () => {
     try {
-      // An untouched translated default name is saved back as the stored one, so other languages keep theirs.
+      // An untouched translated default is saved back as the stored Korean source, so other languages keep theirs.
       const savedName = agent.sourceName && name === agent.name ? agent.sourceName : name;
-      await api.updateAgent(agent.id, { name: savedName, model, rules, skin, personality, ...(ownCharacter && { outfit: wearing }) });
+      const savedRules = agent.sourceRules && rules === agent.rules ? agent.sourceRules : rules;
+      await api.updateAgent(agent.id, { name: savedName, model, rules: savedRules, skin, personality, ...(ownCharacter && { outfit: wearing }) });
       onSaved(tpl('{name} 정보를 저장했어요.', { name }));
     } catch (e) {
       onError(e instanceof Error ? e.message : String(e));
@@ -588,7 +589,7 @@ export function HireTab({
   return (
     <div className="page">
       <h2>
-        {t('직원 관리')} · {team.emoji} {team.name}
+        {t('직원 관리')} · {team.emoji} {t(team.name)}
       </h2>
       <p className="muted">
         {tpl('지금 일하는 직원을 고르면 외형·모델·이름·규칙을 바꿀 수 있어요. 새 직원을 고용하거나 내보낼 수도 있어요. (사무실당 최대 {n}명)', {

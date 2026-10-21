@@ -76,6 +76,10 @@ export async function taskWorkflow({ taskId }: TaskWorkflowInput): Promise<void>
         continue;
       }
       ({ at, feedback } = outcome);
+      if (at >= steps.length) {
+        await activities.completeTask(taskId);
+        return;
+      }
     }
   } catch (error) {
     await activities.failTask(taskId, reasonOf(error));

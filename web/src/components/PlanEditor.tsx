@@ -49,7 +49,7 @@ export function PlanEditor({ team, agents, steps, onChange }: Props) {
               </div>
               <div className="plan-step-row">
                 {step.kind === 'approval' ? (
-                  <span className="plan-step-owner muted small">{t('🙋 사용자(나) · 수정 요청하면 결과물 작성으로 돌아가요')}</span>
+                  <span className="plan-step-owner muted small">{t('🙋 사용자(나) · 삭제하면 자동 승인돼요')}</span>
                 ) : (
                   <select
                     className="plan-step-owner"
@@ -113,7 +113,7 @@ export function PlanEditor({ team, agents, steps, onChange }: Props) {
                       <input
                         value={step.loop.when}
                         maxLength={60}
-                        placeholder={LOOP_PLACEHOLDER[step.kind]}
+                        placeholder={t(LOOP_PLACEHOLDER[step.kind] ?? '')}
                         onChange={(e) => updateLoop(i, { when: e.target.value })}
                         aria-label={tpl('{v}단계 반복 조건', { v: i + 1 })}
                       />
@@ -128,17 +128,17 @@ export function PlanEditor({ team, agents, steps, onChange }: Props) {
                           </option>
                         ))}
                       </select>
-                      <select
-                        value={step.loop.max}
-                        onChange={(e) => updateLoop(i, { max: Number(e.target.value) })}
+                      <input
+                        className="plan-loop-max"
+                        type="number"
+                        min={1}
+                        max={MAX_LOOP}
+                        value={step.loop.max ?? ''}
+                        placeholder={t('제한 없음')}
+                        title={t('비우면 조건이 맞을 때까지 돌아가요')}
+                        onChange={(e) => updateLoop(i, { max: e.target.value === '' ? null : Number(e.target.value) })}
                         aria-label={tpl('{v}단계 최대 반복', { v: i + 1 })}
-                      >
-                        {Array.from({ length: MAX_LOOP }, (_, n) => n + 1).map((n) => (
-                          <option key={n} value={n}>
-                            {tpl('최대 {n}회', { n })}
-                          </option>
-                        ))}
-                      </select>
+                      />
                     </div>
                   )}
                 </div>

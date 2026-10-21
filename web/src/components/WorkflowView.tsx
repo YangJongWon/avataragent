@@ -6,6 +6,7 @@ import {
   ReactFlowProvider,
   useNodesState,
   type Edge,
+  type FinalConnectionState,
   type Node,
   type NodeChange,
   type NodeProps,
@@ -16,20 +17,21 @@ import { createPortal } from 'react-dom';
 import { t, tpl } from '../../../shared/i18n.ts';
 import { TEAMS } from '../../../shared/teams.ts';
 import type { Agent, SavedFlow, StepKind, StepLoop, StepStatus, Task, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
-import { lockedStepCount, loopTargetLabel, PLAN_EDITABLE_STATUSES, planModeLabel, STEP_KIND, validatePlan } from '../../../shared/workflow.ts';
+import { lockedStepCount, loopOpen, loopTargetLabel, PLAN_EDITABLE_STATUSES, planModeLabel, STEP_KIND, validatePlan } from '../../../shared/workflow.ts';
 import { flowFromPlan, type FlowPack } from '../../../shared/flow-pack.ts';
+import { rewire } from '../planOps.ts';
 import { FlowPicker } from './FlowPicker.tsx';
 import { StepInspector } from './StepInspector.tsx';
 
 /** `text` holds the Korean catalogue key, so it must be read through `t()` at render. */
 const STATUS_VIEW: Record<StepStatus, { icon: string; text: string; cls: string }> = {
-  pending: { icon: '○', text: t('대기'), cls: 'st-pending' },
-  running: { icon: '●', text: t('작업 중'), cls: 'st-running' },
-  done: { icon: '✓', text: t('완료'), cls: 'st-done' },
-  error: { icon: '✕', text: t('오류'), cls: 'st-error' },
-  awaiting: { icon: '!', text: t('사용자 대기'), cls: 'st-awaiting' },
-  rejected: { icon: '↩', text: t('반려'), cls: 'st-rejected' },
-  looped: { icon: '🔁', text: t('되돌아감'), cls: 'st-rejected' },
+  pending: { icon: '○', text: '대기', cls: 'st-pending' },
+  running: { icon: '●', text: '작업 중', cls: 'st-running' },
+  done: { icon: '✓', text: '완료', cls: 'st-done' },
+  error: { icon: '✕', text: '오류', cls: 'st-error' },
+  awaiting: { icon: '!', text: '사용자 대기', cls: 'st-awaiting' },
+  rejected: { icon: '↩', text: '반려', cls: 'st-rejected' },
+  looped: { icon: '🔁', text: '되돌아감', cls: 'st-rejected' },
 };
 
 const NODE_W = 124;
@@ -114,7 +116,7 @@ type Layout = Record<string, Box>;
 type ShownStep = WorkflowStepInput & { id: string; status: StepStatus; loop: StepLoop | null };
 
 const inputsOf = (task: Task): WorkflowStepInput[] =>
-  task.plan.map(({ kind, label, agentId, instructions, loop }) => ({ kind, label, agentId, instructions, loop: loop ?? null }));
+  task.plan.map(({ kind, label, agentId, instructions, loop, parallel }) => ({ kind, label, agentId, instructions, loop: loop ?? null, ...(parallel ? { parallel: true } : {}) }));
 
 function shownSteps(task: Task, draft: WorkflowStepInput[] | null, locked: number): ShownStep[] {
   if (!draft) return task.plan.map((s) => ({ ...s, loop: s.loop ?? null }));
@@ -136,7 +138,9 @@ function flowItems(task: Task | undefined, steps: ShownStep[], agents: Agent[], 
       label: t(s.label),
       status: s.status,
       owner: s.kind === 'approval' ? t('사용자') : (agents.find((a) => a.id === s.agentId)?.name ?? t('담당 없음')),
-      loop: s.loop ? `${t(s.loop.when)} → ${t(loopTargetLabel(steps, i, s.loop))} (${task.loopCounts?.[s.id] ?? 0}/${s.loop.max})` : undefined,
+      loop: s.loop
+        ? `${t(s.loop.when)} → ${t(loopTargetLabel(steps, i, s.loop))} (${task.loopCounts?.[s.id] ?? 0}${s.loop.max != null ? `/${s.loop.max}` : ''})`
+        : undefined,
       parallel: Boolean(s.parallel),
       selected: selected === i,
       changed: changed.has(i),
@@ -150,17 +154,36 @@ function flowItems(task: Task | undefined, steps: ShownStep[], agents: Agent[], 
   return items;
 }
 
-/** Fills rows left to right and wraps like text, so the journey stays readable at full size on narrow screens. */
-function autoLayout(count: number, width: number, w = NODE_W, h = NODE_H, gx = GAP_X, gy = GAP_Y, maxRows = Infinity): Layout[string][] {
+/** The journey's columns: a step alone, or steps that run at the same time. */
+function stepGroups<T extends { data: StepData }>(items: T[]): T[][] {
+  const groups: T[][] = [];
+  items.forEach((item, i) => (i > 0 && item.data.parallel ? groups.at(-1)!.push(item) : groups.push([item])));
+  return groups;
+}
+
+/**
+ * Fills rows left to right and wraps like text, so the journey stays readable at full size on narrow screens.
+ * Steps that run at the same time share a column, stacked, so their lines fan out and back in.
+ */
+function autoLayout(groupSizes: number[], width: number, w = NODE_W, h = NODE_H, gx = GAP_X, gy = GAP_Y, maxRows = Infinity): Layout[string][] {
+  const count = groupSizes.length;
   const capacity = Math.max(1, Math.min(count, Math.floor((width - 2 * PAD + gx) / (w + gx))));
   // With a row limit, use as few columns as fit the rows (6 nodes in 3 rows stay 2 wide).
   const perRow = maxRows === Infinity ? capacity : Math.min(capacity, Math.max(Math.min(2, count), Math.ceil(count / maxRows)));
   const rowWidth = perRow * w + (perRow - 1) * gx;
   const left = Math.max(PAD, (width - rowWidth) / 2);
-  return Array.from({ length: count }, (_, i) => ({
-    x: left + (i % perRow) * (w + gx),
-    y: PAD + 18 + Math.floor(i / perRow) * (h + gy),
-  }));
+  const stackGap = Math.round(gy / 3);
+  const boxes: Layout[string][] = [];
+  let top = PAD + 18;
+  for (let row = 0; row * perRow < count; row++) {
+    const sizes = groupSizes.slice(row * perRow, (row + 1) * perRow);
+    sizes.forEach((size, col) => {
+      for (let k = 0; k < size; k++) boxes.push({ x: left + col * (w + gx), y: top + k * (h + stackGap) });
+    });
+    const tallest = Math.max(...sizes);
+    top += tallest * h + (tallest - 1) * stackGap + gy;
+  }
+  return boxes;
 }
 
 const layoutKey = (taskId: string) => `workflow-layout:${taskId}`;
@@ -198,6 +221,7 @@ function WorkflowInner({ task, agents, team, edit, dense, maxRows }: Props) {
   const [picking, setPicking] = useState(false);
   const [choosing, setChoosing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
   const dirty = useRef(false);
 
   useEffect(() => {
@@ -243,7 +267,7 @@ function WorkflowInner({ task, agents, team, edit, dense, maxRows }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<StepData>>([]);
   useEffect(() => {
     if (!width) return;
-    const auto = autoLayout(items.length, width, nodeW, nodeH, gapX, gapY, maxRows);
+    const auto = autoLayout(stepGroups(items).map((g) => g.length), width, nodeW, nodeH, gapX, gapY, maxRows);
     setNodes((prev) =>
       items.map((item, i) => {
         const savedBox = draft || dense ? undefined : layout?.[item.id];
@@ -292,6 +316,7 @@ function WorkflowInner({ task, agents, team, edit, dense, maxRows }: Props) {
   };
 
   const change = (next: WorkflowStepInput[], select?: number | null) => {
+    setHint(null);
     setDraft(next);
     if (select !== undefined) setSelected(select);
   };
@@ -330,7 +355,7 @@ function WorkflowInner({ task, agents, team, edit, dense, maxRows }: Props) {
     }
   };
   /** A running task with unfinished repeat cycles: saving asks whether to switch now or after the cycles. */
-  const pendingLoops = task?.plan.some((s) => s.loop && (task.loopCounts?.[s.id] ?? 0) < s.loop.max) ?? false;
+  const pendingLoops = task?.plan.some((s) => s.loop && s.loop.max != null && loopOpen(s.loop, task.loopCounts?.[s.id] ?? 0)) ?? false;
   const needsChoice = canEdit && (task?.status === 'running' || task?.status === 'awaiting_help') && pendingLoops;
   const requestSave = () => {
     if (!draft || draftError || saving) return;
@@ -354,23 +379,40 @@ function WorkflowInner({ task, agents, team, edit, dense, maxRows }: Props) {
 
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const edges: Edge[] = [];
-  items.slice(0, -1).forEach((item, i) => {
-    const next = items[i + 1];
-    const a = byId.get(item.id);
-    const b = byId.get(next.id);
-    const [out, inn] = a && b ? sides(a, b, nodeH) : ['r', 'l'];
-    edges.push({
-      id: `${item.id}->${next.id}`,
-      source: item.id,
-      sourceHandle: `${out}-out`,
-      target: next.id,
-      targetHandle: `${inn}-in`,
-      type: out === 'r' || out === 'l' ? 'default' : 'smoothstep',
-      animated: item.data.status === 'done' && (next.data.status === 'running' || next.data.status === 'awaiting'),
-      // Steps that run together are tied by a dashed "at the same time" line, not an arrow of order.
-      ...(next.data.parallel ? { label: t('동시'), style: { strokeDasharray: '4 4' }, labelStyle: { fontWeight: 700 } } : {}),
-    });
+  // Steps that run together share the step before them and the step after them: the lines fan out and back in.
+  const groups = stepGroups(items);
+  groups.slice(0, -1).forEach((group, g) => {
+    for (const item of group) {
+      for (const next of groups[g + 1]) {
+        const a = byId.get(item.id);
+        const b = byId.get(next.id);
+        const [out, inn] = a && b ? sides(a, b, nodeH) : ['r', 'l'];
+        edges.push({
+          id: `${item.id}->${next.id}`,
+          source: item.id,
+          sourceHandle: `${out}-out`,
+          target: next.id,
+          targetHandle: `${inn}-in`,
+          type: out === 'r' || out === 'l' ? 'default' : 'smoothstep',
+          animated: item.data.status === 'done' && (next.data.status === 'running' || next.data.status === 'awaiting'),
+        });
+      }
+    }
   });
+  /** A line dragged from one step to another: a step of the same kind drawn from the step before runs alongside. */
+  const onConnectEnd = (event: MouseEvent | TouchEvent, connection: FinalConnectionState) => {
+    const point = 'changedTouches' in event ? event.changedTouches[0] : event;
+    const dropped = connection.toNode?.id ?? (document.elementFromPoint(point.clientX, point.clientY)?.closest('.react-flow__node') as HTMLElement | null)?.dataset.id;
+    const from = steps.findIndex((s) => s.id === connection.fromNode?.id);
+    const to = steps.findIndex((s) => s.id === dropped);
+    if (from < 0 || to < 0 || from === to) return;
+    const result = rewire(inputs, from, to, canEdit ? locked : 0);
+    if (!result) {
+      setHint(t('선은 단계 순서대로 그려져요. 조사·검토 단계를 같은 종류 단계의 바로 앞 단계에서 끌어다 놓으면 동시에 진행하고, 동시 진행 중인 단계끼리 이으면 순서대로 바뀌어요.'));
+      return;
+    }
+    change(result.steps, null);
+  };
   steps.forEach((step, i) => {
     if (!step.loop || step.loop.to === i || !steps[step.loop.to]) return;
     const review = step.kind === 'review';
@@ -382,7 +424,10 @@ function WorkflowInner({ task, agents, team, edit, dense, maxRows }: Props) {
       target: steps[step.loop.to].id,
       targetHandle: review ? 't-in' : 'b-in',
       type: 'smoothstep',
-      label: tpl(review ? '반려 {n}/{max}' : '조건 {n}/{max}', { n: task?.loopCounts?.[step.id] ?? 0, max: step.loop.max }),
+      label:
+        step.loop.max == null
+          ? tpl(review ? '반려 {n}' : '조건 {n}', { n: task?.loopCounts?.[step.id] ?? 0 })
+          : tpl(review ? '반려 {n}/{max}' : '조건 {n}/{max}', { n: task?.loopCounts?.[step.id] ?? 0, max: step.loop.max }),
       animated: step.status === 'rejected' || step.status === 'looped',
       style: { stroke: color, strokeDasharray: '6 4' },
       labelStyle: { fill: color, fontWeight: 700 },
@@ -390,7 +435,7 @@ function WorkflowInner({ task, agents, team, edit, dense, maxRows }: Props) {
   });
   const draftStep = steps.find((s) => s.kind === 'draft');
   const approval = steps.at(-1);
-  if (task && draftStep && approval) {
+  if (task && draftStep && approval?.kind === 'approval') {
     edges.push({
       id: `${approval.id}->changes`,
       source: approval.id,
@@ -483,10 +528,12 @@ function WorkflowInner({ task, agents, team, edit, dense, maxRows }: Props) {
       {task?.planNote && <div className="plan-note">🧭 {task.planNote}</div>}
       {edit && task && !draft && selected === null && (
         <div className="plan-note small muted">
-          ✏️ {canEdit ? t('단계 상자를 누르면 담당 직원·역할·지시를 바꾸고, 단계를 더하거나 뺄 수 있어요.') : t('완료된 여정도 눌러서 보고, 다음 업무에서 쓸 흐름으로 저장할 수 있어요.')}
+          ✏️ {canEdit ? t('단계 상자를 누르면 담당 직원·역할·지시를 바꾸고, 단계를 더하거나 뺄 수 있어요.') : t('완료된 여정도 눌러서 보고, 다음 업무에서 쓸 흐름으로 저장할 수 있어요.')}{' '}
+          {t('상자 가장자리의 점에서 선을 끌어 조사·검토 단계를 동시에 진행하게 할 수 있어요.')}
         </div>
       )}
       {draftError && <div className="plan-note small neg">⚠️ {draftError}</div>}
+      {hint && !draftError && <div className="plan-note small muted">💡 {hint}</div>}
       <div className={`workflow-canvas ${editing ? 'editing' : 'locked'} ${canView ? 'clickable' : ''}${dense ? ' dense' : ''}`} ref={containerRef}>
         <div className="workflow-stage" style={{ width: contentW || '100%', height: Math.max(contentH, 100) }}>
           <ReactFlow
@@ -501,7 +548,8 @@ function WorkflowInner({ task, agents, team, edit, dense, maxRows }: Props) {
             nodeTypes={nodeTypes}
             defaultViewport={{ x: 0, y: 0, zoom: 1 }}
             nodesDraggable={editing}
-            nodesConnectable={false}
+            nodesConnectable={canView && !editing}
+            onConnectEnd={onConnectEnd}
             elementsSelectable={editing}
             panOnDrag={false}
             zoomOnScroll={false}

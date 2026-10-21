@@ -77,6 +77,7 @@ export const SERVER_TEXT: Record<string, ServerTextEntry> = {
   '비교 기준 정리': { zh: '整理比较标准', ja: '比較基準の整理', en: 'Comparison criteria' },
   '비교 대상과 평가 기준을 표로 정리한다.': { zh: '用表格整理比较对象和评估标准。', ja: '比較対象と評価基準を表にまとめる。', en: 'Tabulate what is being compared and the criteria.' },
   '비교할 후보가 2개 미만이면': { zh: '如果候选少于 2 个', ja: '比較候補が2つ未満なら', en: 'fewer than 2 candidates' },
+  '비교할 후보가 모자라면': { zh: '如果候选不够', ja: '比較候補が足りなければ', en: 'if there aren’t enough candidates' },
   '비교가 필요해 보여서 검토자에게 비교 기준 정리를 먼저 맡겼어요. 후보가 모자라면 조사로 되돌아가요.': {
     zh: '看起来需要比较，所以先让审核员整理比较标准。候选不足时会回到调研。',
     ja: '比較が必要そうなので、先にレビュアーに比較基準の整理を任せました。候補が足りなければ調査に戻ります。',
@@ -145,6 +146,8 @@ export const SERVER_TEXT: Record<string, ServerTextEntry> = {
     ja: '出典の項目が空で、結論の根拠が本文の数値とつながっていません',
     en: 'The sources section is empty, and the conclusion isn’t tied to the figures in the body',
   },
+  '승인하면 결과물이 보고서함에 보관됩니다.': { zh: '批准后，成果会保存到报告箱。', ja: '承認すると成果物がレポート箱に保管されます。', en: 'Approve to file the result in the report box.' },
+  '결과물 "{title}"를 보고서함에 보관했어요.': { zh: '已把成果“{title}”保存到报告箱。', ja: '成果物「{title}」をレポート箱に保管しました。', en: 'Filed “{title}” in the report box.' },
   '승인하면 보고서가 보고서함에 보관됩니다.': { zh: '批准后，报告会保存到报告箱。', ja: '承認するとレポートがレポート箱に保管されます。', en: 'Approve to file the report in the report box.' },
   '보고서 "{title}"를 보고서함에 보관했어요.': { zh: '已把报告“{title}”保存到报告箱。', ja: 'レポート「{title}」をレポート箱に保管しました。', en: 'Filed the report “{title}” in the report box.' },
 

@@ -71,9 +71,12 @@ interface CharacterEnv {
   openDoor(): void;
 }
 
+/** Catalogue Korean strings follow the screen language; a theme's {ko,ja,…} object already picked one. */
+const spoken = (text: LocalText) => (typeof text === 'string' ? t(text) : localText(text, currentLanguage()));
+
 const say = (lines: LocalText[] | undefined) => {
   const line = lines && pickOne(lines);
-  return line ? localText(line, currentLanguage()) : '';
+  return line ? spoken(line) : '';
 };
 
 const LONG_PRESS_MS = 500;
@@ -540,7 +543,7 @@ export class OfficeScene {
     const ctx = c.context();
     return this.interactions
       .filter((i) => firstMatch([i], ctx) && firstMatch(i.reactions, ctx))
-      .map((i) => ({ id: i.id, label: localText(i.label, currentLanguage()) }));
+      .map((i) => ({ id: i.id, label: spoken(i.label) }));
   }
 
   /** Plays how this person answers an interaction. Nothing leaves the screen: it is only a reaction. */
@@ -634,7 +637,7 @@ export class OfficeScene {
         existing.setPlace(resting ? 'lounge' : 'desk');
       } else {
         const art = this.theme.createCharacter();
-        const view = new CharacterView(agent, this.callbacks, this.team.roleTitles[agent.role], resting, art, this.env, home, rest, offDuty);
+        const view = new CharacterView(agent, this.callbacks, t(this.team.roleTitles[agent.role]), resting, art, this.env, home, rest, offDuty);
         this.chars.set(agent.id, view);
         this.charLayer.addChild(view.root);
       }
@@ -782,7 +785,7 @@ export class OfficeScene {
     this.postIt.visible = Boolean(active);
 
     if (!task) {
-      this.boardTitle.text = tpl('{emoji} {name} 칠판', { emoji: this.team.emoji, name: this.team.name });
+      this.boardTitle.text = tpl('{emoji} {name} 칠판', { emoji: this.team.emoji, name: t(this.team.name) });
       this.boardLines.text = t('여기를 눌러 첫 업무를 등록하세요');
       return;
     }

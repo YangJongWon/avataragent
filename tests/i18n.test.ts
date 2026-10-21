@@ -12,6 +12,7 @@ import {
   setActiveLanguage,
   t,
   translate,
+  translateMessage,
   translateTemplate,
   tpl,
 } from '../shared/i18n.ts';
@@ -104,12 +105,11 @@ test('전역 활성 언어가 t/tpl 과 currentLanguage 에 반영된다', () =>
 
 /** 번역한 탭은 화면에 그대로 나가는 한국어 문자열이.catalog 안에 있어야 한다. */
 // Every screen file: a Korean string passed to t()/tpl() anywhere must have zh/ja/en.
-const SCREEN_DIRS = ['web/src', 'web/src/components', 'web/src/office', 'web/src/office/themes', 'web/src/studio'];
-const LOCALIZED_SOURCES = SCREEN_DIRS.flatMap((dir) =>
-  readdirSync(new URL(`../${dir}`, import.meta.url))
-    .filter((f) => /\.tsx?$/.test(f) && !f.startsWith('__'))
-    .map((f) => `${dir}/${f}`),
-);
+const sourceFiles = (dir: string): string[] =>
+  readdirSync(new URL(`../${dir}/`, import.meta.url), { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory() ? sourceFiles(`${dir}/${entry.name}`) : /\.tsx?$/.test(entry.name) && !entry.name.startsWith('__') ? [`${dir}/${entry.name}`] : [],
+  );
+const LOCALIZED_SOURCES = sourceFiles('web/src');
 
 const EXTRA_HOLES = ['web/src/format.ts'];
 const unescape = (raw: string) => raw.replace(/\\n/g, '\n').replace(/\\'/g, "'").replace(/\\\\/g, '\\');
@@ -172,4 +172,47 @@ test('화면 문자열 카탈로그에 중괄값이 있는 문장을 잘못 넣�
   const withHoles = '{who} 검수 통과';
   assert.equal(translate(withHoles, 'en'), withHoles, '문장 카탈로그는 중괄값 문장을 받지 않아요');
   assert.equal(translateTemplate(withHoles, 'en', { who: '민', score: 1 }), '민 approved it (1)');
+});
+
+test('JSX에 번역 함수를 거치지 않은 한국어 문구가 없다', () => {
+  const problems: string[] = [];
+  for (const file of LOCALIZED_SOURCES.filter((name) => name.endsWith('.tsx'))) {
+    const src = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+    for (const match of src.matchAll(/>\s*([^<{\r\n]*[가-힣][^<{\r\n]*)</g)) problems.push(`${file}: ${match[1].trim()}`);
+    for (const match of src.matchAll(/(?:placeholder|title|aria-label)="([^"]*[가-힣][^"]*)"/g)) problems.push(`${file}: ${match[1]}`);
+  }
+  assert.deepEqual(problems, [], problems.join('\n'));
+});
+
+test('서버에서 이미 값이 채워진 문장도 화면 언어로 번역한다', () => {
+  assert.equal(translateMessage('6단계', 'en'), '6 steps');
+  assert.equal(translateMessage('6단계', 'ja'), '6 段階');
+  assert.equal(translateMessage('등록되지 않은 서버 문장', 'en'), '등록되지 않은 서버 문장');
+});
+
+test('기본 인사·안전 규칙·역할 규칙은 화면 언어로 번역된다', async () => {
+  const { DEFAULT_INTERACTIONS } = await import('../shared/theme-defaults.ts');
+  const { ORGANIZATION_SAFETY_RULES } = await import('../server/config.ts');
+  const { TEAM_ORDER, TEAMS } = await import('../shared/teams.ts');
+  const { defaultMilestones } = await import('../shared/project.ts');
+  const { MCP_PRESETS, TOOL_MODE_LABEL } = await import('../shared/mcp.ts');
+  const keys = [
+    ...DEFAULT_INTERACTIONS.flatMap((item) => [
+      typeof item.label === 'string' ? item.label : '',
+      ...(item.reactions ?? []).flatMap((reaction) => (reaction.say ?? []).map((line) => (typeof line === 'string' ? line : ''))),
+    ]),
+    ...ORGANIZATION_SAFETY_RULES,
+    ...Object.values(TEAMS).flatMap((team) => Object.values(team.defaultRules)),
+    ...TEAM_ORDER.flatMap((team) => defaultMilestones(team).map((milestone) => milestone.label)),
+    ...Object.values(TOOL_MODE_LABEL),
+    ...MCP_PRESETS.flatMap((preset) => [preset.name, preset.note, ...preset.secrets.map((secret) => secret.label), ...(preset.links ?? []).map((link) => link.label)]),
+  ].filter((key) => /[가-힣]/.test(key));
+  const problems: string[] = [];
+  for (const key of keys) {
+    for (const language of LANGUAGES) {
+      if (language.id === 'ko') continue;
+      if (translate(key, language.id) === key) problems.push(`[${language.id}] ${key}`);
+    }
+  }
+  assert.deepEqual(problems, [], problems.join('\n'));
 });

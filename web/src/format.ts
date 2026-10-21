@@ -160,15 +160,15 @@ export function eventLabel(event: OfficeEvent, agents: Map<string, Agent>) {
     }
     case 'workflow.updated':
       return tpl('업무 여정 수정', { steps: num(Number(p.steps ?? 0)) });
-    case 'workflow.looped':
-      return tpl('{who} 되돌아감', {
-        who,
-        from: String(p.from ?? ''),
-        to: String(p.to === p.from ? t('다시') : (p.to ?? '')),
-        count: Number(p.count ?? 0),
-        max: Number(p.max ?? 0),
-        reason: String(p.reason ?? ''),
-      });
+    case 'workflow.looped': {
+      const from = String(p.from ?? '');
+      const to = String(p.to === p.from ? t('다시') : (p.to ?? ''));
+      const count = Number(p.count ?? 0);
+      const reason = String(p.reason ?? '');
+      return p.max == null || p.max === ''
+        ? tpl('{who} 조건으로 되돌아감', { who, from, to, count, reason })
+        : tpl('{who} 되돌아감', { who, from, to, count, max: Number(p.max), reason });
+    }
     case 'share.created':
       return tpl('공유 링크 생성', { name: String(p.name ?? '') });
     case 'share.revoked':

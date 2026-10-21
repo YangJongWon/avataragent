@@ -32,7 +32,7 @@ For durable execution and the PostgreSQL development environment, start Docker D
 - **Workflows**
   - Use the set workflow for each task type, let AI design one, or lay out the steps yourself.
   - Steps run Brief → Research → Write → Review → Approve, up to 10 steps.
-  - **Conditional loops**: attach conditions to any step, such as "if it falls short of the review criteria, go back to writing (up to 2 times)".
+  - **Conditional loops**: attach conditions to any step, such as "if it falls short of the review criteria, go back to writing". Leave the count empty to keep going while the condition holds.
   - The workflow view wraps lines to fit the width automatically, and you can also move and resize nodes yourself.
 - **Approval and profit**
   - Results only count once you approve them. Asking for changes sends the work back to the writing step.

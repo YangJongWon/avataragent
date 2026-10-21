@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { TEAMS } from '../shared/teams.ts';
+import { generalTaskType } from '../shared/task-types.ts';
+import { isTeamTaskType, TEAMS } from '../shared/teams.ts';
+import { TYPE_ASKS } from './task-type-asks.ts';
 import { calendarOf, type Proposal, type Recommendation, type Role, type Task, type TeamId } from '../shared/types.ts';
 import { parseJson } from './ai.ts';
 import { store } from './store.ts';
@@ -621,6 +623,35 @@ const welfare: TeamSpec = {
 
 export const TEAM_SPECS: Record<TeamId, TeamSpec> = { dev, hr, mgmt, support, welfare };
 
-export function systemPromptFor(team: TeamId, role: Role) {
-  return `너는 AI 회사 "${TEAMS[team].name}"의 ${TEAMS[team].roleTitles[role]}다. ${TEAM_SPECS[team].duty[role]}`;
+// ───────────────────────────── 공용 업무 유형 ─────────────────────────────
+
+/** A general task type: the request is the input, the writer makes what the type asks, approval keeps the result. */
+function generalSpec(taskType: string): TeamSpec {
+  const type = generalTaskType(taskType)!;
+  const ask = TYPE_ASKS[taskType];
+  return {
+    ...dev,
+    duty: {
+      manager: '사용자의 요청을 담당자가 바로 작업할 수 있는 작업 지시서(목표, 범위, 결과물 형식)로 짧게 정리한다.',
+      researcher: dev.duty.researcher,
+      writer: `작업 지시서와 조사 메모를 바탕으로 "${type.label}" 결과물을 만든다.`,
+      reviewer: '결과물이 요청한 내용과 형식을 지켰는지, 틀린 내용이 없는지 공정하게 검토한다.',
+    },
+    defaultTitle: type.label,
+    researchAsk: ask?.research ?? dev.researchAsk,
+    draftAsk: ask ? `${ask.draft}
+결과물만 출력한다.` : dev.draftAsk,
+    reviewAsk: ask ? `결과물을 평가해라. ${ask.review}` : dev.reviewAsk,
+    buildProposal: (_json, task) => ({ headline: V('승인하면 결과물이 보고서함에 보관됩니다.'), lines: [`📄 ${task.title}`] }),
+    onApprove: (_json, task) => V('결과물 "{title}"를 보고서함에 보관했어요.', { title: task.title }),
+  };
+}
+
+/** The spec for a task: the team's own for its own types, a general one for types any office can take on. */
+export function specFor(team: TeamId, taskType: string): TeamSpec {
+  return isTeamTaskType(team, taskType) ? TEAM_SPECS[team] : generalSpec(taskType);
+}
+
+export function systemPromptFor(team: TeamId, role: Role, taskType = '') {
+  return `너는 AI 회사 "${TEAMS[team].name}"의 ${TEAMS[team].roleTitles[role]}다. ${specFor(team, taskType).duty[role]}`;
 }

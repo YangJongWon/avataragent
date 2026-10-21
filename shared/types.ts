@@ -88,6 +88,8 @@ export interface Agent {
   role: Role;
   model: string;
   rules: string;
+  /** Web only: the stored rules when `rules` shows a default translated for the viewer. */
+  sourceRules?: string;
   /** Default working style added to every prompt of this agent. */
   personality: Personality;
   skin: AgentSkin;
@@ -131,12 +133,13 @@ export type StepStatus = 'pending' | 'running' | 'done' | 'error' | 'awaiting' |
 
 export type StepKind = 'brief' | 'research' | 'draft' | 'review' | 'approval';
 
-/** Go back to an earlier step (or repeat this one) while `when` holds, at most `max` times. */
+/** Go back to an earlier step (or repeat this one) while `when` holds. */
 export interface StepLoop {
   /** Index into the plan; must not be after the step that owns the loop. */
   to: number;
   when: string;
-  max: number;
+  /** How many times to take the loop. Null keeps going while `when` holds. */
+  max: number | null;
 }
 
 export interface WorkflowStepInput {

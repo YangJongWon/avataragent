@@ -48,7 +48,8 @@ function FlowDetails({ details }: { details: Record<string, unknown> }) {
             {s.instructions && <div className="small">{s.instructions}</div>}
             {s.loop && (
               <div className="small muted">
-                ↩ {s.loop.when} → {s.loop.to === i ? t('이 단계 다시') : tpl('{step}(으)로', { step: steps[s.loop.to]?.label ?? '?' })} ({tpl('최대 {n}번', { n: s.loop.max })})
+                ↩ {s.loop.when} → {s.loop.to === i ? t('이 단계 다시') : tpl('{step}(으)로', { step: steps[s.loop.to]?.label ?? '?' })}
+                {s.loop.max != null ? ` (${tpl('최대 {n}번', { n: s.loop.max })})` : ''}
               </div>
             )}
           </li>

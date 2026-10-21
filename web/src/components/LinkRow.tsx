@@ -6,7 +6,7 @@ export function LinkRow({ links, label = t('바로가기') }: { links?: { label:
       {label && <span className="muted small">{label}</span>}
       {links.map((link) => (
         <a key={link.url} className="pixel-btn small link-out" href={link.url} target="_blank" rel="noopener noreferrer">
-          {link.label} ↗
+          {t(link.label)} ↗
         </a>
       ))}
     </div>

@@ -86,7 +86,7 @@ function buildRoom(team: TeamMeta): RoomArt {
   sign.roundRect(14, 10, 70, 18, 3).fill('#5d4037');
   back.addChild(sign);
   const signText = new Text({
-    text: `${team.emoji} ${team.name}`,
+    text: `${team.emoji} ${t(team.name)}`,
     style: { fontFamily: FONT, fontSize: 11, fontWeight: 'bold', fill: '#fdf2e9' },
   });
   signText.anchor.set(0.5);

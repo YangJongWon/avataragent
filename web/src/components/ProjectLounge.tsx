@@ -95,8 +95,8 @@ export function ProjectLounge({ snapshot, onOpenOffice, onError }: { snapshot: S
                 </div>
                 <div className="model-parts">
                   {calculated.milestones.map((milestone) => (
-                    <span key={milestone.id} className={milestone.progress >= 1 ? 'built' : milestone.progress > 0 ? 'building' : ''} title={tpl('{label}: {v}% · 가중치 {weight}%', { label: milestone.label, v: Math.round(milestone.progress * 100), weight: milestone.weight })}>
-                      {milestone.progress >= 1 ? '◆' : milestone.progress > 0 ? '◈' : '◇'} {milestone.label} {Math.round(milestone.progress * 100)}%
+                    <span key={milestone.id} className={milestone.progress >= 1 ? 'built' : milestone.progress > 0 ? 'building' : ''} title={tpl('{label}: {v}% · 가중치 {weight}%', { label: t(milestone.label), v: Math.round(milestone.progress * 100), weight: milestone.weight })}>
+                      {milestone.progress >= 1 ? '◆' : milestone.progress > 0 ? '◈' : '◇'} {t(milestone.label)} {Math.round(milestone.progress * 100)}%
                     </span>
                   ))}
                 </div>
@@ -122,7 +122,7 @@ export function ProjectLounge({ snapshot, onOpenOffice, onError }: { snapshot: S
                         }}
                       >
                         <option value="">{t('마일스톤 지정…')}</option>
-                        {calculated.milestones.map((milestone) => <option key={milestone.id} value={milestone.id}>{milestone.label} ({milestone.weight}%)</option>)}
+                        {calculated.milestones.map((milestone) => <option key={milestone.id} value={milestone.id}>{t(milestone.label)} ({milestone.weight}%)</option>)}
                       </select>
                     </label>
                   ))}

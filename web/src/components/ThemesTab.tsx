@@ -10,10 +10,10 @@ import './themes.css';
 const PIXEL: ThemeSummary = {
   id: DEFAULT_THEME,
   themeVersion: '',
-  name: t('기본 픽셀'),
+  name: '기본 픽셀',
   author: 'AvatarCast',
   license: 'AGPL-3.0',
-  description: t('앱에 들어 있는 도트 사무실이에요. 테마가 없거나 불러오지 못하면 이 테마로 보여요.'),
+  description: '앱에 들어 있는 도트 사무실이에요. 테마가 없거나 불러오지 못하면 이 테마로 보여요.',
   preview: '',
   hasCss: false,
   characters: [],

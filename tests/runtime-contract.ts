@@ -95,6 +95,15 @@ export function runtimeContract(name: string, runtime: WorkflowRuntime, teardown
       await until(() => statusOf(task.id) === 'completed', 'AI 설계 업무 완료');
     });
 
+    await t.test('사용자 승인 단계가 없는 업무는 자동 승인되어 완료된다', async () => {
+      const preview = await runtime.designPlan({ officeId: 'office_welfare', title: '자동 승인', description: '간단히', taskType: '' });
+      const steps = preview.steps.filter((step) => step.kind !== 'approval');
+      const task = await runtime.createTask({ officeId: 'office_welfare', title: '자동 승인', description: '간단히', planMode: 'custom', steps });
+      await until(() => statusOf(task.id) === 'completed', '자동 승인 업무 완료');
+      assert.equal(store.task(task.id).plan.some((step) => step.kind === 'approval'), false);
+      assert.ok(store.task(task.id).value?.recognizedKrw);
+    });
+
     await t.test('일시정지한 직원은 다시 깨울 때까지 단계를 시작하지 않는다', async () => {
       const agents = store.data.agents.filter((a) => a.officeId === 'office_welfare');
       for (const agent of agents) await runtime.pauseAgent(agent.id, true);

@@ -143,7 +143,7 @@ function PlanSection(props: { snapshot: Snapshot; busy: boolean; run: (work: () 
           {site && (
             <div className="site-license small">
               <p>
-                플랜은{' '}
+                {t('플랜은')}{' '}
                 <a href={`${site.url}/account`} target="_blank" rel="noopener">
                   {t('공식 사이트')}
                 </a>

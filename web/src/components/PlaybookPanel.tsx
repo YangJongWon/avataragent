@@ -98,7 +98,7 @@ export function PlaybookPanel(props: { snapshot: Snapshot; office: Office; onErr
       {loaded && (
         <div className="playbook-preview">
           <h4>
-            {loaded.name} <span className="muted small">({TEAMS[loaded.team].name} · {loaded.exportedAt.slice(0, 10)})</span>
+            {loaded.name} <span className="muted small">({t(TEAMS[loaded.team].name)} · {loaded.exportedAt.slice(0, 10)})</span>
           </h4>
           <table className="table">
             <thead>

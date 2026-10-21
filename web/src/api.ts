@@ -1,4 +1,4 @@
-import { t, tpl } from '../../shared/i18n.ts';
+import { currentLanguage, t, tpl, translateMessage } from '../../shared/i18n.ts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DesignKind, DesignReview, ExportFormat } from '../../shared/design.ts';
 import type { Language } from '../../shared/i18n.ts';
@@ -42,7 +42,11 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
   });
   if (res.status === 401) location.assign('/login');
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? tpl('요청 실패 ({status})', { status: res.status }));
+  if (!res.ok) {
+    const message = (data as { error?: string }).error ?? tpl('요청 실패 ({status})', { status: res.status });
+    const translated = translateMessage(message, currentLanguage());
+    throw new Error(currentLanguage() !== 'ko' && translated === message && /[가-힣]/.test(message) ? t('서버 요청을 처리하지 못했어요. 다시 시도해 주세요.') : translated);
+  }
   return data as T;
 }
 
@@ -99,7 +103,8 @@ export const api = {
   applyPlaybook: (officeId: string, body: { playbook: Playbook; includeModel: boolean; acceptWarnings: boolean }) =>
     call<{ changes: PlaybookChange[] }>('POST', `/api/offices/${officeId}/playbook`, body),
   applyImprovement: (officeId: string, id: string) => call('POST', `/api/offices/${officeId}/improvements`, { id }),
-  createOffice: (input: { team: TeamId; name?: string; theme?: string }) => call<Office>('POST', '/api/offices', input),
+  createOffice: (input: { team: TeamId; name?: string; theme?: string }) =>
+    call<Office>('POST', '/api/offices', { ...input, language: currentLanguage() }),
   deleteOffice: (officeId: string) => call('DELETE', `/api/offices/${officeId}`),
   simulateMail: (officeId: string) => call('POST', '/api/sim/mail', { officeId }),
   simulateInquiry: () => call('POST', '/api/sim/inquiry'),
@@ -115,7 +120,7 @@ export const api = {
   updateAgent: (agentId: string, patch: { name?: string; rules?: string; model?: string; skin?: AgentSkin; outfit?: string | null; personality?: Personality; workPolicy?: Agent['workPolicy'] }) =>
     call('PUT', `/api/agents/${agentId}`, patch),
   hireAgent: (officeId: string, body: { role: Role; name?: string; personality?: Personality }) =>
-    call<Agent>('POST', `/api/offices/${officeId}/agents`, body),
+    call<Agent>('POST', `/api/offices/${officeId}/agents`, { ...body, language: currentLanguage() }),
   fireAgent: (agentId: string) => call('DELETE', `/api/agents/${agentId}`),
   setPaused: (agentId: string, paused: boolean) => call('POST', `/api/agents/${agentId}/pause`, { paused }),
   updateBudget: (patch: { monthlyKrw?: number; hourlyRateKrw?: number }) => call('PUT', '/api/budget', patch),

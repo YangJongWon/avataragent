@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { isTimeZone, MAX_SCHEDULES_PER_OFFICE, nextRunAfter, parseRepeat } from '../shared/schedule.ts';
 import type { PlanMode, ScheduledTask, Task, WorkflowStepInput } from '../shared/types.ts';
+import { isTeamTaskType } from '../shared/teams.ts';
 import { agentAvailability } from '../shared/work-policy.ts';
 import { importMail } from './mail-sync.ts';
 import { store } from './store.ts';
@@ -105,12 +106,14 @@ async function skipReason(schedule: ScheduledTask, now: Date, due: boolean): Pro
     const availability = manager && agentAvailability(manager, now);
     if (availability && !availability.available && availability.reason === 'schedule') return V('근무 시간이 아니라 건너뛰었어요.');
   }
-  if (office.team === 'hr') {
+  // Only the team's own type reads its mailbox or inquiries; a general type (a job posting, say) needs neither.
+  const ownType = isTeamTaskType(office.team, schedule.taskType);
+  if (office.team === 'hr' && ownType) {
     const sources = office.gmailServerId || store.data.mailAccounts.some((a) => a.officeId === office.id);
     if (sources) await importMail(office.id).catch((e) => console.error(`[schedule] ${office.name}:`, e instanceof Error ? e.message : e));
     if (!store.data.mailbox.some((m) => m.officeId === office.id && !m.processed)) return V('새 메일이 없어 건너뛰었어요.');
   }
-  if (office.team === 'support' && !store.data.inquiries.some((q) => q.status === 'new')) return V('새 문의가 없어 건너뛰었어요.');
+  if (office.team === 'support' && ownType && !store.data.inquiries.some((q) => q.status === 'new')) return V('새 문의가 없어 건너뛰었어요.');
   return null;
 }
 

@@ -42,3 +42,11 @@ test('잠긴 단계는 옮기거나 지울 수 없고, 꼭 필요한 단계도 �
   assert.equal(removed[2].loop?.to, 1);
   assert.equal(validatePlan(removed, agents), null);
 });
+
+test('사용자 승인 단계를 빼면 유효한 자동 승인 흐름이 된다', () => {
+  const withoutApproval = removeStep(plan(), 4);
+  assert.equal(canRemove(plan(), 4), true);
+  assert.deepEqual(withoutApproval.map((s) => s.kind), ['brief', 'research', 'draft', 'review']);
+  assert.equal(validatePlan(withoutApproval, agents), null);
+  assert.equal(insertIndex(withoutApproval, 'review', null), withoutApproval.length);
+});

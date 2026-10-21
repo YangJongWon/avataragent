@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { TEAM_ORDER, TEAMS } from '../../../shared/teams.ts';
+import { GENERAL_TASK_TYPES, TASK_CATEGORIES } from '../../../shared/task-types.ts';
+import { isTeamTaskType, TEAM_ORDER, TEAMS } from '../../../shared/teams.ts';
 import type { Agent, Office, PlanMode, SavedFlow, Task, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
 import { loopTargetLabel, STEP_KIND, templatePlan, validatePlan } from '../../../shared/workflow.ts';
 import { api } from '../api.ts';
@@ -13,7 +14,17 @@ import { PlanEditor } from './PlanEditor.tsx';
 import { browserTimeZone, repeatOf, ScheduleFields, useScheduleDraft } from './ScheduleFields.tsx';
 import { AgentPortrait } from './AgentPortrait.tsx';
 
-export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({
+  title,
+  onClose,
+  children,
+  footer,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+  footer?: ReactNode;
+}) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
@@ -28,7 +39,8 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
             ✕
           </button>
         </div>
-        {children}
+        <div className="modal-body">{children}</div>
+        {footer != null && <div className="modal-foot">{footer}</div>}
       </div>
     </div>
   );
@@ -39,19 +51,19 @@ interface ErrorProp {
 }
 
 const TITLE_PLACEHOLDER: Record<TeamId, string> = {
-  dev: t('예: 사내 AI 코딩 도구 도입 검토'),
-  hr: t('비워 두면 "메일함 정리와 일정 등록"'),
-  mgmt: t('비워 두면 "이번 달 AI 예산 배분안"'),
-  support: t('비워 두면 "고객 문의 답변 초안"'),
-  welfare: t('비워 두면 "이번 주 휴식·문화생활 추천"'),
+  dev: '예: 사내 AI 코딩 도구 도입 검토',
+  hr: '비워 두면 "메일함 정리와 일정 등록"',
+  mgmt: '비워 두면 "이번 달 AI 예산 배분안"',
+  support: '비워 두면 "고객 문의 답변 초안"',
+  welfare: '비워 두면 "이번 주 휴식·문화생활 추천"',
 };
 
 const DESCRIPTION_PLACEHOLDER: Record<TeamId, string> = {
-  dev: t('수집할 자료, 분석 관점, 꼭 들어가야 할 내용을 적으면 직원이 덜 곤란해해요.'),
-  hr: t('예: 면접 관련 메일은 우선 처리해 줘'),
-  mgmt: t('예: 이번 달은 서포터팀에 여유를 더 줘'),
-  support: t('예: 환불 문의는 정책 안내만 하고 확정하지 마'),
-  welfare: t('예: 이번 주말은 집에서 쉬고 싶어'),
+  dev: '수집할 자료, 분석 관점, 꼭 들어가야 할 내용을 적으면 직원이 덜 곤란해해요.',
+  hr: '예: 면접 관련 메일은 우선 처리해 줘',
+  mgmt: '예: 이번 달은 서포터팀에 여유를 더 줘',
+  support: '예: 환불 문의는 정책 안내만 하고 확정하지 마',
+  welfare: '예: 이번 주말은 집에서 쉬고 싶어',
 };
 
 export function NewOfficeModal({
@@ -89,9 +101,9 @@ export function NewOfficeModal({
         {TEAM_ORDER.map((id) => (
           <button key={id} type="button" className={`team-pick-option ${team === id ? 'selected' : ''}`} style={{ background: team === id ? TEAMS[id].wall : undefined }} onClick={() => setTeam(id)}>
             <b>
-              {TEAMS[id].emoji} {TEAMS[id].name}
+              {TEAMS[id].emoji} {t(TEAMS[id].name)}
             </b>
-            <span className="small muted">{TEAMS[id].description}</span>
+            <span className="small muted">{t(TEAMS[id].description)}</span>
           </button>
         ))}
       </div>
@@ -102,7 +114,7 @@ export function NewOfficeModal({
       )}
       <label className="field">
         {t('사무실 이름 (선택)')}
-        <input value={name} maxLength={20} onChange={(e) => setName(e.target.value)} placeholder={tpl('비워 두면 "{v} 2" 같은 이름', { v: TEAMS[team].name })} />
+        <input value={name} maxLength={20} onChange={(e) => setName(e.target.value)} placeholder={tpl('비워 두면 "{v} 2" 같은 이름', { v: t(TEAMS[team].name) })} />
       </label>
       {themes.length > 0 && (
         <label className="field">
@@ -139,7 +151,8 @@ function PlanChain({ steps, agents }: { steps: WorkflowStepInput[]; agents: Agen
           <span className="muted"> · {s.kind === 'approval' ? t('나') : (agents.find((a) => a.id === s.agentId)?.name ?? '?')}</span>
           {s.loop && (
             <span className="plan-chain-loop">
-              🔁 {t(s.loop.when)} → {t(loopTargetLabel(steps, i, s.loop))} ({tpl('최대 {n}회', { n: s.loop.max })})
+              🔁 {t(s.loop.when)} → {t(loopTargetLabel(steps, i, s.loop))}
+              {s.loop.max != null ? ` (${tpl('최대 {n}회', { n: s.loop.max })})` : ''}
             </span>
           )}
         </li>
@@ -215,7 +228,8 @@ export function NewTaskModal({
     setPlanNote(flow.note);
     setPicking(false);
   };
-  const noInput = team.inputLabel !== null && pendingCount === 0;
+  const ownType = isTeamTaskType(office.team, taskType);
+  const noInput = team.inputLabel !== null && ownType && pendingCount === 0;
   const planError = planMode === 'custom' ? validatePlan(steps, agents) : null;
 
   const changeType = (id: string) => {
@@ -279,21 +293,34 @@ export function NewTaskModal({
   };
 
   return (
-    <Modal title={tpl('📌 {emoji} {name} 칠판에 업무 등록', { emoji: team.emoji, name: team.name })} onClose={onClose}>
-      <p className="muted small">{team.description}</p>
+    <Modal
+      title={tpl('📌 {emoji} {name} 칠판에 업무 등록', { emoji: team.emoji, name: t(team.name) })}
+      onClose={onClose}
+      footer={
+        <div className="row end">
+          <button className="pixel-btn" onClick={onClose}>
+            {t('취소')}
+          </button>
+          <button className="pixel-btn primary" disabled={busy || (noInput && !repeat) || Boolean(planError) || (titleRequired && !title.trim())} onClick={submit}>
+            {repeat ? `⏰ ${t('예약하기')}` : willQueue ? t('대기열에 추가') : t('칠판에 붙이기')}
+          </button>
+        </div>
+      }
+    >
+      <p className="muted small">{t(team.description)}</p>
       {willQueue && (
         <p className="small">
           {tpl('지금 진행 중인 업무가 있어서 대기열 {v}번째로 들어가요. 앞 업무가 끝나면 자동으로 시작해요.', { v: queuedCount + 1 })}
         </p>
       )}
-      {team.inputLabel && (
+      {team.inputLabel && ownType && (
         <p className={`small ${noInput ? 'neg' : ''}`}>
           {tpl('{label}: {n}건', { label: t(team.inputLabel ?? ''), n: pendingCount })}{noInput ? t(' — 팀 자료 탭에서 새 항목을 받아 오세요.') : ''}
         </p>
       )}
       <label className="field">
         {t('업무 제목')}{titleRequired ? '' : t(' (선택)')}
-        <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={TITLE_PLACEHOLDER[office.team]} />
+        <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t(TITLE_PLACEHOLDER[office.team])} />
       </label>
       <label className="field">
         {t('요청 내용 (선택)')}
@@ -301,7 +328,7 @@ export function NewTaskModal({
           rows={3}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder={DESCRIPTION_PLACEHOLDER[office.team]}
+          placeholder={t(DESCRIPTION_PLACEHOLDER[office.team])}
         />
       </label>
       <div className="row assist-row">
@@ -350,21 +377,28 @@ export function NewTaskModal({
         <select value={milestoneId} onChange={(e) => setMilestoneId(e.target.value)}>
           <option value="">{t('진행률에 포함하지 않음')}</option>
           {(office.milestones ?? []).map((milestone) => (
-            <option key={milestone.id} value={milestone.id}>{milestone.label} · {tpl('전체의 {n}%', { n: milestone.weight })}</option>
+            <option key={milestone.id} value={milestone.id}>{t(milestone.label)} · {tpl('전체의 {n}%', { n: milestone.weight })}</option>
           ))}
         </select>
       </label>
       <label className="field">
         {t('업무 유형 (여정 바로가기)')}
         <select value={taskType} onChange={(e) => changeType(e.target.value)}>
-          {team.taskTypes.map((entry) => {
-            const hours = entry.standardHours + (entry.hoursPerItem ?? 0) * Math.max(1, pendingCount);
-            return (
-              <option key={entry.id} value={entry.id}>
-                {t(entry.label)} ({tpl('사람 기준 {hours}시간 = {money}', { hours: Math.round(hours * 10) / 10, money: krw(hours * hourlyRateKrw) })})
-              </option>
-            );
-          })}
+          {[
+            { id: 'team', label: tpl('{team}의 업무', { team: t(team.name) }), types: team.taskTypes },
+            ...TASK_CATEGORIES.map((category) => ({ id: category.id, label: t(category.label), types: GENERAL_TASK_TYPES.filter((type) => type.category === category.id) })),
+          ].map((group) => (
+            <optgroup key={group.id} label={group.label}>
+              {group.types.map((entry) => {
+                const hours = entry.standardHours + (entry.hoursPerItem ?? 0) * Math.max(1, pendingCount);
+                return (
+                  <option key={entry.id} value={entry.id}>
+                    {t(entry.label)} ({tpl('사람 기준 {hours}시간 = {money}', { hours: Math.round(hours * 10) / 10, money: krw(hours * hourlyRateKrw) })})
+                  </option>
+                );
+              })}
+            </optgroup>
+          ))}
         </select>
       </label>
       <div className="field">
@@ -407,7 +441,6 @@ export function NewTaskModal({
           onError={onError}
         />
       )}
-      <div className="plan-scroll">
       {planMode === 'template' && <PlanChain steps={steps} agents={agents} />}
       {planMode === 'ai' && (
         <div className="callout plan-ai">
@@ -436,16 +469,7 @@ export function NewTaskModal({
           </button>
         </>
       )}
-      </div>
       <ScheduleFields draft={schedule} onChange={setSchedule} />
-      <div className="row end">
-        <button className="pixel-btn" onClick={onClose}>
-          {t('취소')}
-        </button>
-        <button className="pixel-btn primary" disabled={busy || (noInput && !repeat) || Boolean(planError) || (titleRequired && !title.trim())} onClick={submit}>
-          {repeat ? `⏰ ${t('예약하기')}` : willQueue ? t('대기열에 추가') : t('칠판에 붙이기')}
-        </button>
-      </div>
     </Modal>
   );
 }
@@ -531,7 +555,8 @@ export function RulesModal({
 
   const save = async () => {
     try {
-      await api.updateAgent(agent.id, { rules });
+      const savedRules = agent.sourceRules && rules === agent.rules ? agent.sourceRules : rules;
+      await api.updateAgent(agent.id, { rules: savedRules });
       onClose();
     } catch (e) {
       onError(e instanceof Error ? e.message : String(e));

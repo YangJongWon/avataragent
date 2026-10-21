@@ -73,11 +73,24 @@ function officeIdOfEvent(event: OfficeEvent, snapshot: Snapshot) {
 export function App() {
   const { t, language } = useLanguage();
   const { snapshot: rawSnapshot, events, connected, onEvent } = useOffice();
-  // 기본 직원 이름은 나라별 이름으로 보여 준다. 직접 지은 이름은 그대로 두고, 원래 이름은 sourceName에 남긴다.
-  const snapshot = useMemo(
-    () => (rawSnapshot ? { ...rawSnapshot, agents: rawSnapshot.agents.map((a) => (t(a.name) === a.name ? a : { ...a, name: t(a.name), sourceName: a.name })) } : rawSnapshot),
-    [rawSnapshot, language, t],
-  );
+  // 기본 이름·규칙은 화면 언어로 보여 준다. 직접 지은 값은 그대로 두고, 원문은 source* 에 남긴다.
+  const snapshot = useMemo(() => {
+    if (!rawSnapshot) return rawSnapshot;
+    return {
+      ...rawSnapshot,
+      safetyRules: rawSnapshot.safetyRules.map((rule) => t(rule)),
+      agents: rawSnapshot.agents.map((a) => {
+        const name = t(a.name);
+        const rules = t(a.rules);
+        if (name === a.name && rules === a.rules) return a;
+        return {
+          ...a,
+          ...(name !== a.name ? { name, sourceName: a.name } : {}),
+          ...(rules !== a.rules ? { rules, sourceRules: a.rules } : {}),
+        };
+      }),
+    };
+  }, [rawSnapshot, language, t]);
   const [tab, setTab] = useState<Tab>('office');
   const [officeId, setOfficeId] = useState('office_dev');
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -289,6 +302,14 @@ export function App() {
     setSelectedTaskId(null);
     setDialog(null);
   };
+  const goHome = () => {
+    const homeId = snapshot.offices.some((o) => o.id === 'office_dev') ? 'office_dev' : snapshot.offices[0].id;
+    setTab('office');
+    switchOffice(homeId);
+    setShowHelp(false);
+    setTabMenu(null);
+    setDrawer(null);
+  };
 
   const closeOffice = async (id: string, name: string) => {
     if (!window.confirm(tpl('"{name}" 사무실을 닫을까요? 직원과 업무 기록이 함께 사라져요.', { name }))) return;
@@ -480,9 +501,9 @@ export function App() {
   return (
     <div className="app" {...themePack.attrs}>
         <header className="topbar">
-          <div className="brand">
+          <button type="button" className="brand" title={t('처음 사무실로')} onClick={goHome}>
             {planHas(snapshot.plan, 'companyLogo') ? <img className="brand-logo" src={snapshot.companyLogo ?? '/company-logo.png'} alt="" /> : '🏢'} {t(snapshot.companyName)}
-          </div>
+          </button>
           <nav className="main-tabs">
             {(
               [

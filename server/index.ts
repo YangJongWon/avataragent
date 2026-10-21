@@ -35,7 +35,7 @@ import { isPersonality } from '../shared/personality.ts';
 import { parsePlaybook, playbookChanges } from '../shared/playbook.ts';
 import { parseFlowPack } from '../shared/flow-pack.ts';
 import { isPlan, planHas, planOf } from '../shared/plans.ts';
-import { isLanguage, type Language } from '../shared/i18n.ts';
+import { isLanguage, translate, type Language } from '../shared/i18n.ts';
 import { isQuote, krwJpyRate, krwRate } from './exchange-rate.ts';
 import { exportActivity } from './activity.ts';
 import { applyLicense, billingInfo, billingProvider, billingTick, cancelSubscription, completeMockCheckout, handleWebhook, resumeSubscription, startCheckout } from './billing.ts';
@@ -150,13 +150,14 @@ app.put('/api/tasks/:id/plan', async (req, res) => {
 
 app.post('/api/offices', (req, res) => {
   guard(res, 'owner');
-  const { team, name, theme } = req.body ?? {};
+  const { team, name, theme, language } = req.body ?? {};
   if (typeof team !== 'string' || !(team in TEAMS)) throw new Error('팀 종류를 선택해 주세요.');
   if (theme !== undefined && !isUsableTheme(theme)) throw new Error('설치되지 않은 테마예요.');
   const meta = TEAMS[team as TeamId];
   const sameTeam = store.data.offices.filter((o) => o.team === team).length;
-  const title = typeof name === 'string' && name.trim() ? name.trim().slice(0, 20) : `${meta.name} ${sameTeam + 1}`;
-  let office = store.addOffice(team as TeamId, title);
+  const displayLanguage = isLanguage(language) ? language : 'ko';
+  const title = typeof name === 'string' && name.trim() ? name.trim().slice(0, 20) : `${translate(meta.name, displayLanguage)} ${sameTeam + 1}`;
+  let office = store.addOffice(team as TeamId, title, displayLanguage);
   if (theme && theme !== store.data.theme) {
     store.updateOffice(office.id, (o) => {
       o.theme = theme;
@@ -658,12 +659,12 @@ app.put('/api/agents/:id', (req, res) => {
 
 app.post('/api/offices/:id/agents', (req, res) => {
   guard(res, 'manage', req.params.id);
-  const { role, name, model, skin, personality } = req.body ?? {};
+  const { role, name, model, skin, personality, language } = req.body ?? {};
   if (!['manager', 'researcher', 'writer', 'reviewer'].includes(role)) throw new Error('알 수 없는 역할입니다.');
   if (model !== undefined && !isModelId(model)) throw new Error('알 수 없는 모델입니다.');
   if (skin !== undefined && !isUsableSkin(skin)) throw new Error('알 수 없는 스킨입니다.');
   if (personality !== undefined && !isPersonality(personality)) throw new Error('알 수 없는 성격이에요.');
-  const agent = store.hireAgent(req.params.id, role, typeof name === 'string' ? name : undefined);
+  const agent = store.hireAgent(req.params.id, role, typeof name === 'string' ? name : undefined, isLanguage(language) ? language : 'ko');
   if (model !== undefined || skin !== undefined || personality !== undefined) {
     store.updateAgent(agent.id, { ...(model ? { model } : {}), ...(skin ? { skin } : {}), ...(personality ? { personality } : {}) });
   }

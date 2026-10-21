@@ -1,5 +1,6 @@
 import { tpl } from '../../../shared/i18n.ts';
 import { useState } from 'react';
+import { categoryLabel, GENERAL_TASK_TYPES } from '../../../shared/task-types.ts';
 import { TEAM_ORDER, TEAMS } from '../../../shared/teams.ts';
 import type { Snapshot } from '../../../shared/types.ts';
 import { api } from '../api.ts';
@@ -155,6 +156,17 @@ export function ProfitTab({ snapshot, onError, onNotice }: { snapshot: Snapshot;
                   </tr>
                 )),
               )}
+              {GENERAL_TASK_TYPES.map((taskType) => (
+                <tr key={`general-${taskType.id}`}>
+                  <td>
+                    🗂 {t(categoryLabel(taskType.category))} · {t(taskType.label)}
+                  </td>
+                  <td className="num">
+                    {taskType.standardHours}{t('시간')}
+                  </td>
+                  <td className="num">{krw(taskType.standardHours * budget.hourlyRateKrw)}~</td>
+                </tr>
+              ))}
             </tbody>
           </table>
           <p className="muted small">{t('인정 가치 = 기준 가치 × 품질 보정(검수 점수에 따라 0.7~1.2) × 사용자 평가(그대로 승인 100%, 수정 요청 후 승인 70%). 실제 회계 수치가 아닌 참고 지표예요.')}</p>
