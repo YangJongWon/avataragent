@@ -56,11 +56,15 @@ export function parseServerIds(value: unknown): string[] | undefined {
   return [...new Set(value.filter((id): id is string => typeof id === 'string' && id.length > 0))].slice(0, SKILL_LIMITS.servers);
 }
 
+/** An OpenRouter model id such as "openai/gpt-image-1-mini"; anything else is dropped. */
+export const parseImageModel = (value: unknown) => (typeof value === 'string' && /^[\w.-]+\/[\w.:-]+$/.test(value) && value.length <= 100 ? value : undefined);
+
 /** The step's optional fields, set only when they say something, so a plain step stays plain. */
-export function stepExtras(value: { skills?: unknown; mcpServerIds?: unknown }) {
+export function stepExtras(value: { kind?: unknown; skills?: unknown; mcpServerIds?: unknown; imageModel?: unknown }) {
   const skills = parseSkills(value.skills);
   const mcpServerIds = parseServerIds(value.mcpServerIds);
-  return { ...(skills.length ? { skills } : {}), ...(mcpServerIds ? { mcpServerIds } : {}) };
+  const imageModel = value.kind === 'draft' ? parseImageModel(value.imageModel) : undefined;
+  return { ...(skills.length ? { skills } : {}), ...(mcpServerIds ? { mcpServerIds } : {}), ...(imageModel ? { imageModel } : {}) };
 }
 
 /** The skills as a prompt block. They guide how to work; they never outrank the request or the safety rules. */

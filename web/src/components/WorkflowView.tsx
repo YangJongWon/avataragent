@@ -16,7 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { t, tpl } from '../../../shared/i18n.ts';
 import { TEAMS } from '../../../shared/teams.ts';
-import type { McpServer } from '../../../shared/mcp.ts';
+import type { StepServer } from './StepExtras.tsx';
 import type { Agent, SavedFlow, StepKind, StepLoop, StepStatus, Task, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
 import { lockedStepCount, loopOpen, loopTargetLabel, PLAN_EDITABLE_STATUSES, planModeLabel, STEP_KIND, validatePlan } from '../../../shared/workflow.ts';
 import { flowFromPlan, type FlowPack } from '../../../shared/flow-pack.ts';
@@ -90,7 +90,7 @@ const nodeTypes = { step: StepNode };
 export interface WorkflowEditing {
   officeId: string;
   /** MCP servers the office may use, for steps that name their own; the owner sees them. */
-  servers?: McpServer[];
+  servers?: StepServer[];
   flows: SavedFlow[];
   canManageFlows: boolean;
   /** Only the owner keeps the saved-flow list, so only they can keep a journey for next time. */
@@ -119,7 +119,7 @@ type Layout = Record<string, Box>;
 type ShownStep = WorkflowStepInput & { id: string; status: StepStatus; loop: StepLoop | null };
 
 const inputsOf = (task: Task): WorkflowStepInput[] =>
-  task.plan.map(({ kind, label, agentId, instructions, loop, parallel, skills, mcpServerIds }) => ({
+  task.plan.map(({ kind, label, agentId, instructions, loop, parallel, skills, mcpServerIds, imageModel }) => ({
     kind,
     label,
     agentId,
@@ -128,6 +128,7 @@ const inputsOf = (task: Task): WorkflowStepInput[] =>
     ...(parallel ? { parallel: true } : {}),
     ...(skills?.length ? { skills } : {}),
     ...(mcpServerIds ? { mcpServerIds } : {}),
+    ...(imageModel ? { imageModel } : {}),
   }));
 
 function shownSteps(task: Task, draft: WorkflowStepInput[] | null, locked: number): ShownStep[] {

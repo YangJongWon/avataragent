@@ -172,17 +172,44 @@ export async function callToolData(server: McpServer, name: string, args: Record
   }
 }
 
-/** Calls a tool and returns its text output, trimmed for the prompt. */
-export async function callTool(server: McpServer, name: string, args: Record<string, unknown>): Promise<string> {
+/** A binary part of a tool result (an image, audio, or a file resource), handed over to be kept with the task. */
+export interface ToolFile {
+  name: string;
+  mime: string;
+  data: Buffer;
+}
+
+type Part = { type?: string; text?: string; data?: string; mimeType?: string; resource?: { text?: string; uri?: string; blob?: string; mimeType?: string } };
+
+/** The file in a part, if it carries one. */
+function fileOf(part: Part, tool: string, index: number): ToolFile | null {
+  const base64 = part.type === 'image' || part.type === 'audio' ? part.data : part.type === 'resource' ? part.resource?.blob : undefined;
+  if (!base64) return null;
+  const mime = (part.type === 'resource' ? part.resource?.mimeType : part.mimeType) || 'application/octet-stream';
+  const fromUri = part.resource?.uri?.split(/[/?#]/).filter(Boolean).pop();
+  const ext = mime.split('/')[1]?.replace('jpeg', 'jpg').replace(/[^\w]/g, '') || 'bin';
+  return { name: fromUri && fromUri.includes('.') ? fromUri : `${tool}-${index + 1}.${ext}`, mime, data: Buffer.from(base64, 'base64') };
+}
+
+/**
+ * Calls a tool and returns its text output, trimmed for the prompt. Images, audio and file resources go to `onFile`
+ * when given; the text then says what was saved.
+ */
+export async function callTool(server: McpServer, name: string, args: Record<string, unknown>, onFile?: (file: ToolFile) => string | null): Promise<string> {
   let conn: Connection | undefined;
   try {
     conn = await connection(server);
     const result = await withTimeout(conn.client.callTool({ name, arguments: args }), config.mcpTimeoutMs, `${server.name} ${name}`);
     const parts = Array.isArray(result.content) ? result.content : [];
     const text = parts
-      .map((part: { type?: string; text?: string; resource?: { text?: string; uri?: string } }) =>
-        part.type === 'text' ? part.text : part.type === 'resource' ? (part.resource?.text ?? part.resource?.uri) : `[${part.type}]`,
-      )
+      .map((part: Part, index: number) => {
+        const file = onFile ? fileOf(part, name, index) : null;
+        if (file) {
+          const saved = onFile!(file);
+          return saved ? `[파일 저장: ${saved}]` : `[파일이 너무 커서 저장하지 못했어요: ${file.name}]`;
+        }
+        return part.type === 'text' ? part.text : part.type === 'resource' ? (part.resource?.text ?? part.resource?.uri) : `[${part.type}]`;
+      })
       .filter(Boolean)
       .join('\n')
       .slice(0, MAX_RESULT_CHARS);

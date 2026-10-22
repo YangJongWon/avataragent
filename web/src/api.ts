@@ -149,6 +149,9 @@ export const api = {
   exportCapabilities: () => call<ExportCapabilities>('GET', '/api/export-capabilities'),
   askHelp: (question: string, tab: string, officeId: string | undefined, history: HelpTurn[]) =>
     call<HelpAnswer>('POST', '/api/help', { question, tab, officeId, history }),
+  imageModels: () => call<{ models: { id: string; name: string }[]; defaultModel: string }>('GET', '/api/image-models'),
+  fileUrl: (taskId: string, fileId: string, inline = false) => `/api/tasks/${taskId}/files/${fileId}${inline ? '?inline=1' : ''}`,
+  removeFile: (taskId: string, fileId: string) => call('DELETE', `/api/tasks/${taskId}/files/${fileId}`),
   exportUrl: (taskId: string, format: ExportFormat, print = false) =>
     `/api/tasks/${taskId}/export?format=${format}${print ? '&print=1' : ''}`,
   exportFile: async (taskId: string, format: ExportFormat) => {

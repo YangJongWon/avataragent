@@ -21,7 +21,8 @@ export interface CompletionRequest {
 }
 
 export interface Attachment {
-  mime: 'application/pdf';
+  /** A PDF, or an image for a model that can see (a reviewer looking at generated images). */
+  mime: 'application/pdf' | 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
   name: string;
   data: Buffer;
 }
@@ -280,7 +281,11 @@ async function openaiCompatibleOnce(endpoint: Endpoint, model: string, req: Comp
           role: 'user',
           content: req.attachments?.length
             ? [
-                ...req.attachments.map((a) => ({ type: 'file', file: { filename: a.name, file_data: `data:${a.mime};base64,${a.data.toString('base64')}` } })),
+                ...req.attachments.map((a) =>
+                  a.mime.startsWith('image/')
+                    ? { type: 'image_url', image_url: { url: `data:${a.mime};base64,${a.data.toString('base64')}` } }
+                    : { type: 'file', file: { filename: a.name, file_data: `data:${a.mime};base64,${a.data.toString('base64')}` } },
+                ),
                 { type: 'text', text: req.user },
               ]
             : req.user,
@@ -313,7 +318,7 @@ async function anthropic(endpoint: Endpoint, model: string, req: CompletionReque
         {
           role: 'user',
           content: [
-            ...(req.attachments ?? []).map((a) => ({ type: 'document', source: { type: 'base64', media_type: a.mime, data: a.data.toString('base64') } })),
+            ...(req.attachments ?? []).map((a) => ({ type: a.mime.startsWith('image/') ? 'image' : 'document', source: { type: 'base64', media_type: a.mime, data: a.data.toString('base64') } })),
             { type: 'text', text: req.user },
           ],
         },

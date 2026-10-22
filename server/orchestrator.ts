@@ -3,7 +3,7 @@ import { splitDraft } from '../shared/draft.ts';
 import { isTeamTaskType, taskTypeOf, TEAMS } from '../shared/teams.ts';
 import type { Agent, Artifact, Expression, Role, StepStatus, Task, TeamId, WorkflowStep, WorkflowStepInput } from '../shared/types.ts';
 import { lockedStepCount, loopOpen, normalizePlan, parseLoop, PLAN_EDITABLE_STATUSES, remapLoops, STEP_KIND, templatePlan, validatePlan, parallelGroup, majorityApproves } from '../shared/workflow.ts';
-import { usableBy, type McpServer, type McpTool, type McpToolMode, type PlannedAction } from '../shared/mcp.ts';
+import { stepTools, usableBy, type McpServer, type McpTool, type McpToolMode, type PlannedAction } from '../shared/mcp.ts';
 import { skillPrompt, stepExtras } from '../shared/step-extras.ts';
 import { modelOf, tierScale } from '../shared/models.ts';
 import {
@@ -20,6 +20,8 @@ import { personalityOf, type Personality } from '../shared/personality.ts';
 import { complete, costKrw, parseJson, type Attachment, type Purpose } from './ai.ts';
 import { config, ORGANIZATION_SAFETY_RULES } from './config.ts';
 import { callTool } from './mcp.ts';
+import { extOf, readTaskFile, removeTaskFiles, saveTaskFile, syncDraftFiles } from './task-files.ts';
+import { generateImage, MAX_IMAGES_PER_STEP } from './images.ts';
 import { nextInquiry, nextMail } from './seed.ts';
 import { store } from './store.ts';
 import { L, LT, V } from './text.ts';
@@ -202,8 +204,12 @@ export async function callAI(agent: Agent, task: Task | null, purpose: Purpose, 
   const startedAt = Date.now();
   const result = await complete({ purpose, system: systemPrompt(current, task), user, json, model, mockText: styledMock, attachments });
   const elapsedMs = Date.now() - startedAt;
-  const amount = costKrw(result, model);
+  charge(agent, taskId, costKrw(result, model), purpose, result.inputTokens, result.outputTokens, elapsedMs);
+  return result.text;
+}
 
+/** Books what an AI call cost on the task, the staff member, the office and the month's budget. */
+function charge(agent: Agent, taskId: string | undefined, amount: number, purpose: string, inputTokens = 0, outputTokens = 0, elapsedMs = 0) {
   if (taskId) {
     store.updateTask(taskId, (t) => {
       t.costKrw += amount;
@@ -214,19 +220,15 @@ export async function callAI(agent: Agent, task: Task | null, purpose: Purpose, 
   const dailyUsage = latest.dailyUsage.date === usageDate(latest.workPolicy) ? latest.dailyUsage : freshDailyUsage(latest.workPolicy);
   store.updateAgent(agent.id, {
     costKrw: latest.costKrw + amount,
-    dailyUsage: { ...dailyUsage, tokens: dailyUsage.tokens + result.inputTokens + result.outputTokens, workMs: dailyUsage.workMs + elapsedMs },
+    dailyUsage: { ...dailyUsage, tokens: dailyUsage.tokens + inputTokens + outputTokens, workMs: dailyUsage.workMs + elapsedMs },
   });
-  store.updateOffice(office.id, (o) => {
+  store.updateOffice(agent.officeId, (o) => {
     o.spentKrw += amount;
   });
   store.updateBudget((b) => {
     b.spentKrw += amount;
   });
-  store.emit('cost.recorded', {
-    taskId,
-    agentId: agent.id,
-    payload: { amountKrw: amount, inputTokens: result.inputTokens, outputTokens: result.outputTokens, purpose },
-  });
+  store.emit('cost.recorded', { taskId, agentId: agent.id, payload: { amountKrw: amount, inputTokens, outputTokens, purpose } });
   enforceWorkPolicies();
 
   const after = store.budget;
@@ -236,7 +238,80 @@ export async function callAI(agent: Agent, task: Task | null, purpose: Purpose, 
     });
     store.emit('budget.threshold_reached', { agentId: agent.id, payload: { ratio: 0.8, spentKrw: after.spentKrw } });
   }
-  return result.text;
+}
+
+const IMAGE_BLOCK = /```images\s*\n([\s\S]*?)```/;
+const IMAGE_ASK = (max: number, model: string) =>
+  [
+    `이 단계는 그림도 만든다. 그림은 이미지 모델 ${model}이 그린다(다른 도구 이름을 지어내지 않는다). 결과물 맨 끝에 \`\`\`images 코드블록으로 만들 그림을 JSON 배열로 적어라 (최대 ${max}개, 요청에 개수가 있으면 그 개수).`,
+    '형식: [{"name": "짧은 파일 이름", "prompt": "영어로 쓴 구체적인 그림 설명 (주제, 구도, 스타일, 색감, 글자 여부)", "aspect_ratio": "1:1"}]',
+    'aspect_ratio는 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3 중 하나. 이 블록은 그림을 만드는 데만 쓰이고 결과물에서는 빠진다.',
+  ].join('\n');
+
+/**
+ * Draws the pictures a draft asks for in its images block with the step's image model, keeps them as task files and
+ * puts them in the result in place of the block. A picture that fails is noted in the result; the rest still come.
+ */
+async function drawImages(taskId: string, writer: Agent, step: WorkflowStep, draft: string) {
+  const task = store.task(taskId);
+  const block = draft.match(IMAGE_BLOCK);
+  const raw = parseJson(block?.[1] ?? '[]', [] as unknown[]);
+  const asked = (Array.isArray(raw) ? raw : [])
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && typeof (item as { prompt?: unknown }).prompt === 'string')
+    .slice(0, MAX_IMAGES_PER_STEP);
+  // A writer that left the block out is asked once more for just the list, from what it wrote.
+  const listed = asked.length ? asked : await listImages(writer, task, draft);
+  const wanted = listed.length ? listed : [{ name: task.title, prompt: [task.title, task.description].filter(Boolean).join('. ') }];
+  const body = draft.replace(IMAGE_BLOCK, '').trimEnd();
+  setAgent(writer, 'working', 'focus', V('그림을 그리고 있어요 ({n}장).', { n: wanted.length }));
+  const results = await Promise.all(
+    wanted.map(async (item, i) => {
+      const prompt = String(item.prompt).slice(0, 2000);
+      try {
+        const { image, costUsd } = await generateImage(step.imageModel!, prompt, typeof item.aspect_ratio === 'string' ? item.aspect_ratio : undefined);
+        if (costUsd) charge(writer, taskId, Math.round(costUsd * config.usdKrw * 100) / 100, 'image');
+        const base = String(item.name ?? '').trim().slice(0, 60) || `image-${i + 1}`;
+        const file = saveTaskFile(taskId, { name: `${base}.${extOf(image.mime)}`, mime: image.mime, data: image.data, source: 'image', origin: step.imageModel, agentId: writer.id });
+        return file ? `![${file.name}](/api/tasks/${taskId}/files/${file.id}?inline=1)\n\n_${prompt}_` : `- ⚠ ${L('파일 보관 한도를 넘어 그림을 저장하지 못했어요.')}`;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        store.emit('image.failed', { taskId, agentId: writer.id, payload: { model: step.imageModel, reason } });
+        return `- ⚠ ${reason}`;
+      }
+    }),
+  );
+  store.emit('image.created', { taskId, agentId: writer.id, payload: { model: step.imageModel, count: results.filter((r) => r.startsWith('![')).length } });
+  return `${body}\n\n## ${L('생성한 이미지')}\n\n${results.join('\n\n')}`;
+}
+
+/** The pictures a draft describes, as a list for the image model, when the draft did not give one itself. */
+async function listImages(writer: Agent, task: Task, draft: string) {
+  const raw = await callAI(
+    writer,
+    task,
+    'draft',
+    [
+      `[요청]\n${task.title}\n${task.description}`,
+      `[방금 쓴 결과물]\n${draft.slice(0, 6000)}`,
+      '',
+      `이 결과물에 맞는 그림을 이미지 모델에 맡길 목록으로 만들어라. 최대 ${MAX_IMAGES_PER_STEP}개, 요청에 개수가 있으면 그 개수.`,
+      'prompt는 영어로 구체적으로 쓴다(주제, 구도, 스타일, 색감, 글자 여부). aspect_ratio는 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3 중 하나.',
+      'JSON으로만 답한다: {"images": [{"name": "짧은 파일 이름", "prompt": string, "aspect_ratio": string}]}',
+    ].join('\n'),
+    () => JSON.stringify({ images: [{ name: task.title, prompt: `${task.title}, bright illustration`, aspect_ratio: '1:1' }] }),
+    true,
+  );
+  const parsed = parseJson(raw, { images: [] as Record<string, unknown>[] });
+  return (Array.isArray(parsed.images) ? parsed.images : []).filter((item) => item && typeof item.prompt === 'string').slice(0, MAX_IMAGES_PER_STEP);
+}
+
+/** The pictures a result shows (from its image links), for a reviewer that can look at them. */
+function resultImages(taskId: string, markdown: string): Attachment[] {
+  const ids = [...markdown.matchAll(/\/api\/tasks\/[\w-]+\/files\/(file_[\w]+)/g)].map((m) => m[1]);
+  return ids.slice(0, MAX_IMAGES_PER_STEP).flatMap((id) => {
+    const found = readTaskFile(taskId, id);
+    return found && /^image\/(png|jpeg|webp|gif)$/.test(found.file.mime) ? [{ mime: found.file.mime as Attachment['mime'], name: found.file.name, data: found.data }] : [];
+  });
 }
 
 function addArtifact(taskId: string, agent: Agent, step: WorkflowStep, kind: Artifact['kind'], title: string, content: string) {
@@ -426,11 +501,16 @@ const MAX_TOOL_CALLS = 3;
 
 type OfficeTool = { server: McpServer; tool: McpTool; ref: string };
 
-/** The office's tools in a mode; a step that names its MCP servers gets only theirs. */
-const officeTools = (officeId: string, mode: McpToolMode, step?: WorkflowStepInput): OfficeTool[] =>
-  store.data.mcpServers
-    .filter((server) => usableBy(server, officeId) && (!step?.mcpServerIds || step.mcpServerIds.includes(server.id)))
-    .flatMap((server) => server.tools.filter((tool) => tool.mode === mode).map((tool) => ({ server, tool, ref: `${server.id}/${tool.name}` })));
+/**
+ * The office's tools in a mode. A step that names its MCP servers gets those servers instead, shared or limited to
+ * any office, with every tool that is neither for after approval nor destructive.
+ */
+const officeTools = (officeId: string, mode: McpToolMode, step?: WorkflowStepInput): OfficeTool[] => {
+  const picked = mode === 'auto' ? step?.mcpServerIds : undefined;
+  return store.data.mcpServers
+    .filter((server) => (picked ? server.enabled && picked.includes(server.id) : usableBy(server, officeId)))
+    .flatMap((server) => (picked ? stepTools(server) : server.tools.filter((tool) => tool.mode === mode)).map((tool) => ({ server, tool, ref: `${server.id}/${tool.name}` })));
+};
 
 const toolList = (tools: OfficeTool[]) =>
   tools.map(({ ref, server, tool }) => `- ${ref} (${server.name}): ${tool.description || '(설명 없음)'}\n  인자: ${JSON.stringify(tool.inputSchema)}`);
@@ -511,7 +591,8 @@ async function invokeTool(taskId: string, agent: Agent, server: McpServer, tool:
     });
   };
   try {
-    const output = await callTool(server, tool, args);
+    // Images and other files the tool returns are kept with the task.
+    const output = await callTool(server, tool, args, (file) => saveTaskFile(taskId, { ...file, source: 'mcp', origin: `${server.name} · ${tool}`, agentId: agent.id })?.name ?? null);
     count(false);
     store.emit('mcp.result', { taskId, agentId: agent.id, payload: { ...payload, chars: output.length } });
     return { ok: true as const, output };
@@ -738,12 +819,13 @@ async function draftStep(taskId: string, step: WorkflowStep, attempt: number, cl
       found ? `[이 단계에 지정된 도구로 찾은 내용]\n${found}` : '',
       '',
       spec.draftAsk,
+      step.imageModel ? IMAGE_ASK(MAX_IMAGES_PER_STEP, step.imageModel) : '',
     ]
       .filter(Boolean)
       .join('\n\n'),
     () => spec.mock.draft(store.task(taskId)),
   );
-  addArtifact(taskId, writer, step, 'draft', '초안', draft);
+  addArtifact(taskId, writer, step, 'draft', '초안', step.imageModel ? await drawImages(taskId, writer, step, draft) : draft);
   setStep(taskId, step.id, 'done');
   return true;
 }
@@ -832,12 +914,14 @@ async function reviewStep(taskId: string, step: WorkflowStep, attempt: number, r
   const unscored = researchOf(store.data.performance).filter((r) => r.taskId === taskId && r.accuracy === null);
   const notes = unscored.length ? researchNotes(task).slice(0, 2500) : '';
   const found = await assignedTools(taskId, reviewer, step, `[업무 제목] ${task.title}\n[초안]\n${(latest(task, 'draft')?.content ?? '').slice(0, 3000)}`);
-  const raw = await callAI(
+  const pictures = resultImages(taskId, latest(task, 'draft')?.content ?? '');
+  const ask = (withPictures: boolean) => callAI(
     reviewer,
     task,
     'review',
     [
       `[업무 제목] ${task.title}`,
+      withPictures ? `[첨부한 그림 ${pictures.length}장 - 결과물에 들어간 그림이다. 요청과 맞는지 직접 보고 판단해라]` : pictures.length ? '[결과물의 그림은 볼 수 없다. 그림 설명과 프롬프트가 요청을 반영했는지로 판단해라]' : '',
       `[처리할 자료]\n${task.inputText}`,
       notes ? `[조사 메모]\n${notes}` : '',
       `[초안]\n${latest(task, 'draft')?.content}`,
@@ -865,7 +949,10 @@ async function reviewStep(taskId: string, step: WorkflowStep, attempt: number, r
         ...(notes ? mockResearchVerdict(unscored) : {}),
       }),
     true,
+    withPictures ? pictures : undefined,
   );
+  // A model that cannot take pictures answers an error; the review then goes on from the text.
+  const raw = pictures.length ? await ask(true).catch(() => ask(false)) : await ask(false);
   const parsed = parseJson(raw, {
     approved: true,
     score: 70,
@@ -1099,6 +1186,8 @@ export async function requestApproval(taskId: string, stepId: string) {
     setAgent(manager, 'awaiting_approval', 'normal', V('결과물을 올렸어요. 사용자 승인을 기다리고 있어요.'));
     return;
   }
+  const final = latest(task, 'draft');
+  if (final) syncDraftFiles(taskId, final.content, final.agentId);
   const actions = await planActions(taskId);
   const { json } = splitDraft(latest(task, 'draft')?.content ?? '');
   setStep(taskId, step.id, 'awaiting');
@@ -1321,7 +1410,11 @@ export async function completeTask(taskId: string, valueKrw?: number) {
   if (store.task(taskId).status === 'completed' || completing.has(taskId)) return;
   completing.add(taskId);
   try {
-    if (!store.task(taskId).plan.some((s) => s.kind === 'approval')) await planActions(taskId);
+    if (!store.task(taskId).plan.some((s) => s.kind === 'approval')) {
+      const final = latest(store.task(taskId), 'draft');
+      if (final) syncDraftFiles(taskId, final.content, final.agentId);
+      await planActions(taskId);
+    }
     await runActions(taskId);
     const task = store.task(taskId);
     const manager = agentOf(task, 'manager');
@@ -1500,6 +1593,7 @@ export function cancelTask(taskId: string) {
   store.mutate((s) => {
     s.tasks = s.tasks.filter((t) => t.id !== taskId);
   });
+  removeTaskFiles(taskId);
   store.emit('task.cancelled', { payload: { officeId: task.officeId, title: task.title } });
 }
 
@@ -1516,8 +1610,9 @@ function checkedPlan(officeId: string, steps: unknown) {
     ...(s?.parallel === true ? { parallel: true } : {}),
     ...stepExtras(s ?? {}),
   }));
-  const usable = new Set(store.data.mcpServers.filter((server) => usableBy(server, officeId)).map((server) => server.id));
-  for (const step of inputs) if (step.mcpServerIds) step.mcpServerIds = step.mcpServerIds.filter((id) => usable.has(id));
+  // A step may pick any registered server, shared or limited to another office: picking it is the permission.
+  const known = new Set(store.data.mcpServers.map((server) => server.id));
+  for (const step of inputs) if (step.mcpServerIds) step.mcpServerIds = step.mcpServerIds.filter((id) => known.has(id));
   const error = validatePlan(inputs, officeAgents(officeId));
   if (error) throw new Error(error);
   return inputs;
@@ -1598,7 +1693,8 @@ const sameStep = (a: WorkflowStepInput, b: WorkflowStepInput) =>
   JSON.stringify(a.loop ?? null) === JSON.stringify(b.loop ?? null) &&
   Boolean(a.parallel) === Boolean(b.parallel) &&
   JSON.stringify(a.skills ?? []) === JSON.stringify(b.skills ?? []) &&
-  JSON.stringify(a.mcpServerIds ?? null) === JSON.stringify(b.mcpServerIds ?? null);
+  JSON.stringify(a.mcpServerIds ?? null) === JSON.stringify(b.mcpServerIds ?? null) &&
+  (a.imageModel ?? null) === (b.imageModel ?? null);
 
 /**
  * Replaces a task's journey. A queued task can change everything; a started one (local runtime only,

@@ -159,6 +159,8 @@ export interface WorkflowStepInput {
   skills?: StepSkill[];
   /** MCP servers this step may use. Unset: the office default (every enabled server, while researching). */
   mcpServerIds?: string[];
+  /** Draft only: the OpenRouter image model that draws the pictures the writer asks for. Unset: no pictures. */
+  imageModel?: string;
 }
 
 export interface StepSkill {
@@ -183,6 +185,8 @@ export interface FlowTemplateStep {
   role: Role | null;
   /** Reviews get a loop back to the draft by default; `null` turns that off. */
   loop?: StepLoop | null;
+  /** Draft only: the image model that draws its pictures. */
+  imageModel?: string;
 }
 
 /** A work journey kept for reuse: one of mine, from a file, or installed from the community. */
@@ -202,6 +206,20 @@ export interface TaskTypeEntry {
   hoursPerItem?: number;
   /** Journey shortcut for this type; falls back to the team's stepLabels. */
   flow?: FlowTemplateStep[];
+}
+
+/** A file a task produced, kept on the server beside the office data. */
+export interface TaskFile {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+  /** draft: a code block of the result; mcp: returned by an MCP tool; image: drawn by an image model. */
+  source: 'draft' | 'mcp' | 'image';
+  /** For MCP files, the server and tool that returned it. */
+  origin?: string;
+  agentId?: string;
+  createdAt: string;
 }
 
 export interface Artifact {
@@ -276,6 +294,8 @@ export interface Task {
   actions?: PlannedAction[];
   /** MCP tool calls made for this task, research and approved actions together. */
   toolCalls?: number;
+  /** Files the task produced: code from the result, images and other files MCP tools returned. */
+  files?: TaskFile[];
   /** The person in charge (business plan): 'owner' or a member id. */
   assigneeId?: string | null;
   costKrw: number;

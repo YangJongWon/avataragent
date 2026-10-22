@@ -1,4 +1,5 @@
 import { localize, t, tpl } from '../../../shared/i18n.ts';
+import { TaskFiles } from './TaskFiles.tsx';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { useMemo, useState, type ReactNode } from 'react';
@@ -12,7 +13,7 @@ import { eventLabel, krw, statusLabel, timeOf } from '../format.ts';
 import { ExportBox } from './ExportBox.tsx';
 import { useLanguage } from '../LanguageProvider.tsx';
 
-type Tab = 'team' | 'report' | 'artifacts' | 'reviews' | 'profit' | 'log';
+type Tab = 'team' | 'report' | 'files' | 'artifacts' | 'reviews' | 'profit' | 'log';
 
 interface Props {
   team: TeamId;
@@ -285,6 +286,7 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
           [
             ['team', t('팀 자료')],
             ['report', t('보고서')],
+            ['files', task.files?.length ? `${t('결과 파일')} ${task.files.length}` : t('결과 파일')],
             ['artifacts', t('중간 산출물')],
             ['reviews', t('검수 의견')],
             ['profit', t('손익')],
@@ -317,6 +319,7 @@ export function ReportPanel({ team, teamData, task, tasks, agents, events, canOp
             <p className="muted">{t('아직 보고서 초안이 없어요. 작성자가 쓰는 중입니다.')}</p>
           ))}
 
+        {tab === 'files' && <TaskFiles task={task} agents={agents} canOperate={canOperate} onError={onError} />}
         {tab === 'artifacts' &&
           (task.artifacts.length ? (
             task.artifacts

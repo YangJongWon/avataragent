@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { t, tpl } from '../../../shared/i18n.ts';
 import { TEAMS } from '../../../shared/teams.ts';
-import type { McpServer } from '../../../shared/mcp.ts';
+import type { StepServer } from './StepExtras.tsx';
 import type { Agent, StepKind, StepLoop, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
 import { PARALLEL_TEXT } from '../parallelText.ts';
 import { StepExtras } from './StepExtras.tsx';
@@ -25,7 +25,7 @@ interface Props {
   agents: Agent[];
   steps: WorkflowStepInput[];
   /** MCP servers the office may use, for steps that name their own; undefined when the viewer cannot see them. */
-  servers?: McpServer[];
+  servers?: StepServer[];
   onChange: (steps: WorkflowStepInput[]) => void;
 }
 

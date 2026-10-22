@@ -44,3 +44,11 @@ test('흐름 파일에는 스킬이 따라가고 사무실의 MCP 지정은 따�
   assert.deepEqual(back[2].skills, steps[2].skills);
   assert.equal(back[1].mcpServerIds, undefined);
 });
+
+test('단계가 고른 MCP는 "꺼짐" 도구까지 쓰고, 승인 후 실행·위험 도구는 쓰지 않는다. 사무실 기본은 자동 도구만', async () => {
+  const { defaultTools, stepTools } = await import('../shared/mcp.ts');
+  const tool = (name: string, mode: 'off' | 'auto' | 'approval', destructive = false) => ({ name, description: '', inputSchema: {}, readOnly: false, destructive, mode });
+  const server = { tools: [tool('search', 'off'), tool('lookup', 'auto'), tool('post', 'approval'), tool('wipe', 'off', true)] } as never;
+  assert.deepEqual(stepTools(server).map((t: { name: string }) => t.name), ['search', 'lookup']);
+  assert.deepEqual(defaultTools(server).map((t: { name: string }) => t.name), ['lookup']);
+});

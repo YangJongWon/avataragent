@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { GENERAL_TASK_TYPES, TASK_CATEGORIES } from '../../../shared/task-types.ts';
 import { isTeamTaskType, TEAM_ORDER, TEAMS } from '../../../shared/teams.ts';
-import type { McpServer } from '../../../shared/mcp.ts';
+import type { StepServer } from './StepExtras.tsx';
 import type { Agent, Office, PlanMode, SavedFlow, Task, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
 import { loopTargetLabel, STEP_KIND, templatePlan, validatePlan } from '../../../shared/workflow.ts';
 import { api } from '../api.ts';
@@ -184,7 +184,7 @@ export function NewTaskModal({
   office: Office;
   agents: Agent[];
   /** MCP servers the office may use; undefined when the viewer cannot see them. */
-  servers?: McpServer[];
+  servers?: StepServer[];
   busy: boolean;
   queuedCount: number;
   pendingCount: number;

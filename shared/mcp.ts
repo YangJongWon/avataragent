@@ -256,3 +256,12 @@ export function stdioPresetOf(server: Pick<McpServer, 'transport' | 'command' | 
 /** A connection that can read a Gmail inbox: Google's Gmail MCP server, or any offering search_threads and get_thread. */
 export const isGmailServer = (server: Pick<McpServer, 'url' | 'tools'>) =>
   /gmailmcp\.googleapis\.com/i.test(server.url) || (server.tools.some((t) => t.name === 'search_threads') && server.tools.some((t) => t.name === 'get_thread'));
+
+/**
+ * The tools a step gets from a server it picks by name: everything not left for after approval and not marked
+ * destructive, so a server picked for a step does something even if no tool was set to run automatically.
+ */
+export const stepTools = (server: McpServer) => server.tools.filter((tool) => tool.mode !== 'approval' && !tool.destructive);
+
+/** The tools the office default uses while researching: servers the office may use, tools set to run automatically. */
+export const defaultTools = (server: McpServer) => server.tools.filter((tool) => tool.mode === 'auto');

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { TEAMS } from '../../../shared/teams.ts';
 import type { Agent, StepLoop, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
 import { LOOP_PLACEHOLDER, LOOPABLE, loopTargets, MAX_LOOP, MAX_PLAN_STEPS, PARALLEL_KINDS, STEP_KIND, stepKindHint, stepKindTitle } from '../../../shared/workflow.ts';
-import type { McpServer } from '../../../shared/mcp.ts';
+import type { StepServer } from './StepExtras.tsx';
 import { useLanguage } from '../LanguageProvider.tsx';
 import { StepExtras } from './StepExtras.tsx';
 import { PARALLEL_TEXT } from '../parallelText.ts';
@@ -17,7 +17,7 @@ interface Props {
   /** Leading steps that already started and stay as they are. */
   locked: number;
   /** MCP servers the office may use, for the step's own; undefined when the viewer cannot see them. */
-  servers?: McpServer[];
+  servers?: StepServer[];
   /** A task whose journey can no longer change (finished, or past the point of editing): edits become a flow for the next task. */
   template?: 'completed' | 'locked';
   /** The task waits for the user's decision at this approval step; it can be given here too. */

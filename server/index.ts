@@ -47,6 +47,8 @@ import { listModels } from './ai.ts';
 import { authEnabled, authRouter, stillValid, viewerOf } from './auth.ts';
 import { chatNews, forwardChat, postChat, setAssignee } from './chat.ts';
 import { communityFlow, communityInstall, communityItem, communityList, communityPreview, popularFlows, removeFlow, saveFlow } from './community.ts';
+import { INLINE_TYPES, readTaskFile, removeTaskFile, removeTaskFiles } from './task-files.ts';
+import { DEFAULT_IMAGE_MODEL, imageModels } from './images.ts';
 import { recommendFlows, suggestInstructions, suggestPrompt } from './recommend.ts';
 import { config } from './config.ts';
 import { closeStorage, storageInfo } from './db.ts';
@@ -174,7 +176,9 @@ app.delete('/api/offices/:id', (req, res) => {
   if (store.data.tasks.some((t) => t.officeId === office.id && ['running', 'awaiting_help', 'awaiting_approval'].includes(t.status))) {
     throw new Error('진행 중인 업무가 있어서 닫을 수 없어요.');
   }
+  const taskIds = store.data.tasks.filter((t) => t.officeId === office.id).map((t) => t.id);
   store.removeOffice(office.id);
+  for (const taskId of taskIds) removeTaskFiles(taskId);
   store.emit('office.removed', { payload: { name: office.name } });
   res.json({ ok: true });
 });
@@ -571,6 +575,38 @@ app.get('/api/tasks/:id/export', async (req, res) => {
     res.setHeader('content-disposition', `attachment; filename="export.${format}"; filename*=UTF-8''${encodeURIComponent(file.filename)}`);
   }
   res.send(file.body);
+});
+
+/** Image models a picture step can pick, from OpenRouter (cached). */
+app.get('/api/image-models', async (_req, res) => {
+  guard(res, 'view');
+  res.json({ models: await imageModels(), defaultModel: DEFAULT_IMAGE_MODEL });
+});
+
+/** A file the task produced. Images, video, audio and PDF may show in the page; anything else only downloads. */
+app.get('/api/tasks/:id/files/:fileId', (req, res) => {
+  const task = store.task(req.params.id);
+  guard(res, 'view', task.officeId);
+  const found = readTaskFile(task.id, req.params.fileId);
+  if (!found) {
+    res.status(404).json({ error: '파일을 찾을 수 없어요.' });
+    return;
+  }
+  const inline = req.query.inline === '1' && INLINE_TYPES.has(found.file.mime);
+  res.setHeader('content-type', inline ? found.file.mime : found.file.mime.startsWith('text/') ? 'text/plain; charset=utf-8' : 'application/octet-stream');
+  res.setHeader('x-content-type-options', 'nosniff');
+  res.setHeader('content-security-policy', "default-src 'none'; sandbox");
+  res.setHeader('content-disposition', `${inline ? 'inline' : 'attachment'}; filename="file"; filename*=UTF-8''${encodeURIComponent(found.file.name)}`);
+  res.send(found.data);
+});
+
+app.delete('/api/tasks/:id/files/:fileId', (req, res) => {
+  guard(res, 'operate', officeOfTask(req.params.id));
+  if (!removeTaskFile(req.params.id, req.params.fileId)) {
+    res.status(404).json({ error: '파일을 찾을 수 없어요.' });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 app.post('/api/tasks/:id/design', async (req, res) => {

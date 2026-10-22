@@ -1,5 +1,8 @@
 import type { FlowTemplateStep, TaskTypeEntry, TeamId } from './types.ts';
 
+/** The image model a picture step starts with; any OpenRouter image model can be picked instead. */
+export const DEFAULT_IMAGE_MODEL = 'openai/gpt-image-1-mini';
+
 /**
  * Task types any office can take on, beside its team's own (mail, inquiries, budget, recommendations). They make a
  * document from the request: the team's special inputs and approval actions belong to the team's own types only.
@@ -13,6 +16,7 @@ export const TASK_CATEGORIES = [
   { id: 'planning', label: '기획·전략', team: 'mgmt' },
   { id: 'finance', label: '재무·예산', team: 'mgmt' },
   { id: 'marketing', label: '마케팅·홍보', team: 'mgmt' },
+  { id: 'design', label: '디자인·이미지', team: 'mgmt' },
   { id: 'customer', label: '고객 응대', team: 'support' },
   { id: 'life', label: '생활·복지', team: 'welfare' },
 ] as const satisfies readonly { id: string; label: string; team: TeamId }[];
@@ -307,6 +311,23 @@ export const GENERAL_TASK_TYPES: GeneralTaskType[] = [
       tags: ['블로그', '콘텐츠', 'SEO', '글'],
       standardHours: 2,
       flow: researched('주제 접수', '자료 조사', '글 작성', '글 검토'),
+    },
+  ]),
+  ...group('design', [
+    {
+      id: 'image_create',
+      label: '이미지 생성',
+      summary: '요청에 맞는 그림을 이미지 모델로 생성',
+      tags: ['이미지', '그림', '일러스트', '디자인', '썸네일', '배너'],
+      standardHours: 2,
+      flow: [
+        { kind: 'brief', label: '요청 접수', role: 'manager' },
+        { kind: 'research', label: '레퍼런스 조사', role: 'researcher' },
+        { kind: 'draft', label: '이미지 생성', role: 'writer', imageModel: DEFAULT_IMAGE_MODEL },
+        // Two tries: a picture the model cannot make is not fixed by asking forever.
+        { kind: 'review', label: '이미지 검토', role: 'reviewer', loop: { to: 2, when: '그림이 요청과 다르면', max: 2 } },
+        { kind: 'approval', label: '사용자 승인', role: null },
+      ],
     },
   ]),
   ...group('customer', [

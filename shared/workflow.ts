@@ -103,6 +103,7 @@ export function templatePlan(team: TeamId, taskType: string, officeAgents: Agent
     agentId: agentFor(officeAgents, s.role),
     instructions: '',
     loop: s.loop !== undefined ? s.loop : s.kind === 'review' ? reviewLoop(flow) : null,
+    ...(s.imageModel ? { imageModel: s.imageModel } : {}),
   }));
 }
 
