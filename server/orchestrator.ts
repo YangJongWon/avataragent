@@ -21,7 +21,7 @@ import { complete, costKrw, parseJson, type Attachment, type Purpose } from './a
 import { config, ORGANIZATION_SAFETY_RULES } from './config.ts';
 import { callTool } from './mcp.ts';
 import { extOf, readTaskFile, removeTaskFiles, saveTaskFile, syncDraftFiles } from './task-files.ts';
-import { generateImage, MAX_IMAGES_PER_STEP } from './images.ts';
+import { DEFAULT_IMAGE_MODEL, generateImage, imageModels, MAX_IMAGES_PER_STEP, openRouterKey } from './images.ts';
 import { nextInquiry, nextMail } from './seed.ts';
 import { store } from './store.ts';
 import { L, LT, V } from './text.ts';
@@ -248,6 +248,31 @@ const IMAGE_ASK = (max: number, model: string) =>
     'aspect_ratio는 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3 중 하나. 이 블록은 그림을 만드는 데만 쓰이고 결과물에서는 빠진다.',
   ].join('\n');
 
+/** Offered to every writer when pictures can be drawn: it decides from the request whether any are wanted. */
+const IMAGE_OFFER = (max: number) =>
+  [
+    '그림이 필요한지는 요청·지시·스킬을 보고 판단해라. 그림·이미지·일러스트·배너·썸네일처럼 그림을 원할 때만,',
+    `결과물 맨 끝에 \`\`\`images 코드블록으로 그릴 그림을 JSON 배열로 적어라 (최대 ${max}개). 원하지 않으면 이 블록을 쓰지 않는다.`,
+    '형식: [{"name": "짧은 파일 이름", "prompt": "영어로 쓴 구체적인 그림 설명", "aspect_ratio": "1:1"}]',
+  ].join('\n');
+
+/** Pictures can be drawn: an OpenRouter key is set, or the offline mock draws them. */
+async function canDraw() {
+  if (store.provider === 'mock') return true;
+  try {
+    return Boolean(openRouterKey());
+  } catch {
+    return false;
+  }
+}
+
+/** The model that draws a writer's pictures: its own model when that can draw, otherwise the default image model. */
+async function drawerFor(writer: Agent) {
+  if (store.provider === 'mock') return DEFAULT_IMAGE_MODEL;
+  const own = modelOf(store.agent(writer.id).model).apiModel;
+  return (await imageModels()).some((m) => m.id === own) ? own : DEFAULT_IMAGE_MODEL;
+}
+
 /**
  * Draws the pictures a draft asks for in its images block with the step's image model, keeps them as task files and
  * puts them in the result in place of the block. A picture that fails is noted in the result; the rest still come.
@@ -259,7 +284,7 @@ async function drawImages(taskId: string, writer: Agent, step: WorkflowStep, dra
   const asked = (Array.isArray(raw) ? raw : [])
     .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && typeof (item as { prompt?: unknown }).prompt === 'string')
     .slice(0, MAX_IMAGES_PER_STEP);
-  // A writer that left the block out is asked once more for just the list, from what it wrote.
+  // A picture step whose writer left the block out is asked once more for just the list, from what it wrote.
   const listed = asked.length ? asked : await listImages(writer, task, draft);
   const wanted = listed.length ? listed : [{ name: task.title, prompt: [task.title, task.description].filter(Boolean).join('. ') }];
   const body = draft.replace(IMAGE_BLOCK, '').trimEnd();
@@ -334,6 +359,24 @@ function handOff(taskId: string, from: Agent, to: Agent, label: string) {
 }
 
 const latest = (task: Task, kind: Artifact['kind']) => task.artifacts.filter((a) => a.kind === kind).at(-1);
+
+/**
+ * The work order, or each one when several intakes read the request at the same time: the latest of every intake
+ * step, labelled so the next steps can weigh the readings against each other.
+ */
+function workOrders(task: Task) {
+  const orders = task.plan
+    .filter((s) => s.kind === 'brief')
+    .flatMap((s) => {
+      const order = task.artifacts.filter((a) => a.kind === 'brief' && a.stepId === s.id).at(-1);
+      return order ? [{ step: s, order }] : [];
+    });
+  if (orders.length <= 1) return `[작업 지시서]\n${orders[0]?.order.content ?? latest(task, 'brief')?.content ?? ''}`;
+  return [
+    `[작업 지시서 ${orders.length}개 - 같은 요청을 서로 다르게 해석했다. 각 해석의 좋은 점을 살리고, 서로 다른 점은 결과물에서 비교하거나 밝혀라]`,
+    ...orders.map(({ step, order }, i) => `[작업 지시서 ${i + 1} - ${step.label} · ${store.agent(order.agentId).name}]\n${order.content}`),
+  ].join('\n\n');
+}
 
 function researchNotes(task: Task) {
   const notes = task.plan
@@ -424,7 +467,7 @@ export async function designPlan(input: { officeId: string; title: string; descr
       '요청에 맞게 업무 여정을 설계하고 각 단계에 가장 알맞은 직원을 배정해라.',
       '순서 규칙: brief 1개로 시작, research 0개 이상, draft 1개, review 0개 이상, approval 1개로 끝. 전체 10단계 이하.',
       '조건 루프: research·draft·review 단계에는 "조건이 맞으면 앞 단계로 되돌아가기"를 붙일 수 있다. to는 지금 여정 steps 배열의 0부터 세는 번호이고, 자기 자신이나 그 앞 단계여야 한다. max는 횟수 상한이며, 생략하거나 null이면 조건이 맞을 때까지 되돌린다. 루프가 필요 없으면 loop 자체를 null.',
-      '동시 진행: 같은 역할 직원이 여럿이면 research·draft·review 단계에 "parallel": true를 붙여 바로 앞 같은 종류 단계와 동시에 맡길 수 있다. research는 서로 다른 관점이나 모델로 비교할 때, draft는 결과물을 여럿 써서 가장 나은 것을 고를 때, review는 여러 검토자가 다수결로 판정할 때 쓴다. 동시 진행 단계에는 루프를 붙이지 않는다(review 묶음의 루프는 첫 review에만).',
+      '동시 진행: 같은 역할 직원이 여럿이면 brief·research·draft·review 단계에 "parallel": true를 붙여 바로 앞 같은 종류 단계와 동시에 맡길 수 있다. brief는 요청을 서로 다르게 해석해 볼 때, research는 서로 다른 관점이나 모델로 비교할 때, draft는 결과물을 여럿 써서 가장 나은 것을 고를 때, review는 여러 검토자가 다수결로 판정할 때 쓴다. 동시 진행 단계에는 루프를 붙이지 않는다(review 묶음의 루프는 첫 review에만).',
       '기본 여정으로 충분하면 그대로 써도 된다. 불필요한 단계와 루프는 비용만 늘린다.',
       'JSON으로만 답한다: {"steps": [{"kind": string, "label": string (12자 이내), "agentId": string, "instructions": string, "loop": {"to": number, "when": string (조건, 20자 이내), "max": number | null} | null, "parallel": boolean}], "note": string (설계 이유 한두 문장)}',
     ]
@@ -486,6 +529,10 @@ async function briefStep(taskId: string, step: WorkflowStep, feedback?: string) 
       `[업무 여정]\n${task.plan.map((s, i) => `${i + 1}. ${s.label}`).join('\n')}`,
       stepNote(step, feedback),
       skillPrompt(step.skills),
+      await briefTools(taskId, agent, step, task),
+      task.plan.filter((s) => s.kind === 'brief').length > 1
+        ? '다른 담당자도 같은 요청을 따로 해석해 지시서를 쓴다. 단계 지시가 있으면 그 관점으로, 없으면 너만의 관점(목표·범위·결과물 형식을 다르게 잡은 해석)으로 쓰고 첫 줄에 어떤 해석인지 한 줄로 밝혀라.'
+        : '',
       '',
       spec.briefAsk,
     ]
@@ -567,6 +614,12 @@ async function useTools(taskId: string, agent: Agent, context: string, step?: Wo
   return { text: results.join('\n\n'), calls: results.length, failures };
 }
 
+/** An intake with MCP servers of its own looks things up before writing the work order. */
+async function briefTools(taskId: string, agent: Agent, step: WorkflowStep, task: Task) {
+  const found = await assignedTools(taskId, agent, step, `[업무 제목] ${task.title}\n[요청 내용] ${task.description}`);
+  return found ? `[이 단계에 지정된 도구로 찾은 내용]\n${found}` : '';
+}
+
 /** Outside research, tools run only on a step that names its MCP servers. */
 async function assignedTools(taskId: string, agent: Agent, step: WorkflowStepInput, context: string) {
   if (!step.mcpServerIds?.length) return '';
@@ -616,7 +669,7 @@ async function researchStep(taskId: string, step: WorkflowStep, feedback?: strin
 
   const earlier = researchNotes(task);
   const context = [
-    `[작업 지시서]\n${latest(task, 'brief')?.content}`,
+    workOrders(task),
     `[처리할 자료]\n${task.inputText}`,
     earlier !== '(조사 단계 없음)' ? `[앞 단계 메모]\n${earlier}` : '',
     chatNoteBlock(task),
@@ -709,7 +762,7 @@ async function raiseHelp(taskId: string, step: WorkflowStep, writer: Agent) {
       task,
       'clarify',
       [
-        `[작업 지시서]\n${latest(task, 'brief')?.content}`,
+        workOrders(task),
         `[조사 메모]\n${researchNotes(task)}`,
         `[사용자 요청 원문]\n${task.title}\n${task.description || '(설명 없음)'}`,
         '',
@@ -797,7 +850,7 @@ async function draftStep(taskId: string, step: WorkflowStep, attempt: number, cl
   const task = store.task(taskId);
   const lastReview = task.reviews.at(-1);
   const lastChange = task.userChangeRequests.at(-1);
-  const found = await assignedTools(taskId, writer, step, `[업무 제목] ${task.title}\n[작업 지시서]\n${latest(task, 'brief')?.content}`);
+  const found = await assignedTools(taskId, writer, step, `[업무 제목] ${task.title}\n${workOrders(task)}`);
   setAgent(writer, 'working', attempt > 1 ? 'sweat' : 'focus', attempt > 1 ? V('지적받은 부분을 고쳐서 다시 쓰고 있어요.') : V('{step} 중이에요.', { step: step.label }));
   const draft = await callAI(
     writer,
@@ -805,7 +858,7 @@ async function draftStep(taskId: string, step: WorkflowStep, attempt: number, cl
     'draft',
     [
       `[업무 제목] ${task.title}`,
-      `[작업 지시서]\n${latest(task, 'brief')?.content}`,
+      workOrders(task),
       `[조사 메모]\n${researchNotes(task)}`,
       `[처리할 자료]\n${task.inputText}`,
       task.clarifications.length ? `[사용자가 정한 방향]\n${task.clarifications.join('\n')}` : '',
@@ -819,13 +872,15 @@ async function draftStep(taskId: string, step: WorkflowStep, attempt: number, cl
       found ? `[이 단계에 지정된 도구로 찾은 내용]\n${found}` : '',
       '',
       spec.draftAsk,
-      step.imageModel ? IMAGE_ASK(MAX_IMAGES_PER_STEP, step.imageModel) : '',
+      step.imageModel ? IMAGE_ASK(MAX_IMAGES_PER_STEP, step.imageModel) : (await canDraw()) ? IMAGE_OFFER(MAX_IMAGES_PER_STEP) : '',
     ]
       .filter(Boolean)
       .join('\n\n'),
     () => spec.mock.draft(store.task(taskId)),
   );
-  addArtifact(taskId, writer, step, 'draft', '초안', step.imageModel ? await drawImages(taskId, writer, step, draft) : draft);
+  // Pictures come when the step is for them, or when the writer judged the request wants some and listed them.
+  const drawing = step.imageModel ? step : IMAGE_BLOCK.test(draft) ? { ...step, imageModel: await drawerFor(writer) } : null;
+  addArtifact(taskId, writer, step, 'draft', '초안', drawing ? await drawImages(taskId, writer, drawing, draft) : draft);
   setStep(taskId, step.id, 'done');
   return true;
 }
@@ -860,7 +915,7 @@ async function pickDraft(taskId: string, group: WorkflowStep[], next: WorkflowSt
     [
       `[업무 제목] ${task.title}`,
       task.description ? `[요청 내용]\n${task.description}` : '',
-      `[작업 지시서]\n${latest(task, 'brief')?.content ?? ''}`,
+      workOrders(task),
       ...candidates.map((c, i) => `[안 ${i + 1} - ${c.writer.name} · ${c.step.label}]\n${c.artifact.content.slice(0, 6000)}`),
       '',
       `같은 요청으로 따로 쓴 결과물 ${candidates.length}개다. 요청한 내용과 형식을 가장 잘 지키고 틀린 내용이 가장 적은 안 하나를 골라라.`,
@@ -1306,7 +1361,7 @@ export async function runStepAt(taskId: string, at: number, feedback: string | n
 
   // Steps marked parallel run at the same time as this one, each by its own staff member.
   const group = parallelGroup(plan, at);
-  if (step.kind === 'brief') await briefStep(taskId, step, reason);
+  if (step.kind === 'brief') await Promise.all(group.map((s) => briefStep(taskId, s, reason)));
   else if (step.kind === 'research') await Promise.all(group.map((s) => researchStep(taskId, s, reason)));
   else if (step.kind === 'draft') {
     const attempt = drafts() + 1;

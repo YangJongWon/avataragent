@@ -5,9 +5,11 @@ import { TEAMS } from '../../../shared/teams.ts';
 import type { StepServer } from './StepExtras.tsx';
 import type { Agent, StepKind, StepLoop, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
 import { PARALLEL_TEXT } from '../parallelText.ts';
-import { StepExtras } from './StepExtras.tsx';
+import { InstructionField, StepExtras, useImageModelIds } from './StepExtras.tsx';
+import { modelOf } from '../../../shared/models.ts';
 import { LOOP_PLACEHOLDER, LOOPABLE, loopTargets, MAX_LOOP, MAX_PLAN_STEPS, PARALLEL_KINDS, STEP_KIND, stepKindHint, stepKindTitle, validatePlan } from '../../../shared/workflow.ts';
 import {
+  ADDABLE,
   addToStage,
   canMove as canMoveStep,
   canRemove,
@@ -17,6 +19,7 @@ import {
   moveStep,
   removeFromStage,
   separateFromStage,
+  setStage,
   stagesOf,
 } from '../planOps.ts';
 
@@ -55,9 +58,39 @@ export function PlanEditor({ team, agents, steps, servers, onChange }: Props) {
   const canMove = (index: number, delta: -1 | 1) => !inStage(index) && steps[index + delta] !== undefined && !inStage(index + delta) && canMoveStep(steps, index, delta);
   const move = (index: number, delta: -1 | 1) => onChange(moveStep(steps, index, delta));
   const remove = (index: number) => onChange(removeFromStage(steps, index));
-  const insert = (kind: 'research' | 'review') => {
+  const insert = (kind: StepKind) => {
     const at = insertIndex(steps, kind, null);
-    if (at !== null) onChange(insertStep(steps, kind, agents, at, kind === 'research' ? t('추가 조사') : t('추가 검토')));
+    if (at !== null) onChange(insertStep(steps, kind, agents, at, STEP_KIND[kind].title));
+  };
+  const [stageError, setStageError] = useState<string | null>(null);
+  /** The stage number typed in front of a step: the step moves there, or joins it when it is a stage of its kind. */
+  const moveToStage = (index: number, stage: number) => {
+    const next = setStage(steps, index, stage);
+    if (!next) {
+      setStageError(t('그 단계로는 옮길 수 없어요. 첫 단계는 접수·지시, 검토는 결과물 작성 뒤, 사용자 승인은 마지막이어야 해요.'));
+      return;
+    }
+    setStageError(null);
+    onChange(next);
+  };
+  /** A select of stage numbers, the step's own first; one more than the stages puts it on its own at the end. */
+  const stageSelect = (i: number) => {
+    const current = stages.findIndex((stage) => stage.includes(i));
+    return (
+      <select
+        className="stage-no"
+        value={current}
+        onChange={(e) => moveToStage(i, Number(e.target.value))}
+        title={t('번호를 바꾸면 그 단계로 옮겨요. 같은 종류 단계의 번호로 바꾸면 그 단계와 동시에 진행해요.')}
+        aria-label={t('단계 번호')}
+      >
+        {[...stages.map((_, n) => n), stages.length].map((n) => (
+          <option key={n} value={n}>
+            {n + 1}
+          </option>
+        ))}
+      </select>
+    );
   };
   const addParallel = (index: number) => {
     const size = stages.find((stage) => stage.includes(index))!.length;
@@ -66,68 +99,83 @@ export function PlanEditor({ team, agents, steps, servers, onChange }: Props) {
   };
 
   const owner = (step: WorkflowStepInput) => agents.find((a) => a.id === step.agentId)?.name ?? t('담당 없음');
+  const drawers = useImageModelIds();
+  /** A staff member as the owner list shows them: name, role, model, and whether that model can draw. */
+  const staffLabel = (a: Agent) => {
+    const model = modelOf(a.model);
+    return `${a.name} (${t(roleTitles[a.role])}) · ${model.label}${drawers.includes(model.apiModel) ? ` · 🖼 ${t('그림 가능')}` : ''}`;
+  };
 
   /** One step's fields: name, owner, instructions, loop. Inside a stage the stage handles order and the "together" switch. */
   const card = (i: number, inside: boolean) => {
     const step = steps[i];
     const meta = STEP_KIND[step.kind];
     const lead = inside && !step.parallel;
+    const canAdd = !inside && PARALLEL_KINDS.includes(step.kind);
+    const loopable = LOOPABLE.includes(step.kind) && (!inside || lead) && (step.kind === 'review' || !inside);
     return (
       <div className={`plan-step kind-${step.kind}`} key={i}>
-        <div className="plan-step-row">
-          <span className="plan-step-kind" title={stepKindHint(step.kind)}>
-            {meta.icon} {stepKindTitle(step.kind)}
+        <div className="step-row">
+          <span className="step-row-label">
+            {stageSelect(i)}
+            <span className="plan-step-kind" title={stepKindHint(step.kind)}>
+              {meta.icon} {stepKindTitle(step.kind)}
+            </span>
           </span>
-          <input
-            className="plan-step-label"
-            value={t(step.label)}
-            maxLength={20}
-            onChange={(e) => update(i, { label: e.target.value })}
-            aria-label={tpl('{v}단계 이름', { v: i + 1 })}
-          />
+          <div className="step-row-body">
+            <input
+              className="plan-step-label"
+              value={t(step.label)}
+              maxLength={20}
+              onChange={(e) => update(i, { label: e.target.value })}
+              aria-label={tpl('{v}단계 이름', { v: i + 1 })}
+            />
+            <span className="plan-step-tools">
+              {!inside && (
+                <>
+                  <button type="button" className="icon-btn" disabled={!canMove(i, -1)} onClick={() => move(i, -1)} title={t('위로')}>
+                    ▲
+                  </button>
+                  <button type="button" className="icon-btn" disabled={!canMove(i, 1)} onClick={() => move(i, 1)} title={t('아래로')}>
+                    ▼
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                className="icon-btn"
+                disabled={!canRemove(steps, i)}
+                onClick={() => remove(i)}
+                title={canRemove(steps, i) ? t('단계 빼기') : t('꼭 필요한 단계예요')}
+              >
+                ✕
+              </button>
+            </span>
+          </div>
         </div>
-        <div className="plan-step-row">
-          {step.kind === 'approval' ? (
-            <span className="plan-step-owner muted small">{t('🙋 사용자(나) · 삭제하면 자동 승인돼요')}</span>
-          ) : (
-            <select className="plan-step-owner" value={step.agentId ?? ''} onChange={(e) => update(i, { agentId: e.target.value })} aria-label={tpl('{v}단계 담당자', { v: i + 1 })}>
-              {agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name} ({t(roleTitles[a.role])})
-                </option>
-              ))}
-            </select>
-          )}
-          <span className="plan-step-tools">
-            {!inside && (
-              <>
-                <button type="button" className="icon-btn" disabled={!canMove(i, -1)} onClick={() => move(i, -1)} title={t('위로')}>
-                  ▲
-                </button>
-                <button type="button" className="icon-btn" disabled={!canMove(i, 1)} onClick={() => move(i, 1)} title={t('아래로')}>
-                  ▼
-                </button>
-              </>
+        <div className="step-row">
+          <span className="step-row-label">👤 {t('담당')}</span>
+          <div className="step-row-body">
+            {step.kind === 'approval' ? (
+              <span className="muted small">{t('🙋 사용자(나) · 삭제하면 자동 승인돼요')}</span>
+            ) : (
+              <select className="plan-step-owner" value={step.agentId ?? ''} onChange={(e) => update(i, { agentId: e.target.value })} aria-label={tpl('{v}단계 담당자', { v: i + 1 })}>
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {staffLabel(a)}
+                  </option>
+                ))}
+              </select>
             )}
-            <button
-              type="button"
-              className="icon-btn"
-              disabled={!canRemove(steps, i)}
-              onClick={() => remove(i)}
-              title={canRemove(steps, i) ? t('단계 빼기') : t('꼭 필요한 단계예요')}
-            >
-              ✕
-            </button>
-          </span>
+          </div>
         </div>
         {step.kind !== 'approval' && (
-          <input
-            className="plan-step-note"
-            value={step.instructions}
-            maxLength={300}
-            placeholder={t('이 단계에만 줄 지시 (선택)')}
-            onChange={(e) => update(i, { instructions: e.target.value })}
-          />
+          <div className="step-row">
+            <span className="step-row-label">📝 {t('지시')}</span>
+            <div className="step-row-body">
+              <InstructionField step={step} onChange={(patch) => update(i, patch)} />
+            </div>
+          </div>
         )}
         {step.kind !== 'approval' && <StepExtras step={step} servers={servers} onChange={(patch) => update(i, patch)} />}
         {inside && step.parallel && (
@@ -135,55 +183,56 @@ export function PlanEditor({ team, agents, steps, servers, onChange }: Props) {
             ↓ {t('따로 진행 (이 단계 다음에)')}
           </button>
         )}
-        {!inside && PARALLEL_KINDS.includes(step.kind) && (
-          <div className="row plan-step-together">
-            <button type="button" className="pixel-btn small" disabled={full} onClick={() => addParallel(i)} title={t(PARALLEL_TEXT[step.kind]!.hint)}>
-              ⇉ {t(PARALLEL_TEXT[step.kind]!.add)}
-            </button>
-            {steps[i - 1]?.kind === step.kind && (
+        {(canAdd || loopable) && (
+          <div className="plan-step-actions">
+            {canAdd && (
+              <button type="button" className="pixel-btn small" disabled={full} onClick={() => addParallel(i)} title={t(PARALLEL_TEXT[step.kind]!.hint)}>
+                ⇉ {t(PARALLEL_TEXT[step.kind]!.add)}
+              </button>
+            )}
+            {canAdd && steps[i - 1]?.kind === step.kind && (
               <label className="check small">
                 <input type="checkbox" checked={false} onChange={() => update(i, { parallel: true, loop: null })} />
                 {t('앞 단계와 합치기')}
               </label>
             )}
+            {loopable && (
+              <label className="check small" title={!step.loop && step.kind === 'review' ? t('끄면 의견만 남기고 넘어가요') : undefined}>
+                <input type="checkbox" checked={Boolean(step.loop)} onChange={(e) => update(i, { loop: e.target.checked ? defaultLoop(steps, i) : null })} />
+                🔁 {step.kind === 'review' ? (inside ? t('과반이 반려하면 되돌리기') : t('반려되면 되돌리기')) : t('조건이 맞으면 되돌리기')}
+              </label>
+            )}
           </div>
         )}
-        {LOOPABLE.includes(step.kind) && (!inside || lead) && (step.kind === 'review' || !inside) && (
-          <div className={`plan-step-loop ${step.loop ? 'on' : ''}`}>
-            <label className="check small">
-              <input type="checkbox" checked={Boolean(step.loop)} onChange={(e) => update(i, { loop: e.target.checked ? defaultLoop(steps, i) : null })} />
-              🔁 {step.kind === 'review' ? (inside ? t('과반이 반려하면 되돌리기') : t('반려되면 되돌리기')) : t('조건이 맞으면 되돌리기')}
-            </label>
-            {!step.loop && step.kind === 'review' && <span className="small muted">{t('끄면 의견만 남기고 넘어가요')}</span>}
-            {step.loop && (
-              <div className="plan-loop-fields">
-                <input
-                  value={step.loop.when}
-                  maxLength={60}
-                  placeholder={t(LOOP_PLACEHOLDER[step.kind] ?? '')}
-                  onChange={(e) => updateLoop(i, { when: e.target.value })}
-                  aria-label={tpl('{v}단계 반복 조건', { v: i + 1 })}
-                />
-                <select value={step.loop.to} onChange={(e) => updateLoop(i, { to: Number(e.target.value) })} aria-label={tpl('{v}단계 되돌아갈 단계', { v: i + 1 })}>
-                  {loopTargets(steps, i).map((to) => (
-                    <option key={to} value={to}>
-                      {to === i ? t('이 단계 다시') : tpl('{n}. {label}(으)로', { n: to + 1, label: t(steps[to].label) })}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  className="plan-loop-max"
-                  type="number"
-                  min={1}
-                  max={MAX_LOOP}
-                  value={step.loop.max ?? ''}
-                  placeholder={t('제한 없음')}
-                  title={t('비우면 조건이 맞을 때까지 돌아가요')}
-                  onChange={(e) => updateLoop(i, { max: e.target.value === '' ? null : Number(e.target.value) })}
-                  aria-label={tpl('{v}단계 최대 반복', { v: i + 1 })}
-                />
-              </div>
-            )}
+        {loopable && step.loop && (
+          <div className="plan-step-loop on">
+            <div className="plan-loop-fields">
+              <input
+                value={step.loop.when}
+                maxLength={60}
+                placeholder={t(LOOP_PLACEHOLDER[step.kind] ?? '')}
+                onChange={(e) => updateLoop(i, { when: e.target.value })}
+                aria-label={tpl('{v}단계 반복 조건', { v: i + 1 })}
+              />
+              <select value={step.loop.to} onChange={(e) => updateLoop(i, { to: Number(e.target.value) })} aria-label={tpl('{v}단계 되돌아갈 단계', { v: i + 1 })}>
+                {loopTargets(steps, i).map((to) => (
+                  <option key={to} value={to}>
+                    {to === i ? t('이 단계 다시') : tpl('{n}. {label}(으)로', { n: to + 1, label: t(steps[to].label) })}
+                  </option>
+                ))}
+              </select>
+              <input
+                className="plan-loop-max"
+                type="number"
+                min={1}
+                max={MAX_LOOP}
+                value={step.loop.max ?? ''}
+                placeholder={t('제한 없음')}
+                title={t('비우면 조건이 맞을 때까지 돌아가요')}
+                onChange={(e) => updateLoop(i, { max: e.target.value === '' ? null : Number(e.target.value) })}
+                aria-label={tpl('{v}단계 최대 반복', { v: i + 1 })}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -197,7 +246,6 @@ export function PlanEditor({ team, agents, steps, servers, onChange }: Props) {
           if (stage.length === 1) {
             return (
               <li key={stage[0]} className="plan-stage">
-                <span className="plan-stage-no">{tpl('단계 {n}', { n: n + 1 })}</span>
                 {card(stage[0], false)}
               </li>
             );
@@ -206,10 +254,9 @@ export function PlanEditor({ team, agents, steps, servers, onChange }: Props) {
           const lead = steps[stage[0]];
           return (
             <li key={stage[0]} className="plan-stage">
-              <span className="plan-stage-no">
-                {tpl('단계 {n}', { n: n + 1 })} · ⇉ {tpl(PARALLEL_TEXT[kind]!.stage, { n: stage.length })}
-              </span>
               <button type="button" className={`plan-parallel-row kind-${kind}`} onClick={() => setOpenStage(stage[0])} title={t('눌러서 동시에 하는 단계를 고쳐요')}>
+                <span className="stage-badge">{n + 1}</span>
+                <span className="plan-parallel-title small">⇉ {tpl(PARALLEL_TEXT[kind]!.stage, { n: stage.length })}</span>
                 {stage.map((i) => (
                   <span key={i} className="plan-parallel-chip">
                     <b>
@@ -229,14 +276,14 @@ export function PlanEditor({ team, agents, steps, servers, onChange }: Props) {
           );
         })}
       </ol>
-      <div className="row">
-        <button type="button" className="pixel-btn small" disabled={full} onClick={() => insert('research')}>
-          {t('+ 조사·분석 단계')}
-        </button>
-        <button type="button" className="pixel-btn small" disabled={full} onClick={() => insert('review')}>
-          {t('+ 검토 단계')}
-        </button>
+      <div className="row plan-add-row">
+        {ADDABLE.map((kind) => (
+          <button key={kind} type="button" className="pixel-btn small" disabled={full || insertIndex(steps, kind, null) === null} onClick={() => insert(kind)} title={stepKindHint(kind)}>
+            + {STEP_KIND[kind].icon} {stepKindTitle(kind)}
+          </button>
+        ))}
       </div>
+      {stageError && <p className="small neg">{stageError}</p>}
       {error && <p className="small neg">{error}</p>}
       {shownStage && <StageDialog title={stageTitle(steps, shownStage, stages)} onClose={() => setOpenStage(null)} onAdd={full ? undefined : () => addParallel(shownStage[0])} kind={steps[shownStage[0]].kind}>
         {shownStage.map((i) => card(i, true))}

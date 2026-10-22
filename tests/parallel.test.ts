@@ -99,7 +99,7 @@ test('drafts marked parallel are written at the same time, and the next reviewer
     { kind: 'approval' as const, label: '승인', agentId: null, instructions: '', loop: null },
   ];
   assert.equal(validatePlan(steps, team), null, 'two drafts written together are one draft stage');
-  assert.match(validatePlan(steps.map((s, i) => (i === 2 ? { ...s, parallel: undefined } : s)), team) ?? '', /결과물 작성/, 'two drafts one after the other are not');
+  assert.equal(validatePlan(steps.map((s, i) => (i === 2 ? { ...s, parallel: undefined } : s)), team), null, 'two drafts one after the other: the second rewrites the first');
 
   const startSeq = store.data.seq ?? 0;
   const task = await runtime.createTask({ officeId: office, title: '동시 작성', description: '고객 문의 답변 초안', taskType: 'email_draft', planMode: 'custom', steps });
@@ -120,6 +120,32 @@ test('drafts marked parallel are written at the same time, and the next reviewer
   const writers = new Set(t.artifacts.filter((a) => a.kind === 'draft' && a.title === '초안').map((a) => a.agentId));
   assert.equal(writers.size, 2, 'each writer wrote a draft');
   assert.equal(t.artifacts.filter((a) => a.kind === 'draft').at(-1)!.title, '초안 (비교 후 선택)', 'the kept draft is the one that goes on');
+  await runtime.approve(task.id);
+  await until(() => store.task(task.id).status === 'completed', '완료');
+});
+
+test('intakes marked parallel read the request two ways at once, and the next step gets both work orders', async () => {
+  const office = 'office_dev';
+  const extra = store.hireAgent(office, 'manager', '둘째 팀장');
+  const team = store.data.agents.filter((a) => a.officeId === office);
+  const by = (role: string) => team.find((a) => a.role === role && a.id !== extra.id)!;
+  const steps = [
+    { kind: 'brief' as const, label: '접수 A', agentId: by('manager').id, instructions: '비용 관점', loop: null },
+    { kind: 'brief' as const, label: '접수 B', agentId: extra.id, instructions: '사용자 경험 관점', loop: null, parallel: true },
+    { kind: 'research' as const, label: '조사', agentId: by('researcher').id, instructions: '', loop: null },
+    { kind: 'draft' as const, label: '작성', agentId: by('writer').id, instructions: '', loop: null },
+    { kind: 'approval' as const, label: '승인', agentId: null, instructions: '', loop: null },
+  ];
+  assert.equal(validatePlan(steps, team), null, 'two intakes read together are the first stage');
+  assert.equal(validatePlan(steps.map((s, i) => (i === 1 ? { ...s, parallel: undefined } : s)), team), null, 'a second intake after the first is a stage of its own');
+  assert.match(validatePlan(steps.slice(1), team) ?? '', /접수·지시/, 'the journey still starts with an intake');
+
+  const task = await runtime.createTask({ officeId: office, title: '두 가지 해석', description: '사내 도구 개선', planMode: 'custom', steps });
+  await until(() => ['awaiting_help', 'awaiting_approval'].includes(store.task(task.id).status), '질문 또는 승인 대기');
+  if (store.task(task.id).status === 'awaiting_help') await runtime.answerHelp(task.id, null);
+  await until(() => store.task(task.id).status === 'awaiting_approval', '승인 대기');
+  const orders = store.task(task.id).artifacts.filter((a) => a.kind === 'brief');
+  assert.equal(new Set(orders.map((a) => a.agentId)).size, 2, 'each lead wrote a work order');
   await runtime.approve(task.id);
   await until(() => store.task(task.id).status === 'completed', '완료');
 });

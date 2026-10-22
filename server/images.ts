@@ -21,7 +21,7 @@ export interface GeneratedImage {
 
 const OPENROUTER = 'https://openrouter.ai/api/v1';
 
-function openRouterKey() {
+export function openRouterKey() {
   const company = store.data.companies.find((c) => isOpenRouterCompany(c));
   const key = (company && apiKeyFor(company)) || config.keys.openrouter;
   if (!key) throw new Error('이미지를 만들려면 OpenRouter 키가 필요해요. 모델 관리에서 OpenRouter 키를 넣어 주세요.');

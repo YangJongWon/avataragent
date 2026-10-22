@@ -94,3 +94,33 @@ test('따로 진행하면 묶음 바로 다음 단계가 된다', () => {
   assert.deepEqual(apart.slice(1, 4).map((s) => [s.label, Boolean(s.parallel)]), [['정보 수집', false], ['C', true], ['B', false]]);
   assert.equal(validatePlan(apart, agents), null);
 });
+
+test('단계 번호를 바꾸면 그 단계로 옮기고, 같은 종류 단계의 번호면 그 단계와 동시에 진행한다', async () => {
+  const { setStage, stagesOf } = await import('../web/src/planOps.ts');
+  // 접수(1) 정보 수집(2) 추가 조사(3) 작성(4) 검토 A(5) 검토 B(6) 승인(7)
+  const joined = setStage(plan(), 2, 1)!;
+  assert.deepEqual(stagesOf(joined), [[0], [1, 2], [3], [4], [5], [6]], '추가 조사가 2단계(정보 수집)에 합쳐진다');
+  assert.equal(joined[2].parallel, true);
+  assert.equal(validatePlan(joined, agents), null);
+
+  const later = setStage(plan(), 1, 3)!;
+  assert.deepEqual(later.map((s) => s.label), ['접수', '추가 조사', '작성', '정보 수집', '검토 A', '검토 B', '승인'], '조사를 작성 뒤로 옮길 수도 있다');
+  assert.equal(validatePlan(later, agents), null);
+
+  assert.equal(setStage(plan(), 4, 1), null, '검토를 작성 앞으로는 옮길 수 없다');
+  assert.equal(setStage(plan(), 1, 0), null, '첫 단계는 접수·지시다');
+});
+
+test('어떤 종류의 단계든 추가할 수 있고, 규칙을 깨는 자리에는 넣지 않는다', async () => {
+  const { insertIndex, insertStep } = await import('../web/src/planOps.ts');
+  for (const kind of ['brief', 'research', 'draft', 'review'] as const) {
+    const at = insertIndex(plan(), kind, null);
+    assert.notEqual(at, null, kind);
+    assert.equal(validatePlan(insertStep(plan(), kind, agents, at!, kind), agents), null, kind);
+  }
+  assert.equal(insertIndex(plan(), 'approval', null), null, '승인은 하나만');
+  const noApproval = plan().slice(0, -1);
+  assert.equal(insertIndex(noApproval, 'approval', null), noApproval.length);
+  const reviseAfterReview = insertStep(plan(), 'draft', agents, insertIndex(plan(), 'draft', null)!, '수정 작성');
+  assert.equal(reviseAfterReview.at(-2)!.kind, 'draft', '검토 뒤에 고쳐 쓰는 작성 단계');
+});

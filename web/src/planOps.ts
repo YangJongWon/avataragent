@@ -1,9 +1,10 @@
 import type { Agent, StepKind, StepLoop, WorkflowStepInput } from '../../shared/types.ts';
-import { LOOP_PLACEHOLDER, loopTargets, PARALLEL_KINDS, parallelGroup, remapLoops, reviewLoop, STEP_KIND } from '../../shared/workflow.ts';
+import { LOOP_PLACEHOLDER, loopTargets, PARALLEL_KINDS, parallelGroup, remapLoops, reviewLoop, STEP_KIND, structureError } from '../../shared/workflow.ts';
 
 /** Edits on a journey that keep its loops pointing at the same steps. `locked` leading steps never move. */
 
-export const REMOVABLE: StepKind[] = ['research', 'review'];
+/** Every kind of step can be added; the approval only while the journey has none. */
+export const ADDABLE: StepKind[] = ['brief', 'research', 'draft', 'review', 'approval'];
 
 /** After a move, a loop may point past where it is allowed; pull it back to the nearest valid step. */
 export function clampLoops(steps: WorkflowStepInput[]) {
@@ -16,13 +17,17 @@ export function clampLoops(steps: WorkflowStepInput[]) {
 }
 
 export function defaultLoop(steps: WorkflowStepInput[], index: number): StepLoop {
-  if (steps[index].kind === 'review') return reviewLoop(steps);
+  if (steps[index].kind === 'review') return reviewLoop(steps, index);
   return { to: index, when: (LOOP_PLACEHOLDER[steps[index].kind] ?? '').replace(/^예:\s*/, ''), max: null };
 }
 
+/** A step may move past any neighbour, as long as the journey keeps its few rules (see structureError). */
 export function canMove(steps: WorkflowStepInput[], index: number, delta: -1 | 1, locked = 0) {
-  const other = steps[index + delta];
-  return Boolean(other) && index >= locked && index + delta >= locked && other.kind === steps[index].kind;
+  const other = index + delta;
+  if (!steps[other] || index < locked || other < locked) return false;
+  const next = [...steps];
+  [next[index], next[other]] = [next[other], next[index]];
+  return !structureError(next);
 }
 
 export function moveStep(steps: WorkflowStepInput[], index: number, delta: -1 | 1) {
@@ -32,53 +37,70 @@ export function moveStep(steps: WorkflowStepInput[], index: number, delta: -1 | 
   return clampLoops(next);
 }
 
+/** Any step may go while the journey still keeps its rules: an intake first and a draft before any review. */
 export const canRemove = (steps: WorkflowStepInput[], index: number, locked = 0) =>
-  index >= locked &&
-  (REMOVABLE.includes(steps[index]?.kind) ||
-    (steps[index]?.kind === 'approval' && index === steps.length - 1) ||
-    // A draft goes only while another one is written beside it.
-    (steps[index]?.kind === 'draft' && steps.filter((s) => s.kind === 'draft').length > 1));
+  index >= locked && index < steps.length && !structureError(steps.filter((_, i) => i !== index));
 
 export function removeStep(steps: WorkflowStepInput[], index: number) {
   return clampLoops(remapLoops(steps, (i) => (i === index ? null : i > index ? i - 1 : i)).filter((_, j) => j !== index));
 }
 
 /**
- * Where a new research or review step may go: research sits before the draft, review after it and
- * before the approval. Prefers right after `after` when that is allowed, never inside the locked part.
+ * Where a new step goes: right after the stage of `after` when given, otherwise research before the first draft and
+ * anything else at the end (before the approval). Null when it cannot go there (inside the locked part, or a review
+ * with no draft before it, or a second approval).
  */
-export function insertIndex(steps: WorkflowStepInput[], kind: 'research' | 'review', after: number | null, locked = 0) {
-  const draft = steps.findIndex((s) => s.kind === 'draft');
-  const lastDraft = steps.findLastIndex((s) => s.kind === 'draft');
+export function insertIndex(steps: WorkflowStepInput[], kind: StepKind, after: number | null, locked = 0) {
   const approval = steps.findIndex((s) => s.kind === 'approval');
-  const [min, max] = kind === 'research' ? [1, draft] : [lastDraft + 1, approval >= 0 ? approval : steps.length];
-  const lo = Math.max(min, locked);
-  if (lo > max) return null;
-  const wanted = after === null ? max : after + 1;
-  return Math.min(max, Math.max(lo, wanted));
+  if (kind === 'approval') return approval >= 0 ? null : steps.length;
+  const end = approval >= 0 ? approval : steps.length;
+  let at: number;
+  if (after !== null) {
+    at = after + 1;
+    while (steps[at]?.parallel) at++;
+  } else if (kind === 'research') {
+    const draft = steps.findIndex((s) => s.kind === 'draft');
+    at = draft >= 0 ? draft : end;
+  } else {
+    at = end;
+  }
+  at = Math.min(Math.max(at, locked, 1), end);
+  const next = [...steps];
+  next.splice(at, 0, { kind, label: '', agentId: null, instructions: '', loop: null });
+  return structureError(next) ? null : at;
 }
 
-export function insertStep(steps: WorkflowStepInput[], kind: 'research' | 'review', agents: Agent[], at: number, label: string) {
-  const owner = agents.find((a) => a.role === STEP_KIND[kind].role)?.id ?? agents[0]?.id ?? null;
+/** A new step of any kind at `at`, given to the first staff member of its role; a review loops back to its draft. */
+export function insertStep(steps: WorkflowStepInput[], kind: StepKind, agents: Agent[], at: number, label: string) {
+  const role = STEP_KIND[kind].role;
+  const owner = role ? (agents.find((a) => a.role === role)?.id ?? agents[0]?.id ?? null) : null;
   const next = remapLoops(steps, (i) => (i >= at ? i + 1 : i));
   next.splice(at, 0, { kind, label, agentId: owner, instructions: '', loop: null });
-  if (kind === 'review') next[at] = { ...next[at], loop: reviewLoop(next) };
+  if (kind === 'review') next[at] = { ...next[at], loop: reviewLoop(next, at) };
   return clampLoops(next);
 }
 
-/** Turns a research step into a review or back, moving it to the nearest place that kind may stand. */
-export function changeKind(steps: WorkflowStepInput[], index: number, kind: 'research' | 'review', agents: Agent[], locked = 0) {
+/**
+ * Turns a step into another kind, where it stands when the journey still keeps its rules there, otherwise at the
+ * nearest place the kind may go (a review after the draft, for one).
+ */
+export function changeKind(steps: WorkflowStepInput[], index: number, kind: StepKind, agents: Agent[], locked = 0) {
   const step = steps[index];
-  if (step.kind === kind || !REMOVABLE.includes(step.kind)) return { steps, index };
+  if (!step || step.kind === kind || index < locked || step.kind === 'approval' || kind === 'approval') return { steps, index };
+  const role = STEP_KIND[kind].role;
+  const roleFits = agents.find((a) => a.id === step.agentId)?.role === role;
+  const owner = roleFits ? step.agentId : (agents.find((a) => a.role === role)?.id ?? step.agentId);
+  const { parallel: _, imageModel: __, ...rest } = step;
+  const next = steps.map((s, i) => (i === index ? { ...rest, kind, agentId: owner, loop: null } : s));
+  if (kind === 'review') next[index] = { ...next[index], loop: reviewLoop(next, index) };
+  if (!structureError(next)) return { steps: tidyParallel(clampLoops(next)), index };
   const without = removeStep(steps, index);
-  const at = insertIndex(without, kind, kind === 'research' ? null : index - 1, locked);
+  const at = insertIndex(without, kind, kind === 'research' ? null : without.findLastIndex((s) => s.kind === 'draft'), locked);
   if (at === null) return { steps, index };
-  const roleFits = agents.find((a) => a.id === step.agentId)?.role === STEP_KIND[kind].role;
-  const owner = roleFits ? step.agentId : (agents.find((a) => a.role === STEP_KIND[kind].role)?.id ?? step.agentId);
-  const next = remapLoops(without, (i) => (i >= at ? i + 1 : i));
-  next.splice(at, 0, { ...step, kind, agentId: owner, loop: null });
-  if (kind === 'review') next[at] = { ...next[at], loop: reviewLoop(next) };
-  return { steps: clampLoops(next), index: at };
+  const moved = remapLoops(without, (i) => (i >= at ? i + 1 : i));
+  moved.splice(at, 0, { ...rest, kind, agentId: owner, loop: null });
+  if (kind === 'review') moved[at] = { ...moved[at], loop: reviewLoop(moved, at) };
+  return structureError(moved) ? { steps, index } : { steps: tidyParallel(clampLoops(moved)), index: at };
 }
 
 /** Moves a step to index `at` of the list without it, keeping every loop on the same steps. */
@@ -174,4 +196,38 @@ export function removeFromStage(steps: WorkflowStepInput[], index: number) {
 /** Takes a step out of its stage: it runs on its own right after the stage. */
 export function separateFromStage(steps: WorkflowStepInput[], index: number) {
   return rewire(steps, groupStart(steps, index), index)?.steps ?? steps;
+}
+
+/**
+ * Puts step `index` at stage number `stage` (0-based, as numbered now). A stage of the same kind that can run several
+ * at once takes it in, to run at the same time; any other number puts the step there on its own, so it becomes that
+ * stage and the later ones move one along. One past the last puts it at the end, before the approval. Null when the
+ * journey would break its rules (see structureError).
+ */
+export function setStage(steps: WorkflowStepInput[], index: number, stage: number) {
+  const before = stagesOf(steps);
+  const from = before.findIndex((group) => group.includes(index));
+  if (stage === from) return steps;
+  const step = steps[index];
+  const target = before[stage];
+  const joins = Boolean(target) && steps[target[0]].kind === step.kind && PARALLEL_KINDS.includes(step.kind);
+  const rest = removeFromStage(steps, index);
+  const stages = stagesOf(rest);
+  // Only one step went, so every later index moved up by one.
+  const shift = (i: number) => (i > index ? i - 1 : i);
+  let at: number;
+  if (joins) {
+    at = stages.find((group) => group.includes(shift(target![0])))!.at(-1)! + 1;
+  } else if (target) {
+    at = stages.find((group) => group.includes(shift(target[0])))![0];
+    // Moving down, the step lands after the stage it was numbered as, taking that number itself.
+    if (stage > from) at = (stages.find((group) => group.includes(shift(target.at(-1)!)))!.at(-1) ?? at) + 1;
+  } else {
+    at = rest.at(-1)?.kind === 'approval' && step.kind !== 'approval' ? rest.length - 1 : rest.length;
+  }
+  const { parallel: _, ...alone } = step;
+  const next = remapLoops(rest, (i) => (i >= at ? i + 1 : i));
+  next.splice(at, 0, joins ? { ...alone, parallel: true, loop: null } : { ...alone, loop: step.loop && step.loop.to < at ? step.loop : null });
+  const tidy = tidyParallel(next);
+  return structureError(tidy) ? null : tidy;
 }

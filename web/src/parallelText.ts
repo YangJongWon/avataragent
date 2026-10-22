@@ -2,6 +2,13 @@ import type { StepKind } from '../../shared/types.ts';
 
 /** What "at the same time" means for each kind of step, as Korean catalogue keys and templates for t() and tpl(). */
 export const PARALLEL_TEXT: Partial<Record<StepKind, { hint: string; join: string; add: string; stage: string; title: string }>> = {
+  brief: {
+    hint: '팀장 여럿이 같은 요청을 각자 해석해 작업 지시서를 쓰고, 다음 단계는 그 지시서를 모두 받아요.',
+    join: '앞 접수와 동시에 진행 (다른 해석)',
+    add: '같은 단계에 접수 추가 (다른 해석)',
+    stage: '접수 {n}개 동시 (다른 해석)',
+    title: '{n}단계 · 접수 {count}개 동시 (다른 해석)',
+  },
   research: {
     hint: '같은 역할 직원 여럿이 각자 조사하고, 결과물 작성 단계에서 한꺼번에 비교해요.',
     join: '앞 조사와 동시에 진행',

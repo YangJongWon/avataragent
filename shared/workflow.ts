@@ -17,12 +17,12 @@ export const MAX_PLAN_STEPS = 10;
 export const STEP_KIND: Record<StepKind, { icon: string; title: string; role: Role | null; hint: string }> = {
   brief: { icon: '📌', title: '접수·지시', role: 'manager', hint: '요청을 읽고 작업 지시서를 만들어요.' },
   research: { icon: '🔍', title: '조사·분석', role: 'researcher', hint: '자료를 모으거나 분석 메모를 남겨요. 여러 개 둘 수 있어요.' },
-  draft: { icon: '✍️', title: '결과물 작성', role: 'writer', hint: '최종 결과물을 써요. 하나만 둘 수 있어요.' },
+  draft: { icon: '✍️', title: '결과물 작성', role: 'writer', hint: '결과물을 써요. 뒤에 또 두면 앞의 결과물을 이어서 고쳐 써요.' },
   review: { icon: '🧐', title: '검토', role: 'reviewer', hint: '반려 조건에 걸리면 정한 단계로 되돌아가요.' },
   approval: { icon: '🙋', title: '사용자 승인', role: null, hint: '내가 승인하면 반영돼요.' },
 };
 
-/** Steps must follow this order; research and review may repeat. */
+/** The usual order, used to tidy a journey an AI proposes; people may put steps in any order. */
 const KIND_RANK: Record<StepKind, number> = { brief: 0, research: 1, draft: 2, review: 3, approval: 4 };
 
 /** Upper bound when a loop names a count; omit the count to keep going while the condition holds. */
@@ -41,8 +41,10 @@ export function loopTargets(steps: { kind: StepKind }[], index: number): number[
   return Array.from({ length: index + 1 }, (_, i) => i);
 }
 
-export function reviewLoop(steps: { kind: StepKind }[]): StepLoop {
-  return { to: steps.findIndex((s) => s.kind === 'draft'), when: REVIEW_LOOP_WHEN, max: null };
+/** A review's loop back to the draft it checks: the last one before it, or the first draft when no place is given. */
+export function reviewLoop(steps: { kind: StepKind }[], at?: number): StepLoop {
+  const before = at === undefined ? -1 : steps.slice(0, at).findLastIndex((s) => s.kind === 'draft');
+  return { to: before >= 0 ? before : steps.findIndex((s) => s.kind === 'draft'), when: REVIEW_LOOP_WHEN, max: null };
 }
 
 /** Reads an optional loop cap: empty/missing is unlimited, a number is clamped to 1…MAX_LOOP. */
@@ -107,29 +109,35 @@ export function templatePlan(team: TeamId, taskType: string, officeAgents: Agent
   }));
 }
 
+/**
+ * The few rules on where steps may stand; otherwise any step may come anywhere, as often as wanted. The journey starts
+ * with an intake (the work order), has a draft before any review (something to review), and ends with at most one
+ * approval. A Korean message, or null.
+ */
+export function structureError(steps: { kind: StepKind }[]): string | null {
+  if (steps.length < 2) return '업무 여정에는 최소 2단계(접수·작성)가 필요해요.';
+  if (steps[0].kind !== 'brief') return '첫 단계는 접수·지시여야 해요.';
+  const approvals = steps.filter((s) => s.kind === 'approval').length;
+  if (approvals > 1 || (approvals === 1 && steps.at(-1)!.kind !== 'approval')) return '사용자 승인은 마지막 단계에 하나만 둘 수 있어요.';
+  const firstDraft = steps.findIndex((s) => s.kind === 'draft');
+  if (firstDraft < 0) return '결과물 작성 단계가 하나 이상 있어야 해요.';
+  const firstReview = steps.findIndex((s) => s.kind === 'review');
+  if (firstReview >= 0 && firstReview < firstDraft) return '검토는 결과물 작성 뒤에 와야 해요.';
+  return null;
+}
+
 /** Returns a Korean error message, or null when the plan can run. */
 export function validatePlan(steps: WorkflowStepInput[], officeAgents: Agent[]): string | null {
   if (steps.length < 2) return '업무 여정에는 최소 2단계(접수·작성)가 필요해요.';
   if (steps.length > MAX_PLAN_STEPS) return `업무 여정은 ${MAX_PLAN_STEPS}단계까지 만들 수 있어요.`;
-  const count = (kind: StepKind) => steps.filter((s) => s.kind === kind).length;
-  if (steps[0].kind !== 'brief' || count('brief') !== 1) return '첫 단계는 접수·지시 하나여야 해요.';
-  if (count('approval') > 1 || (count('approval') === 1 && steps.at(-1)!.kind !== 'approval')) {
-    return '사용자 승인은 마지막 단계에 하나만 둘 수 있어요.';
-  }
-  const drafts = steps.flatMap((s, i) => (s.kind === 'draft' ? [i] : []));
-  // One draft, or several written at the same time and compared.
-  if (drafts.length === 0 || drafts.slice(1).some((i) => !steps[i].parallel)) return '결과물 작성 단계는 하나(또는 동시에 쓰는 한 묶음)여야 해요.';
-  for (let i = 1; i < steps.length; i++) {
-    if (KIND_RANK[steps[i].kind] < KIND_RANK[steps[i - 1].kind]) {
-      return '조사·분석은 결과물 작성 앞에, 검토는 결과물 작성 뒤에 와야 해요.';
-    }
-  }
+  const shape = structureError(steps);
+  if (shape) return shape;
   const ids = new Set(officeAgents.map((a) => a.id));
   for (const [i, step] of steps.entries()) {
     if (!step.label.trim()) return '이름이 빈 단계가 있어요.';
     if (step.parallel) {
       if (!PARALLEL_KINDS.includes(step.kind) || steps[i - 1]?.kind !== step.kind) {
-        return `"${step.label}" 단계는 바로 앞의 같은 종류(조사·분석, 결과물 작성, 검토) 단계와만 동시에 진행할 수 있어요.`;
+        return `"${step.label}" 단계는 바로 앞의 같은 종류(접수·지시, 조사·분석, 결과물 작성, 검토) 단계와만 동시에 진행할 수 있어요.`;
       }
       // A review group keeps one loop, on its first review: the majority's rejection sends the draft back.
       if (step.loop || (step.kind !== 'review' && steps[i - 1].loop)) return `동시에 진행하는 단계("${step.label}")에는 되돌리기를 둘 수 없어요.`;
@@ -176,14 +184,20 @@ export function normalizePlan(steps: Partial<WorkflowStepInput>[], team: TeamId,
   const research = cleaned.filter((s) => s.step.kind === 'research');
   const reviews = cleaned.filter((s) => s.step.kind === 'review');
   // One draft, plus any written beside it.
-  const firstDraft = single('draft');
-  const drafts = [firstDraft, ...cleaned.filter((s) => s.step.kind === 'draft' && s !== firstDraft && s.parallel)];
-  while (2 + research.length + drafts.length + reviews.length > MAX_PLAN_STEPS) {
+  // One intake and one draft, each with any that run beside it.
+  const besides = (kind: StepKind) => {
+    const first = single(kind);
+    return [first, ...cleaned.filter((s) => s.step.kind === kind && s !== first && s.parallel)];
+  };
+  const briefs = besides('brief');
+  const drafts = besides('draft');
+  while (1 + briefs.length + research.length + drafts.length + reviews.length > MAX_PLAN_STEPS) {
     if (drafts.length > 1) drafts.pop();
+    else if (briefs.length > 1) briefs.pop();
     else if (research.length > 0) research.pop();
     else reviews.pop();
   }
-  const items = [single('brief'), ...research, ...drafts, ...reviews, single('approval')];
+  const items = [...briefs, ...research, ...drafts, ...reviews, single('approval')];
   const plan = items.map((item) => item.step);
   return items.map((item, i) => {
     const target = item.rawLoop ? items.findIndex((other) => other.origin === item.rawLoop!.to && other.origin >= 0) : -1;
@@ -238,8 +252,11 @@ export const planModeLabel = (mode: keyof typeof PLAN_MODE_LABEL) => t(PLAN_MODE
 
 export const PLAN_MODE_LABEL = { template: '유형 기본', ai: 'AI 설계', custom: '직접 설계' } as const;
 
-/** Step kinds that can run several at once: research (notes compared in the draft), draft (the best one kept) and review (a majority vote). */
-export const PARALLEL_KINDS: StepKind[] = ['research', 'draft', 'review'];
+/**
+ * Step kinds that can run several at once: brief (the request read more than one way, every work order passed on),
+ * research (notes compared in the draft), draft (the best one kept) and review (a majority vote).
+ */
+export const PARALLEL_KINDS: StepKind[] = ['brief', 'research', 'draft', 'review'];
 
 /** The steps that run together starting at `at`: the step itself and the steps of its kind after it marked parallel. */
 export function parallelGroup<T extends Pick<WorkflowStepInput, 'kind' | 'parallel'>>(steps: T[], at: number): T[] {

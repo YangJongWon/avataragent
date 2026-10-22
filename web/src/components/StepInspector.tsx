@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { TEAMS } from '../../../shared/teams.ts';
-import type { Agent, StepLoop, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
+import type { Agent, StepKind, StepLoop, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
 import { LOOP_PLACEHOLDER, LOOPABLE, loopTargets, MAX_LOOP, MAX_PLAN_STEPS, PARALLEL_KINDS, STEP_KIND, stepKindHint, stepKindTitle } from '../../../shared/workflow.ts';
 import type { StepServer } from './StepExtras.tsx';
 import { useLanguage } from '../LanguageProvider.tsx';
-import { StepExtras } from './StepExtras.tsx';
+import { InstructionField, StepExtras } from './StepExtras.tsx';
 import { PARALLEL_TEXT } from '../parallelText.ts';
-import { canMove, canRemove, changeKind, defaultLoop, insertIndex, insertStep, moveStep, removeStep, REMOVABLE } from '../planOps.ts';
+import { ADDABLE, canMove, canRemove, changeKind, defaultLoop, insertIndex, insertStep, moveStep, removeStep } from '../planOps.ts';
 
 interface Props {
   team: TeamId;
@@ -97,11 +97,11 @@ export function StepInspector({ team, agents, steps, index, locked, template, ap
 
   const update = (patch: Partial<WorkflowStepInput>) => onChange(steps.map((s, i) => (i === index ? { ...s, ...patch } : s)));
   const updateLoop = (patch: Partial<StepLoop>) => update({ loop: { ...step.loop!, ...patch } });
-  const add = (kind: 'research' | 'review') => {
+  const add = (kind: StepKind) => {
     const at = insertIndex(steps, kind, index, locked);
-    if (at !== null) onChange(insertStep(steps, kind, agents, at, kind === 'research' ? t('추가 조사') : t('추가 검토')), at);
+    if (at !== null) onChange(insertStep(steps, kind, agents, at, STEP_KIND[kind].title), at);
   };
-  const addable = (kind: 'research' | 'review') => !full && insertIndex(steps, kind, index, locked) !== null;
+  const addable = (kind: StepKind) => !full && insertIndex(steps, kind, index, locked) !== null;
   // Staff whose role matches the step come first, so the usual choice is at the top.
   const ordered = [...agents].sort((a, b) => Number(b.role === meta.role) - Number(a.role === meta.role));
 
@@ -139,11 +139,11 @@ export function StepInspector({ team, agents, steps, index, locked, template, ap
         <input value={step.label} maxLength={20} disabled={readOnly} onChange={(e) => update({ label: e.target.value })} />
       </label>
 
-      {REMOVABLE.includes(step.kind) && (
+      {step.kind !== 'approval' && (
         <div className="field">
           {t('단계 종류 (역할)')}
           <div className="segmented" role="radiogroup">
-            {(['research', 'review'] as const).map((kind) => (
+            {(['brief', 'research', 'draft', 'review'] as const).map((kind) => (
               <button
                 key={kind}
                 type="button"
@@ -161,7 +161,6 @@ export function StepInspector({ team, agents, steps, index, locked, template, ap
               </button>
             ))}
           </div>
-          <span className="small muted">{t('조사·분석은 결과물 작성 앞, 검토는 뒤에 자동으로 자리 잡아요.')}</span>
         </div>
       )}
 
@@ -183,10 +182,10 @@ export function StepInspector({ team, agents, steps, index, locked, template, ap
       )}
 
       {step.kind !== 'approval' && (
-        <label className="field">
+        <div className="field">
           {t('이 단계에만 줄 지시 (선택)')}
-          <textarea rows={2} value={step.instructions} maxLength={300} disabled={readOnly} onChange={(e) => update({ instructions: e.target.value })} />
-        </label>
+          <InstructionField step={step} readOnly={readOnly} multiline onChange={update} />
+        </div>
       )}
       {step.kind !== 'approval' && <StepExtras step={step} servers={servers} readOnly={readOnly} onChange={update} />}
 
@@ -237,12 +236,11 @@ export function StepInspector({ team, agents, steps, index, locked, template, ap
         <button type="button" className="pixel-btn small" disabled={!canMove(steps, index, 1, locked)} onClick={() => onChange(moveStep(steps, index, 1), index + 1)}>
           {t('뒤로')} ▶
         </button>
-        <button type="button" className="pixel-btn small" disabled={!addable('research')} onClick={() => add('research')}>
-          + {t('조사·분석 단계')}
-        </button>
-        <button type="button" className="pixel-btn small" disabled={!addable('review')} onClick={() => add('review')}>
-          + {t('검토 단계')}
-        </button>
+        {ADDABLE.map((kind) => (
+          <button key={kind} type="button" className="pixel-btn small" disabled={!addable(kind)} onClick={() => add(kind)} title={stepKindHint(kind)}>
+            + {STEP_KIND[kind].icon} {stepKindTitle(kind)}
+          </button>
+        ))}
       </div>
       <div className="row step-inspector-foot">
         {showSave && (
