@@ -155,6 +155,17 @@ export interface WorkflowStepInput {
    * group work independently and the draft gets all their notes; review steps vote and the majority decides.
    */
   parallel?: boolean;
+  /** Skill files that tell how to do this step (Markdown, JSON or plain text), beside the written instructions. */
+  skills?: StepSkill[];
+  /** MCP servers this step may use. Unset: the office default (every enabled server, while researching). */
+  mcpServerIds?: string[];
+}
+
+export interface StepSkill {
+  /** The file name it came from. */
+  name: string;
+  format: 'md' | 'json' | 'txt';
+  content: string;
 }
 
 export interface WorkflowStep extends WorkflowStepInput {

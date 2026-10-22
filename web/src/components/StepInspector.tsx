@@ -3,7 +3,9 @@ import { createPortal } from 'react-dom';
 import { TEAMS } from '../../../shared/teams.ts';
 import type { Agent, StepLoop, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
 import { LOOP_PLACEHOLDER, LOOPABLE, loopTargets, MAX_LOOP, MAX_PLAN_STEPS, STEP_KIND, stepKindHint, stepKindTitle } from '../../../shared/workflow.ts';
+import type { McpServer } from '../../../shared/mcp.ts';
 import { useLanguage } from '../LanguageProvider.tsx';
+import { StepExtras } from './StepExtras.tsx';
 import { canMove, canRemove, changeKind, defaultLoop, insertIndex, insertStep, moveStep, removeStep, REMOVABLE } from '../planOps.ts';
 
 interface Props {
@@ -13,6 +15,8 @@ interface Props {
   index: number;
   /** Leading steps that already started and stay as they are. */
   locked: number;
+  /** MCP servers the office may use, for the step's own; undefined when the viewer cannot see them. */
+  servers?: McpServer[];
   /** A task whose journey can no longer change (finished, or past the point of editing): edits become a flow for the next task. */
   template?: 'completed' | 'locked';
   /** The task waits for the user's decision at this approval step; it can be given here too. */
@@ -70,7 +74,7 @@ function ApprovalBox({ approval, onDone }: { approval: NonNullable<Props['approv
 }
 
 /** Edits one step of a task's journey in place: name, kind, who does it, instructions, loop, and its neighbours. */
-export function StepInspector({ team, agents, steps, index, locked, template, approval, saveLabel, showSave, saveDisabled, saving, onSave, onDiscard, onChange, onClose }: Props) {
+export function StepInspector({ team, agents, steps, index, locked, template, approval, saveLabel, showSave, saveDisabled, saving, onSave, onDiscard, onChange, onClose, servers }: Props) {
   const { t, tpl } = useLanguage();
   const step = steps[index];
   // A dialog of its own (portaled to the body so the bottom drawer on mobile never traps it).
@@ -183,6 +187,7 @@ export function StepInspector({ team, agents, steps, index, locked, template, ap
           <textarea rows={2} value={step.instructions} maxLength={300} disabled={readOnly} onChange={(e) => update({ instructions: e.target.value })} />
         </label>
       )}
+      {step.kind !== 'approval' && <StepExtras step={step} servers={servers} readOnly={readOnly} onChange={update} />}
 
       {(step.kind === 'research' || step.kind === 'review') && steps[index - 1]?.kind === step.kind && (
         <label className="check small" title={step.kind === 'review' ? t('검토자 여럿이 같은 초안을 동시에 평가하고, 과반이 통과시키면 통과예요.') : t('같은 역할 직원 여럿이 각자 조사하고, 결과물 작성 단계에서 한꺼번에 비교해요.')}>

@@ -1,5 +1,6 @@
 import { TEAMS } from './teams.ts';
-import type { Agent, Role, StepKind, StepLoop, TeamId, WorkflowStepInput } from './types.ts';
+import { parseSkills } from './step-extras.ts';
+import type { Agent, Role, StepKind, StepLoop, StepSkill, TeamId, WorkflowStepInput } from './types.ts';
 import { MAX_PLAN_STEPS, parseLoop, STEP_KIND, validatePlan } from './workflow.ts';
 
 export const FLOW_FORMAT = 'avataragent-flow';
@@ -31,9 +32,16 @@ export interface FlowPackStep {
   role: Role | null;
   instructions: string;
   loop: StepLoop | null;
-  /** Research only: runs at the same time as the research step before it. */
+  /** Runs at the same time as the step of its kind before it (research or review). */
   parallel?: boolean;
+  /** Skill files for the step. MCP servers are not part of a flow: they belong to one office. */
+  skills?: StepSkill[];
 }
+
+const skillsOf = (value: unknown) => {
+  const skills = parseSkills(value);
+  return skills.length ? { skills } : {};
+};
 
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
@@ -54,7 +62,7 @@ export function parseFlowPack(input: unknown): FlowPack {
     const kind = s.kind as StepKind;
     if (!KINDS.includes(kind)) throw new Error('알 수 없는 단계 종류가 있어요.');
     const role = kind === 'approval' ? null : ROLES.includes(s.role as Role) ? (s.role as Role) : STEP_KIND[kind].role;
-    return { kind, label: str(s.label, FLOW_LIMITS.label), role, instructions: str(s.instructions, FLOW_LIMITS.instructions), loop: parseLoop(s.loop), ...(s.parallel === true ? { parallel: true } : {}) };
+    return { kind, label: str(s.label, FLOW_LIMITS.label), role, instructions: str(s.instructions, FLOW_LIMITS.instructions), loop: parseLoop(s.loop), ...(s.parallel === true ? { parallel: true } : {}), ...skillsOf(s.skills) };
   });
   const error = validatePlan(
     steps.map((s) => ({ kind: s.kind, label: s.label, agentId: s.role, instructions: s.instructions, loop: s.loop, parallel: s.parallel })),
@@ -91,12 +99,12 @@ export function flowFromPlan(
     author: meta.author ?? '',
     license: meta.license || 'CC-BY-4.0',
     exportedAt: new Date().toISOString(),
-    steps: steps.map((s) => ({ kind: s.kind, label: s.label, role: roleOf(s), instructions: s.instructions, loop: s.loop ?? null, ...(s.parallel ? { parallel: true } : {}) })),
+    steps: steps.map((s) => ({ kind: s.kind, label: s.label, role: roleOf(s), instructions: s.instructions, loop: s.loop ?? null, ...(s.parallel ? { parallel: true } : {}), ...skillsOf(s.skills) })),
   });
 }
 
 /** Fits a flow to an office: each role goes to that office's agent with the role, or its first agent. */
 export function flowToSteps(flow: FlowPack, officeAgents: Agent[]): WorkflowStepInput[] {
   const agentFor = (role: Role | null) => (role ? (officeAgents.find((a) => a.role === role)?.id ?? officeAgents[0]?.id ?? null) : null);
-  return flow.steps.map((s) => ({ kind: s.kind, label: s.label, agentId: agentFor(s.role), instructions: s.instructions, loop: s.loop, ...(s.parallel ? { parallel: true } : {}) }));
+  return flow.steps.map((s) => ({ kind: s.kind, label: s.label, agentId: agentFor(s.role), instructions: s.instructions, loop: s.loop, ...(s.parallel ? { parallel: true } : {}), ...skillsOf(s.skills) }));
 }

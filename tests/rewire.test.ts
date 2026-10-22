@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Agent, WorkflowStepInput } from '../shared/types.ts';
 import { validatePlan } from '../shared/workflow.ts';
-import { rewire } from '../web/src/planOps.ts';
+import { addToStage, removeFromStage, rewire, separateFromStage, stagesOf } from '../web/src/planOps.ts';
 
 const agents = [
   { id: 'm', role: 'manager' },
@@ -63,4 +63,34 @@ test('뜻이 없는 선과 이미 시작한 단계는 바꾸지 않는다', () =
   assert.equal(rewire(plan(), 1, 2), null, '이미 순서대로 이어진 두 조사');
   assert.equal(rewire(plan(), 0, 3), null, '작성 단계는 동시에 진행할 수 없다');
   assert.equal(rewire(plan(), 0, 2, 2), null, '시작한 정보 수집에는 끼어들 수 없다');
+});
+
+test('같은 단계에 추가하면 아직 그 단계에 없는 직원이 맡아 동시에 진행한다', () => {
+  const added = addToStage(plan(), 1, agents, '정보 수집 2');
+  assert.deepEqual(stagesOf(added), [[0], [1, 2], [3], [4], [5], [6], [7]]);
+  assert.equal(added[2].agentId, 'r2', '정보 수집을 맡은 r 말고 다른 리서처');
+  assert.equal(added[2].parallel, true);
+  assert.equal(validatePlan(added, agents), null);
+  const reviews = addToStage(plan(), 4, agents, '검토 A 2');
+  assert.equal(reviews[5].agentId, 'v2');
+  assert.equal(reviews[5].loop, null);
+  assert.deepEqual(reviews[4].loop, { to: 3, when: '반려', max: 2 }, '단계를 이끄는 검토의 되돌리기는 남는다');
+  assert.equal(validatePlan(reviews, agents), null);
+});
+
+test('단계를 이끄는 검토를 빼면 다음 검토가 이끌고 되돌리기를 물려받는다', () => {
+  const together = addToStage(plan(), 4, agents, '검토 A 2');
+  const removed = removeFromStage(together, 4);
+  assert.equal(removed[4].label, '검토 A 2');
+  assert.equal(removed[4].parallel, undefined);
+  assert.deepEqual(removed[4].loop, { to: 3, when: '반려', max: 2 });
+  assert.equal(validatePlan(removed, agents), null);
+});
+
+test('따로 진행하면 묶음 바로 다음 단계가 된다', () => {
+  const three = addToStage(addToStage(plan(), 1, agents, 'B'), 1, agents, 'C');
+  assert.deepEqual(stagesOf(three)[1], [1, 2, 3]);
+  const apart = separateFromStage(three, 2);
+  assert.deepEqual(apart.slice(1, 4).map((s) => [s.label, Boolean(s.parallel)]), [['정보 수집', false], ['C', true], ['B', false]]);
+  assert.equal(validatePlan(apart, agents), null);
 });

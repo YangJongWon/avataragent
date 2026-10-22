@@ -92,7 +92,7 @@ function groupStart(steps: WorkflowStepInput[], index: number) {
 }
 
 /** Drops "at the same time" where it can no longer run, and loops a group may not carry. */
-function tidyParallel(steps: WorkflowStepInput[]) {
+export function tidyParallel(steps: WorkflowStepInput[]) {
   const next: WorkflowStepInput[] = steps.map((s, i) => {
     if (!s.parallel || (PARALLEL_KINDS.includes(s.kind) && steps[i - 1]?.kind === s.kind)) return s;
     const { parallel: _, ...rest } = s;
@@ -130,4 +130,43 @@ export function rewire(steps: WorkflowStepInput[], from: number, to: number, loc
   const moved = moveTo(steps, to, at);
   moved[at] = { ...moved[at], parallel: true, loop: null };
   return { steps: tidyParallel(moved), index: at };
+}
+
+/** The journey as stages: each a list of step indexes, more than one when its steps run at the same time. */
+export function stagesOf(steps: WorkflowStepInput[]) {
+  const stages: number[][] = [];
+  steps.forEach((s, i) => (i > 0 && s.parallel ? stages.at(-1)!.push(i) : stages.push([i])));
+  return stages;
+}
+
+/** Adds a step to the stage of step `index`, run by a staff member of that role not already in it when there is one. */
+export function addToStage(steps: WorkflowStepInput[], index: number, agents: Agent[], label: string) {
+  const start = groupStart(steps, index);
+  const kind = steps[start].kind;
+  if (kind !== 'research' && kind !== 'review') return steps;
+  const at = start + parallelGroup(steps, start).length;
+  const used = new Set(steps.slice(start, at).map((s) => s.agentId));
+  const role = STEP_KIND[kind].role;
+  const owner = agents.find((a) => a.role === role && !used.has(a.id)) ?? agents.find((a) => a.role === role) ?? agents[0];
+  const next = insertStep(steps, kind, agents, at, label);
+  next[at] = { ...next[at], agentId: owner?.id ?? null, parallel: true, loop: null };
+  return tidyParallel(next);
+}
+
+/** Removes a step from its stage; when it led the stage, the next one takes its place and its loop. */
+export function removeFromStage(steps: WorkflowStepInput[], index: number) {
+  const leads = !steps[index].parallel && steps[index + 1]?.parallel;
+  const next = leads
+    ? steps.map((s, i) => {
+        if (i !== index + 1) return s;
+        const { parallel: _, ...rest } = s;
+        return { ...rest, loop: steps[index].loop ?? null };
+      })
+    : steps;
+  return tidyParallel(removeStep(next, index));
+}
+
+/** Takes a step out of its stage: it runs on its own right after the stage. */
+export function separateFromStage(steps: WorkflowStepInput[], index: number) {
+  return rewire(steps, groupStart(steps, index), index)?.steps ?? steps;
 }

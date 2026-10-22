@@ -3334,6 +3334,18 @@ p.plan-note {
 /* 흐름 고르기 별도 다이얼로그 */
 .flow-picker-modal { width: 560px; }
 .flow-picker-modal .flow-picker { margin-top: 0; }
+/* 모달 자체가 스크롤하므로 목록 안쪽 스크롤은 끈다(이중 스크롤로 잘려 보임) */
+.flow-picker-modal .flow-picker-list { max-height: none; overflow: visible; }
+/* 모바일: 하단 시트 대신 화면 중앙 카드. 브라우저 하단 툴바에 가리지 않게 dvh 기준 */
+@media (max-width: 900px), (max-height: 520px) {
+  .modal-backdrop:has(> .flow-picker-modal) { place-items: center; padding: 16px; }
+  .modal.flow-picker-modal {
+    width: 100%;
+    max-width: 560px;
+    max-height: calc(100dvh - 32px);
+    border-bottom: 3px solid var(--line);
+  }
+}
 /* 단계 편집 별도 다이얼로그: 모바일 하단 Drawer에 갇히지 않도록 body에 포털 */
 .step-inspector-modal { width: 520px; }
 .step-inspector-modal .step-inspector { margin-top: 0; padding: 0; }
@@ -3563,3 +3575,60 @@ p.plan-note {
 .flow-picker-selects { flex-wrap: wrap; gap: 6px; align-items: center; }
 .flow-picker-selects select { flex: 1 1 120px; min-width: 0; }
 .flow-picker-modal { max-width: calc(100vw - 32px); }
+
+/* Task form journey as stages: a stage number, then a step or a row of steps that run at the same time. */
+.plan-stage { display: grid; gap: 3px; }
+.plan-stage-no { font-size: 11px; font-weight: 800; color: #5b4a6b; }
+.plan-parallel-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+  padding: 6px;
+  border: 2px dashed var(--line);
+  background: var(--surface);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+.plan-parallel-row.kind-review { background: #fdf0ef; }
+.plan-parallel-row:hover { border-style: solid; }
+.plan-parallel-chip {
+  flex: 1 1 110px;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  padding: 4px 6px;
+  border: 2px solid var(--line);
+  background: #f2fbf3;
+}
+.plan-parallel-chip b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-parallel-edit { align-self: center; white-space: nowrap; }
+.plan-step-together { flex-wrap: wrap; gap: 6px; align-items: center; }
+.plan-stage-modal { width: 520px; max-width: calc(100vw - 32px); }
+.plan-stage-members { display: grid; gap: 8px; max-height: 60vh; overflow-y: auto; }
+
+/* A step's skill files and MCP servers, folded under its instructions. */
+.step-extras { border: 1px dashed var(--line); padding: 2px 6px; background: rgba(255, 255, 255, 0.5); }
+.step-extras > summary { cursor: pointer; font-weight: 700; padding: 2px 0; }
+.step-extras-body { display: grid; gap: 6px; padding: 4px 0 6px; }
+.step-skills { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.step-skills li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.step-skill-preview {
+  flex: 1 1 100%;
+  max-height: 160px;
+  overflow: auto;
+  margin: 0;
+  padding: 6px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.step-extras .file-btn { justify-self: start; cursor: pointer; }
+.step-extras .file-btn.disabled { opacity: 0.5; cursor: default; }
+.step-mcp { display: grid; gap: 4px; }
+.step-mcp-list { display: grid; gap: 2px; }

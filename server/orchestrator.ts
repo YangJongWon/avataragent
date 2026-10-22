@@ -4,6 +4,7 @@ import { isTeamTaskType, taskTypeOf, TEAMS } from '../shared/teams.ts';
 import type { Agent, Artifact, Expression, Role, StepStatus, Task, TeamId, WorkflowStep, WorkflowStepInput } from '../shared/types.ts';
 import { lockedStepCount, loopOpen, normalizePlan, parseLoop, PLAN_EDITABLE_STATUSES, remapLoops, STEP_KIND, templatePlan, validatePlan, parallelGroup, majorityApproves } from '../shared/workflow.ts';
 import { usableBy, type McpServer, type McpTool, type McpToolMode, type PlannedAction } from '../shared/mcp.ts';
+import { skillPrompt, stepExtras } from '../shared/step-extras.ts';
 import { modelOf, tierScale } from '../shared/models.ts';
 import {
   lessonsFor,
@@ -409,6 +410,7 @@ async function briefStep(taskId: string, step: WorkflowStep, feedback?: string) 
       `[처리할 자료]\n${task.inputText}`,
       `[업무 여정]\n${task.plan.map((s, i) => `${i + 1}. ${s.label}`).join('\n')}`,
       stepNote(step, feedback),
+      skillPrompt(step.skills),
       '',
       spec.briefAsk,
     ]
@@ -424,9 +426,10 @@ const MAX_TOOL_CALLS = 3;
 
 type OfficeTool = { server: McpServer; tool: McpTool; ref: string };
 
-const officeTools = (officeId: string, mode: McpToolMode): OfficeTool[] =>
+/** The office's tools in a mode; a step that names its MCP servers gets only theirs. */
+const officeTools = (officeId: string, mode: McpToolMode, step?: WorkflowStepInput): OfficeTool[] =>
   store.data.mcpServers
-    .filter((server) => usableBy(server, officeId))
+    .filter((server) => usableBy(server, officeId) && (!step?.mcpServerIds || step.mcpServerIds.includes(server.id)))
     .flatMap((server) => server.tools.filter((tool) => tool.mode === mode).map((tool) => ({ server, tool, ref: `${server.id}/${tool.name}` })));
 
 const toolList = (tools: OfficeTool[]) =>
@@ -447,8 +450,8 @@ function mockToolCalls(tools: OfficeTool[], task: Task) {
 }
 
 /** Lets the agent pick up to MAX_TOOL_CALLS enabled MCP tool calls and returns their results for the prompt. */
-async function useTools(taskId: string, agent: Agent, context: string) {
-  const tools = officeTools(store.task(taskId).officeId, 'auto');
+async function useTools(taskId: string, agent: Agent, context: string, step?: WorkflowStepInput) {
+  const tools = officeTools(store.task(taskId).officeId, 'auto', step);
   if (!tools.length) return { text: '', calls: 0, failures: 0 };
   setAgent(agent, 'working', 'focus', V('연결된 도구로 무엇을 찾아볼지 정하고 있어요.'));
   const raw = await callAI(
@@ -482,6 +485,12 @@ async function useTools(taskId: string, agent: Agent, context: string) {
     results.push(result.ok ? `${label} ${JSON.stringify(args)}\n${result.output}` : `${label} 실패: ${result.reason}`);
   }
   return { text: results.join('\n\n'), calls: results.length, failures };
+}
+
+/** Outside research, tools run only on a step that names its MCP servers. */
+async function assignedTools(taskId: string, agent: Agent, step: WorkflowStepInput, context: string) {
+  if (!step.mcpServerIds?.length) return '';
+  return (await useTools(taskId, agent, `${context}\n\n${stepNote(step as WorkflowStep)}`, step)).text;
 }
 
 /** Calls one MCP tool for a task, logging the call and counting it on the server and the task. */
@@ -532,10 +541,11 @@ async function researchStep(taskId: string, step: WorkflowStep, feedback?: strin
     chatNoteBlock(task),
     lessonBlock(task, 'research'),
     stepNote(step, feedback),
+    skillPrompt(step.skills),
   ]
     .filter(Boolean)
     .join('\n\n');
-  const tooling = await useTools(taskId, agent, context);
+  const tooling = await useTools(taskId, agent, context, step);
   const found = tooling.text;
   setAgent(agent, 'working', 'focus', V('{step} 중이에요.', { step: step.label }));
   const notes = await callAI(
@@ -706,6 +716,7 @@ async function draftStep(taskId: string, step: WorkflowStep, attempt: number, cl
   const task = store.task(taskId);
   const lastReview = task.reviews.at(-1);
   const lastChange = task.userChangeRequests.at(-1);
+  const found = await assignedTools(taskId, writer, step, `[업무 제목] ${task.title}\n[작업 지시서]\n${latest(task, 'brief')?.content}`);
   setAgent(writer, 'working', attempt > 1 ? 'sweat' : 'focus', attempt > 1 ? V('지적받은 부분을 고쳐서 다시 쓰고 있어요.') : V('{step} 중이에요.', { step: step.label }));
   const draft = await callAI(
     writer,
@@ -723,6 +734,8 @@ async function draftStep(taskId: string, step: WorkflowStep, attempt: number, cl
       chatNoteBlock(task),
       lessonBlock(task, 'draft'),
       stepNote(step, feedback),
+      skillPrompt(step.skills),
+      found ? `[이 단계에 지정된 도구로 찾은 내용]\n${found}` : '',
       '',
       spec.draftAsk,
     ]
@@ -764,6 +777,7 @@ async function reviewStep(taskId: string, step: WorkflowStep, attempt: number, r
   const mockScore = Math.round(78 + 6 * tierScale(modelOf(writer.model).tier));
   const unscored = researchOf(store.data.performance).filter((r) => r.taskId === taskId && r.accuracy === null);
   const notes = unscored.length ? researchNotes(task).slice(0, 2500) : '';
+  const found = await assignedTools(taskId, reviewer, step, `[업무 제목] ${task.title}\n[초안]\n${(latest(task, 'draft')?.content ?? '').slice(0, 3000)}`);
   const raw = await callAI(
     reviewer,
     task,
@@ -775,6 +789,8 @@ async function reviewStep(taskId: string, step: WorkflowStep, attempt: number, r
       `[초안]\n${latest(task, 'draft')?.content}`,
       chatNoteBlock(task),
       stepNote(step),
+      skillPrompt(step.skills),
+      found ? `[이 단계에 지정된 도구로 확인한 내용]\n${found}` : '',
       '',
       spec.reviewAsk,
       '판정 기준: 요청한 내용과 형식을 지켰고 틀린 내용이 없으면 통과(approved: true, 80점 이상)다. 문장 다듬기, 있으면 좋을 내용, 확인할 수 없는 외부 수치처럼 결과물을 쓰는 데 지장 없는 점으로는 반려하지 않는다(통과시키고 reason에 적는다). 반려는 요청을 지키지 못했거나 틀린 내용이 있을 때만 하고, 고칠 점을 구체적으로 쓴다.',
@@ -1443,7 +1459,10 @@ function checkedPlan(officeId: string, steps: unknown) {
     instructions: String(s?.instructions ?? '').trim().slice(0, 300),
     loop: parseLoop(s?.loop),
     ...(s?.parallel === true ? { parallel: true } : {}),
+    ...stepExtras(s ?? {}),
   }));
+  const usable = new Set(store.data.mcpServers.filter((server) => usableBy(server, officeId)).map((server) => server.id));
+  for (const step of inputs) if (step.mcpServerIds) step.mcpServerIds = step.mcpServerIds.filter((id) => usable.has(id));
   const error = validatePlan(inputs, officeAgents(officeId));
   if (error) throw new Error(error);
   return inputs;
@@ -1522,7 +1541,9 @@ const sameStep = (a: WorkflowStepInput, b: WorkflowStepInput) =>
   (a.agentId ?? null) === (b.agentId ?? null) &&
   a.instructions === b.instructions &&
   JSON.stringify(a.loop ?? null) === JSON.stringify(b.loop ?? null) &&
-  Boolean(a.parallel) === Boolean(b.parallel);
+  Boolean(a.parallel) === Boolean(b.parallel) &&
+  JSON.stringify(a.skills ?? []) === JSON.stringify(b.skills ?? []) &&
+  JSON.stringify(a.mcpServerIds ?? null) === JSON.stringify(b.mcpServerIds ?? null);
 
 /**
  * Replaces a task's journey. A queued task can change everything; a started one (local runtime only,

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { can, seesEverything, shareRoleLabel, type Action } from '../../shared/access.ts';
 import { TEAMS } from '../../shared/teams.ts';
 import { usesFreeQuota } from '../../shared/models.ts';
+import { usableBy } from '../../shared/mcp.ts';
 import type { Agent, OfficeEvent, Snapshot } from '../../shared/types.ts';
 import { currentStepLabel, planProgress } from '../../shared/workflow.ts';
 import { api, useOffice } from './api.ts';
@@ -431,6 +432,8 @@ export function App() {
       onTogglePause={(agent) => (allowed('manage') ? togglePause(agent) : denied(t('직원을 멈추거나 재개')))}
     />
   );
+  // Only the owner sees MCP servers; others keep the steps' servers as they are.
+  const officeServers = snapshot.mcpServers?.filter((server) => usableBy(server, office.id));
   const workflow = (
     <WorkflowView
       key={`${office.id}-flow`}
@@ -443,6 +446,7 @@ export function App() {
         allowed('operate')
           ? {
               officeId: office.id,
+              servers: officeServers,
               flows: snapshot.flows,
               canManageFlows: isOwner,
               canSaveFlows: isOwner,
@@ -843,6 +847,7 @@ export function App() {
             hourlyRateKrw={snapshot.budget.hourlyRateKrw}
             flows={snapshot.flows ?? []}
             canSaveFlows={isOwner}
+            servers={officeServers}
             onClose={() => setDialog(null)}
             onError={showError}
           />

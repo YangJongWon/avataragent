@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { t, tpl } from '../../../shared/i18n.ts';
 import { TEAMS } from '../../../shared/teams.ts';
+import type { McpServer } from '../../../shared/mcp.ts';
 import type { Agent, SavedFlow, StepKind, StepLoop, StepStatus, Task, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
 import { lockedStepCount, loopOpen, loopTargetLabel, PLAN_EDITABLE_STATUSES, planModeLabel, STEP_KIND, validatePlan } from '../../../shared/workflow.ts';
 import { flowFromPlan, type FlowPack } from '../../../shared/flow-pack.ts';
@@ -88,6 +89,8 @@ const nodeTypes = { step: StepNode };
 /** Present when the viewer may change this task's journey. */
 export interface WorkflowEditing {
   officeId: string;
+  /** MCP servers the office may use, for steps that name their own; the owner sees them. */
+  servers?: McpServer[];
   flows: SavedFlow[];
   canManageFlows: boolean;
   /** Only the owner keeps the saved-flow list, so only they can keep a journey for next time. */
@@ -116,7 +119,16 @@ type Layout = Record<string, Box>;
 type ShownStep = WorkflowStepInput & { id: string; status: StepStatus; loop: StepLoop | null };
 
 const inputsOf = (task: Task): WorkflowStepInput[] =>
-  task.plan.map(({ kind, label, agentId, instructions, loop, parallel }) => ({ kind, label, agentId, instructions, loop: loop ?? null, ...(parallel ? { parallel: true } : {}) }));
+  task.plan.map(({ kind, label, agentId, instructions, loop, parallel, skills, mcpServerIds }) => ({
+    kind,
+    label,
+    agentId,
+    instructions,
+    loop: loop ?? null,
+    ...(parallel ? { parallel: true } : {}),
+    ...(skills?.length ? { skills } : {}),
+    ...(mcpServerIds ? { mcpServerIds } : {}),
+  }));
 
 function shownSteps(task: Task, draft: WorkflowStepInput[] | null, locked: number): ShownStep[] {
   if (!draft) return task.plan.map((s) => ({ ...s, loop: s.loop ?? null }));
@@ -565,6 +577,7 @@ function WorkflowInner({ task, agents, team, edit, dense, maxRows }: Props) {
         <StepInspector
           team={team}
           agents={agents}
+          servers={edit.servers}
           steps={inputs}
           index={selected}
           locked={canEdit ? locked : 0}
