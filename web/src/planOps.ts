@@ -33,7 +33,11 @@ export function moveStep(steps: WorkflowStepInput[], index: number, delta: -1 | 
 }
 
 export const canRemove = (steps: WorkflowStepInput[], index: number, locked = 0) =>
-  index >= locked && (REMOVABLE.includes(steps[index]?.kind) || (steps[index]?.kind === 'approval' && index === steps.length - 1));
+  index >= locked &&
+  (REMOVABLE.includes(steps[index]?.kind) ||
+    (steps[index]?.kind === 'approval' && index === steps.length - 1) ||
+    // A draft goes only while another one is written beside it.
+    (steps[index]?.kind === 'draft' && steps.filter((s) => s.kind === 'draft').length > 1));
 
 export function removeStep(steps: WorkflowStepInput[], index: number) {
   return clampLoops(remapLoops(steps, (i) => (i === index ? null : i > index ? i - 1 : i)).filter((_, j) => j !== index));
@@ -45,8 +49,9 @@ export function removeStep(steps: WorkflowStepInput[], index: number) {
  */
 export function insertIndex(steps: WorkflowStepInput[], kind: 'research' | 'review', after: number | null, locked = 0) {
   const draft = steps.findIndex((s) => s.kind === 'draft');
+  const lastDraft = steps.findLastIndex((s) => s.kind === 'draft');
   const approval = steps.findIndex((s) => s.kind === 'approval');
-  const [min, max] = kind === 'research' ? [1, draft] : [draft + 1, approval >= 0 ? approval : steps.length];
+  const [min, max] = kind === 'research' ? [1, draft] : [lastDraft + 1, approval >= 0 ? approval : steps.length];
   const lo = Math.max(min, locked);
   if (lo > max) return null;
   const wanted = after === null ? max : after + 1;
@@ -100,8 +105,8 @@ export function tidyParallel(steps: WorkflowStepInput[]) {
   });
   return clampLoops(
     next.map((s, i) => {
-      const researchGroup = s.kind === 'research' && (s.parallel || next[i + 1]?.parallel);
-      return s.loop && (s.parallel || researchGroup) ? { ...s, loop: null } : s;
+      const loopless = s.kind !== 'review' && (s.parallel || next[i + 1]?.parallel);
+      return s.loop && (s.parallel || loopless) ? { ...s, loop: null } : s;
     }),
   );
 }
@@ -143,13 +148,13 @@ export function stagesOf(steps: WorkflowStepInput[]) {
 export function addToStage(steps: WorkflowStepInput[], index: number, agents: Agent[], label: string) {
   const start = groupStart(steps, index);
   const kind = steps[start].kind;
-  if (kind !== 'research' && kind !== 'review') return steps;
+  if (!PARALLEL_KINDS.includes(kind)) return steps;
   const at = start + parallelGroup(steps, start).length;
   const used = new Set(steps.slice(start, at).map((s) => s.agentId));
   const role = STEP_KIND[kind].role;
   const owner = agents.find((a) => a.role === role && !used.has(a.id)) ?? agents.find((a) => a.role === role) ?? agents[0];
-  const next = insertStep(steps, kind, agents, at, label);
-  next[at] = { ...next[at], agentId: owner?.id ?? null, parallel: true, loop: null };
+  const next = remapLoops(steps, (i) => (i >= at ? i + 1 : i));
+  next.splice(at, 0, { kind, label, agentId: owner?.id ?? null, instructions: '', loop: null, parallel: true });
   return tidyParallel(next);
 }
 

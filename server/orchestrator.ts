@@ -349,7 +349,7 @@ export async function designPlan(input: { officeId: string; title: string; descr
       '요청에 맞게 업무 여정을 설계하고 각 단계에 가장 알맞은 직원을 배정해라.',
       '순서 규칙: brief 1개로 시작, research 0개 이상, draft 1개, review 0개 이상, approval 1개로 끝. 전체 10단계 이하.',
       '조건 루프: research·draft·review 단계에는 "조건이 맞으면 앞 단계로 되돌아가기"를 붙일 수 있다. to는 지금 여정 steps 배열의 0부터 세는 번호이고, 자기 자신이나 그 앞 단계여야 한다. max는 횟수 상한이며, 생략하거나 null이면 조건이 맞을 때까지 되돌린다. 루프가 필요 없으면 loop 자체를 null.',
-      '동시 진행: 같은 역할 직원이 여럿이면 research나 review 단계에 "parallel": true를 붙여 바로 앞 같은 종류 단계와 동시에 맡길 수 있다. research는 서로 다른 관점이나 모델로 비교할 때, review는 여러 검토자가 다수결로 판정할 때 쓴다. 동시 진행 단계에는 루프를 붙이지 않는다(review 묶음의 루프는 첫 review에만).',
+      '동시 진행: 같은 역할 직원이 여럿이면 research·draft·review 단계에 "parallel": true를 붙여 바로 앞 같은 종류 단계와 동시에 맡길 수 있다. research는 서로 다른 관점이나 모델로 비교할 때, draft는 결과물을 여럿 써서 가장 나은 것을 고를 때, review는 여러 검토자가 다수결로 판정할 때 쓴다. 동시 진행 단계에는 루프를 붙이지 않는다(review 묶음의 루프는 첫 review에만).',
       '기본 여정으로 충분하면 그대로 써도 된다. 불필요한 단계와 루프는 비용만 늘린다.',
       'JSON으로만 답한다: {"steps": [{"kind": string, "label": string (12자 이내), "agentId": string, "instructions": string, "loop": {"to": number, "when": string (조건, 20자 이내), "max": number | null} | null, "parallel": boolean}], "note": string (설계 이유 한두 문장)}',
     ]
@@ -746,6 +746,60 @@ async function draftStep(taskId: string, step: WorkflowStep, attempt: number, cl
   addArtifact(taskId, writer, step, 'draft', '초안', draft);
   setStep(taskId, step.id, 'done');
   return true;
+}
+
+/**
+ * Several writers draft at once and the best draft is kept. Only the first writer may ask the user, before anyone
+ * writes, so every draft starts from the same answers. The next step's reviewer compares them (or the manager when
+ * no review follows), and the chosen draft becomes the one the rest of the journey works on.
+ */
+async function draftGroup(taskId: string, group: WorkflowStep[], next: WorkflowStep | undefined, attempt: number, clarify: Clarify, feedback?: string) {
+  const lead = group[0];
+  if (attempt === 1 && specOf(store.task(taskId)).allowClarify && (await clarify(taskId, lead, agentOfStep(store.task(taskId), lead))) === 'waiting') return false;
+  const noQuestions: Clarify = async () => 'continue';
+  await Promise.all(group.map((s) => draftStep(taskId, s, attempt, noQuestions, feedback)));
+  await pickDraft(taskId, group, next);
+  return true;
+}
+
+async function pickDraft(taskId: string, group: WorkflowStep[], next: WorkflowStep | undefined) {
+  const task = store.task(taskId);
+  const judge = next?.kind === 'review' ? agentOfStep(task, next) : agentOf(task, 'manager');
+  const candidates = group.flatMap((step) => {
+    const artifact = task.artifacts.filter((a) => a.kind === 'draft' && a.stepId === step.id).at(-1);
+    return artifact ? [{ step, artifact, writer: store.agent(artifact.agentId) }] : [];
+  });
+  if (candidates.length === 0) return;
+  setAgent(judge, 'working', 'focus', V('결과물 {n}개를 비교하고 있어요.', { n: candidates.length }));
+  const raw = await callAI(
+    judge,
+    task,
+    'review',
+    [
+      `[업무 제목] ${task.title}`,
+      task.description ? `[요청 내용]\n${task.description}` : '',
+      `[작업 지시서]\n${latest(task, 'brief')?.content ?? ''}`,
+      ...candidates.map((c, i) => `[안 ${i + 1} - ${c.writer.name} · ${c.step.label}]\n${c.artifact.content.slice(0, 6000)}`),
+      '',
+      `같은 요청으로 따로 쓴 결과물 ${candidates.length}개다. 요청한 내용과 형식을 가장 잘 지키고 틀린 내용이 가장 적은 안 하나를 골라라.`,
+      specOf(task).reviewAsk,
+      'JSON으로만 답한다: {"best": number (안 번호), "reason": string (고른 이유와 다른 안과의 차이 한두 문장), "scores": number[] (안마다 0~100)}',
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
+    () => JSON.stringify({ best: 1, reason: L('요청한 형식을 가장 잘 지켰어요.'), scores: candidates.map((_, i) => 85 - i * 5) }),
+    true,
+  );
+  const parsed = parseJson(raw, { best: 1, reason: '', scores: [] as number[] });
+  const index = Math.min(candidates.length, Math.max(1, Math.round(Number(parsed.best) || 1))) - 1;
+  const chosen = candidates[index];
+  const reason = String(parsed.reason ?? '').slice(0, 300);
+  addArtifact(taskId, chosen.writer, chosen.step, 'draft', '초안 (비교 후 선택)', chosen.artifact.content);
+  store.emit('draft.compared', {
+    taskId,
+    agentId: judge.id,
+    payload: { count: candidates.length, chosen: chosen.step.label, writer: chosen.writer.name, reason, scores: Array.isArray(parsed.scores) ? parsed.scores.slice(0, candidates.length) : [] },
+  });
 }
 
 const MOCK_ACCURACY_BONUS: Record<Personality, number> = { careful: 10, critical: 5, balanced: 0, friendly: -2, creative: -6, fast: -12 };
@@ -1166,7 +1220,8 @@ export async function runStepAt(taskId: string, at: number, feedback: string | n
   if (step.kind === 'brief') await briefStep(taskId, step, reason);
   else if (step.kind === 'research') await Promise.all(group.map((s) => researchStep(taskId, s, reason)));
   else if (step.kind === 'draft') {
-    if (!(await draftStep(taskId, step, drafts() + 1, clarify, reason))) {
+    const attempt = drafts() + 1;
+    if (group.length === 1 ? !(await draftStep(taskId, step, attempt, clarify, reason)) : !(await draftGroup(taskId, group, plan[at + group.length], attempt, clarify, reason))) {
       const help = store.task(taskId).help;
       return { kind: 'needs_help', timeoutMs: Math.max(0, (help?.deadline ?? Date.now()) - Date.now()) };
     }

@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { t, tpl } from '../../../shared/i18n.ts';
 import { TEAMS } from '../../../shared/teams.ts';
 import type { McpServer } from '../../../shared/mcp.ts';
-import type { Agent, StepLoop, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
+import type { Agent, StepKind, StepLoop, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
+import { PARALLEL_TEXT } from '../parallelText.ts';
 import { StepExtras } from './StepExtras.tsx';
 import { LOOP_PLACEHOLDER, LOOPABLE, loopTargets, MAX_LOOP, MAX_PLAN_STEPS, PARALLEL_KINDS, STEP_KIND, stepKindHint, stepKindTitle, validatePlan } from '../../../shared/workflow.ts';
 import {
@@ -136,8 +137,8 @@ export function PlanEditor({ team, agents, steps, servers, onChange }: Props) {
         )}
         {!inside && PARALLEL_KINDS.includes(step.kind) && (
           <div className="row plan-step-together">
-            <button type="button" className="pixel-btn small" disabled={full} onClick={() => addParallel(i)} title={step.kind === 'review' ? t('검토자 여럿이 같은 초안을 동시에 평가하고, 과반이 통과시키면 통과예요.') : t('같은 역할 직원 여럿이 각자 조사하고, 결과물 작성 단계에서 한꺼번에 비교해요.')}>
-              ⇉ {step.kind === 'review' ? t('검토자 추가 (다수결)') : t('같은 단계에 조사 추가 (비교)')}
+            <button type="button" className="pixel-btn small" disabled={full} onClick={() => addParallel(i)} title={t(PARALLEL_TEXT[step.kind]!.hint)}>
+              ⇉ {t(PARALLEL_TEXT[step.kind]!.add)}
             </button>
             {steps[i - 1]?.kind === step.kind && (
               <label className="check small">
@@ -206,7 +207,7 @@ export function PlanEditor({ team, agents, steps, servers, onChange }: Props) {
           return (
             <li key={stage[0]} className="plan-stage">
               <span className="plan-stage-no">
-                {tpl('단계 {n}', { n: n + 1 })} · ⇉ {kind === 'review' ? tpl('검토 {n}명 동시 (다수결)', { n: stage.length }) : tpl('조사 {n}개 동시 (비교)', { n: stage.length })}
+                {tpl('단계 {n}', { n: n + 1 })} · ⇉ {tpl(PARALLEL_TEXT[kind]!.stage, { n: stage.length })}
               </span>
               <button type="button" className={`plan-parallel-row kind-${kind}`} onClick={() => setOpenStage(stage[0])} title={t('눌러서 동시에 하는 단계를 고쳐요')}>
                 {stage.map((i) => (
@@ -246,13 +247,11 @@ export function PlanEditor({ team, agents, steps, servers, onChange }: Props) {
 
 function stageTitle(steps: WorkflowStepInput[], stage: number[], stages: number[][]) {
   const n = stages.findIndex((s) => s[0] === stage[0]) + 1;
-  return steps[stage[0]].kind === 'review'
-    ? tpl('{n}단계 · 검토 {count}명 동시 (다수결)', { n, count: stage.length })
-    : tpl('{n}단계 · 조사 {count}개 동시 (비교)', { n, count: stage.length });
+  return tpl(PARALLEL_TEXT[steps[stage[0]].kind]!.title, { n, count: stage.length });
 }
 
 /** The steps of one stage that run at the same time, each with all its fields. */
-function StageDialog({ title, kind, onAdd, onClose, children }: { title: string; kind: string; onAdd?: () => void; onClose: () => void; children: ReactNode }) {
+function StageDialog({ title, kind, onAdd, onClose, children }: { title: string; kind: StepKind; onAdd?: () => void; onClose: () => void; children: ReactNode }) {
   // Escape closes this dialog only, not the task dialog underneath.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -272,14 +271,12 @@ function StageDialog({ title, kind, onAdd, onClose, children }: { title: string;
             ✕
           </button>
         </div>
-        <p className="small muted">
-          {kind === 'review' ? t('검토자 여럿이 같은 초안을 동시에 평가하고, 과반이 통과시키면 통과예요.') : t('같은 역할 직원 여럿이 각자 조사하고, 결과물 작성 단계에서 한꺼번에 비교해요.')}
-        </p>
+        <p className="small muted">{t(PARALLEL_TEXT[kind]!.hint)}</p>
         <div className="plan-stage-members">{children}</div>
         <div className="row step-inspector-foot">
           {onAdd && (
             <button type="button" className="pixel-btn small" onClick={onAdd}>
-              ⇉ {kind === 'review' ? t('검토자 추가 (다수결)') : t('같은 단계에 조사 추가 (비교)')}
+              ⇉ {t(PARALLEL_TEXT[kind]!.add)}
             </button>
           )}
           <button type="button" className="pixel-btn small primary" onClick={onClose}>

@@ -85,3 +85,41 @@ test('reviews marked parallel judge the same draft at once and the majority deci
   const code = templatePlan('dev', 'code_write', store.data.agents.filter((a) => a.officeId === 'office_dev'));
   assert.deepEqual(code.map((s) => s.label), ['요구사항 접수', '구현 방법 조사', '코드 작성', '코드 검토', '사용자 승인']);
 });
+
+test('drafts marked parallel are written at the same time, and the next reviewer keeps the best one', async () => {
+  const office = 'office_support';
+  const extra = store.hireAgent(office, 'writer', '둘째 작성자');
+  const team = store.data.agents.filter((a) => a.officeId === office);
+  const by = (role: string) => team.find((a) => a.role === role && a.id !== extra.id)!;
+  const steps = [
+    { kind: 'brief' as const, label: '접수', agentId: by('manager').id, instructions: '', loop: null },
+    { kind: 'draft' as const, label: '작성 A', agentId: by('writer').id, instructions: '', loop: null },
+    { kind: 'draft' as const, label: '작성 B', agentId: extra.id, instructions: '', loop: null, parallel: true },
+    { kind: 'review' as const, label: '검토', agentId: by('reviewer').id, instructions: '', loop: { to: 1, when: '기준 미달', max: 1 } },
+    { kind: 'approval' as const, label: '승인', agentId: null, instructions: '', loop: null },
+  ];
+  assert.equal(validatePlan(steps, team), null, 'two drafts written together are one draft stage');
+  assert.match(validatePlan(steps.map((s, i) => (i === 2 ? { ...s, parallel: undefined } : s)), team) ?? '', /결과물 작성/, 'two drafts one after the other are not');
+
+  const startSeq = store.data.seq ?? 0;
+  const task = await runtime.createTask({ officeId: office, title: '동시 작성', description: '고객 문의 답변 초안', taskType: 'email_draft', planMode: 'custom', steps });
+  // Only the first writer asks, before anyone writes.
+  await until(() => ['awaiting_help', 'awaiting_approval'].includes(store.task(task.id).status), '질문 또는 승인 대기');
+  if (store.task(task.id).status === 'awaiting_help') {
+    assert.equal(store.task(task.id).plan[2].status, 'pending', 'the second writer waits for the answer');
+    await runtime.answerHelp(task.id, null);
+  }
+  await until(() => store.task(task.id).status === 'awaiting_approval', '승인 대기');
+  const t = store.task(task.id);
+  const { recentEvents } = await import('../server/db.ts');
+  const events = recentEvents(400).filter((e) => e.taskId === task.id && e.seq > startSeq);
+  const compared = events.filter((e) => e.type === 'draft.compared');
+  assert.ok(compared.length >= 1, 'the drafts were compared');
+  assert.equal(compared[0].payload.count, 2);
+  assert.equal(compared[0].agentId, by('reviewer').id, 'the next step’s reviewer compares them');
+  const writers = new Set(t.artifacts.filter((a) => a.kind === 'draft' && a.title === '초안').map((a) => a.agentId));
+  assert.equal(writers.size, 2, 'each writer wrote a draft');
+  assert.equal(t.artifacts.filter((a) => a.kind === 'draft').at(-1)!.title, '초안 (비교 후 선택)', 'the kept draft is the one that goes on');
+  await runtime.approve(task.id);
+  await until(() => store.task(task.id).status === 'completed', '완료');
+});

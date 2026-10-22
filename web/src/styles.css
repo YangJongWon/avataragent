@@ -3611,14 +3611,25 @@ p.plan-note {
 .plan-stage-modal { width: 520px; max-width: calc(100vw - 32px); }
 .plan-stage-members { display: grid; gap: 8px; max-height: 60vh; overflow-y: auto; }
 
-/* A step's skill files and MCP servers, folded under its instructions. */
-.step-extras { border: 1px dashed var(--line); padding: 2px 6px; background: rgba(255, 255, 255, 0.5); }
-.step-extras > summary { cursor: pointer; font-weight: 700; padding: 2px 0; }
-.step-extras-body { display: grid; gap: 6px; padding: 4px 0 6px; }
-.step-skills { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.step-skills li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+/* A step's extras: MCP picked from the registered servers, and uploaded skill or prompt files, one row each. */
+.step-extras { display: grid; gap: 4px; }
+.step-extra-row { display: flex; align-items: flex-start; gap: 6px; }
+.step-extra-label { width: 92px; flex-shrink: 0; font-weight: 800; font-size: 12px; padding-top: 3px; }
+.step-extra-body { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.step-extras .chip-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.step-extras .filter-chip {
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: inherit;
+  cursor: pointer;
+}
+.step-extras .filter-chip.active { background: var(--yellow); font-weight: 700; }
+.step-extras .filter-chip:disabled { opacity: 0.5; cursor: default; }
+.step-file-chip { display: inline-flex; align-items: center; gap: 2px; padding: 0 4px; border: 1px solid var(--line); background: #f2fbf3; }
 .step-skill-preview {
-  flex: 1 1 100%;
   max-height: 160px;
   overflow: auto;
   margin: 0;
@@ -3628,7 +3639,3 @@ p.plan-note {
   background: var(--surface);
   border: 1px solid var(--line);
 }
-.step-extras .file-btn { justify-self: start; cursor: pointer; }
-.step-extras .file-btn.disabled { opacity: 0.5; cursor: default; }
-.step-mcp { display: grid; gap: 4px; }
-.step-mcp-list { display: grid; gap: 2px; }

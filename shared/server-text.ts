@@ -148,6 +148,8 @@ export const SERVER_TEXT: Record<string, ServerTextEntry> = {
   },
   '승인하면 결과물이 보고서함에 보관됩니다.': { zh: '批准后，成果会保存到报告箱。', ja: '承認すると成果物がレポート箱に保管されます。', en: 'Approve to file the result in the report box.' },
   '결과물 "{title}"를 보고서함에 보관했어요.': { zh: '已把成果“{title}”保存到报告箱。', ja: '成果物「{title}」をレポート箱に保管しました。', en: 'Filed “{title}” in the report box.' },
+  '결과물 {n}개를 비교하고 있어요.': { zh: '正在比较 {n} 份成果。', ja: '成果物 {n} 件を比べています。', en: 'Comparing {n} drafts.' },
+  '요청한 형식을 가장 잘 지켰어요.': { zh: '最符合要求的格式。', ja: '依頼された形式を一番よく守っています。', en: 'It follows the requested format best.' },
   '승인하면 보고서가 보고서함에 보관됩니다.': { zh: '批准后，报告会保存到报告箱。', ja: '承認するとレポートがレポート箱に保管されます。', en: 'Approve to file the report in the report box.' },
   '보고서 "{title}"를 보고서함에 보관했어요.': { zh: '已把报告“{title}”保存到报告箱。', ja: 'レポート「{title}」をレポート箱に保管しました。', en: 'Filed the report “{title}” in the report box.' },
 

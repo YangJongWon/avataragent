@@ -12,14 +12,74 @@ interface Props {
   onChange: (patch: Partial<WorkflowStepInput>) => void;
 }
 
-/** A step's skill files and MCP servers, folded under its instructions. */
-export function StepExtras({ step, servers, readOnly, onChange }: Props) {
+/** A step's two extras, each on its own row: MCP picked from the registered servers, and uploaded skill or prompt files. */
+export function StepExtras(props: Props) {
+  const usesTools = props.step.kind === 'research' || props.step.kind === 'draft' || props.step.kind === 'review';
+  return (
+    <div className="step-extras">
+      {usesTools && <StepMcp {...props} />}
+      <StepFiles {...props} />
+    </div>
+  );
+}
+
+/** Which registered MCP servers this step uses: the office default, none, or the ones picked. */
+function StepMcp({ step, servers, readOnly, onChange }: Props) {
+  const assigned = step.mcpServerIds;
+  const toggle = (id: string) => {
+    const current = assigned ?? [];
+    const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
+    onChange({ mcpServerIds: next });
+  };
+  const defaultHint = step.kind === 'research' ? t('조사할 때 사무실에 연결된 MCP 중 "조사 때 자동" 도구를 써요.') : t('이 단계는 MCP를 쓰지 않아요. 지정하면 이 단계에서도 써요.');
+  return (
+    <div className="step-extra-row">
+      <span className="step-extra-label">🔌 MCP</span>
+      <div className="step-extra-body">
+        {servers === undefined ? (
+          <span className="small muted">
+            {assigned ? tpl('MCP {n}개가 지정돼 있어요. 바꾸려면 대표 계정으로 열어 주세요.', { n: assigned.length }) : defaultHint}
+          </span>
+        ) : (
+          <>
+            <div className="chip-row" role="group" aria-label={t('이 단계의 MCP')}>
+              <button type="button" className={`filter-chip ${!assigned ? 'active' : ''}`} disabled={readOnly} aria-pressed={!assigned} onClick={() => onChange({ mcpServerIds: undefined })} title={defaultHint}>
+                {t('사무실 기본')}
+              </button>
+              <button type="button" className={`filter-chip ${assigned?.length === 0 ? 'active' : ''}`} disabled={readOnly} aria-pressed={assigned?.length === 0} onClick={() => onChange({ mcpServerIds: [] })}>
+                {t('안 씀')}
+              </button>
+              {servers.map((server) => {
+                const on = Boolean(assigned?.includes(server.id));
+                const auto = server.tools.filter((tool) => tool.mode === 'auto').length;
+                return (
+                  <button
+                    key={server.id}
+                    type="button"
+                    className={`filter-chip ${on ? 'active' : ''}`}
+                    disabled={readOnly || !server.enabled}
+                    aria-pressed={on}
+                    onClick={() => toggle(server.id)}
+                    title={server.enabled ? tpl('자동 도구 {n}개', { n: auto }) : t('꺼짐')}
+                  >
+                    {server.icon} {server.name}
+                  </button>
+                );
+              })}
+            </div>
+            {servers.length === 0 && <span className="small muted">{t('이 사무실에서 쓸 수 있는 MCP가 없어요. MCP 관리에서 먼저 연결해 주세요.')}</span>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Skill or prompt files uploaded for this step (Markdown, JSON or plain text), beside the written instructions. */
+function StepFiles({ step, readOnly, onChange }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [shown, setShown] = useState<number | null>(null);
   const skills = step.skills ?? [];
-  const assigned = step.mcpServerIds;
-  // The brief only writes the work order; tools are for gathering, writing and checking.
-  const usesTools = step.kind === 'research' || step.kind === 'draft' || step.kind === 'review';
   const full = skills.length >= SKILL_LIMITS.perStep;
 
   const attach = async (files: FileList | null) => {
@@ -34,106 +94,49 @@ export function StepExtras({ step, servers, readOnly, onChange }: Props) {
     }
     if (added.length) onChange({ skills: [...skills, ...added] });
   };
-  const removeSkill = (index: number) => {
+  const remove = (index: number) => {
     const next = skills.filter((_, i) => i !== index);
     onChange({ skills: next.length ? next : undefined });
     setShown(null);
   };
-  const toggleServer = (id: string, on: boolean) => {
-    const current = assigned ?? [];
-    onChange({ mcpServerIds: on ? [...current, id] : current.filter((x) => x !== id) });
-  };
-
-  const summary = [
-    skills.length ? tpl('스킬 {n}개', { n: skills.length }) : '',
-    assigned ? (assigned.length ? tpl('MCP {n}개 지정', { n: assigned.length }) : t('MCP 안 씀')) : '',
-  ]
-    .filter(Boolean)
-    .join(' · ');
 
   return (
-    <details className="step-extras" open={Boolean(summary) || undefined}>
-      <summary className="small">
-        🧩 {t('스킬·MCP')} {summary && <span className="muted">({summary})</span>}
-      </summary>
-      <div className="step-extras-body">
-        <div className="small muted">{t('글로 쓴 지시 말고도, 작업 방법을 담은 파일(.md, .json, .txt)을 스킬로 붙일 수 있어요.')}</div>
-        {skills.length > 0 && (
-          <ul className="step-skills">
-            {skills.map((skill, i) => (
-              <li key={`${skill.name}:${i}`}>
-                <button type="button" className="link-btn small" onClick={() => setShown(shown === i ? null : i)} title={t('내용 보기')}>
-                  📄 {skill.name} <span className="muted">· {skill.format.toUpperCase()} · {tpl('{n}자', { n: skill.content.length.toLocaleString() })}</span>
+    <div className="step-extra-row">
+      <span className="step-extra-label">📎 {t('스킬·프롬프트')}</span>
+      <div className="step-extra-body">
+        <div className="chip-row">
+          {skills.map((skill, i) => (
+            <span key={`${skill.name}:${i}`} className="step-file-chip">
+              <button type="button" className="link-btn small" onClick={() => setShown(shown === i ? null : i)} title={tpl('{n}자', { n: skill.content.length.toLocaleString() })}>
+                📄 {skill.name}
+              </button>
+              {!readOnly && (
+                <button type="button" className="icon-btn" onClick={() => remove(i)} title={t('파일 빼기')}>
+                  ✕
                 </button>
-                {!readOnly && (
-                  <button type="button" className="icon-btn" onClick={() => removeSkill(i)} title={t('스킬 빼기')}>
-                    ✕
-                  </button>
-                )}
-                {shown === i && <pre className="step-skill-preview">{skill.content.slice(0, 4000)}</pre>}
-              </li>
-            ))}
-          </ul>
-        )}
-        {!readOnly && (
-          <label className={`pixel-btn small file-btn ${full ? 'disabled' : ''}`}>
-            📎 {full ? tpl('스킬은 {n}개까지예요', { n: SKILL_LIMITS.perStep }) : t('스킬 파일 붙이기')}
-            <input
-              type="file"
-              accept={SKILL_ACCEPT}
-              multiple
-              disabled={full}
-              hidden
-              onChange={(e) => {
-                void attach(e.target.files);
-                e.target.value = '';
-              }}
-            />
-          </label>
-        )}
+              )}
+            </span>
+          ))}
+          {!readOnly && !full && (
+            <label className="filter-chip file-btn" title={t('작업 방법이나 프롬프트를 담은 .md, .json, .txt 파일')}>
+              ⬆ {t('파일 올리기')}
+              <input
+                type="file"
+                accept={SKILL_ACCEPT}
+                multiple
+                hidden
+                onChange={(e) => {
+                  void attach(e.target.files);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          )}
+          {skills.length === 0 && readOnly && <span className="small muted">{t('없음')}</span>}
+        </div>
+        {shown !== null && skills[shown] && <pre className="step-skill-preview">{skills[shown].content.slice(0, 4000)}</pre>}
         {error && <div className="small neg">{error}</div>}
-
-        {usesTools && (
-          <div className="step-mcp">
-            <div className="segmented small" role="radiogroup" aria-label={t('이 단계의 MCP')}>
-              <button type="button" role="radio" aria-checked={!assigned} className={`segment ${!assigned ? 'active' : ''}`} disabled={readOnly} onClick={() => onChange({ mcpServerIds: undefined })}>
-                {t('사무실 기본')}
-              </button>
-              <button type="button" role="radio" aria-checked={Boolean(assigned)} className={`segment ${assigned ? 'active' : ''}`} disabled={readOnly} onClick={() => onChange({ mcpServerIds: assigned ?? [] })}>
-                {t('이 단계에 MCP 지정')}
-              </button>
-            </div>
-            {!assigned && (
-              <div className="small muted">
-                {step.kind === 'research' ? t('조사할 때 사무실에 연결된 MCP 중 "조사 때 자동" 도구를 써요.') : t('이 단계는 MCP를 쓰지 않아요. 지정하면 이 단계에서도 써요.')}
-              </div>
-            )}
-            {assigned &&
-              (servers === undefined ? (
-                <div className="small muted">{tpl('MCP {n}개가 지정돼 있어요. 바꾸려면 대표 계정으로 열어 주세요.', { n: assigned.length })}</div>
-              ) : servers.length === 0 ? (
-                <div className="small muted">{t('이 사무실에서 쓸 수 있는 MCP가 없어요. MCP 관리에서 먼저 연결해 주세요.')}</div>
-              ) : (
-                <div className="step-mcp-list">
-                  {servers.map((server) => {
-                    const auto = server.tools.filter((tool) => tool.mode === 'auto').length;
-                    return (
-                      <label key={server.id} className="check small">
-                        <input type="checkbox" checked={assigned.includes(server.id)} disabled={readOnly || !server.enabled} onChange={(e) => toggleServer(server.id, e.target.checked)} />
-                        {server.icon} {server.name}
-                        <span className="muted">
-                          {' '}
-                          · {server.enabled ? tpl('자동 도구 {n}개', { n: auto }) : t('꺼짐')}
-                        </span>
-                      </label>
-                    );
-                  })}
-                  {assigned.length === 0 && <div className="small muted">{t('아무것도 고르지 않으면 이 단계는 MCP를 쓰지 않아요.')}</div>}
-                </div>
-              ))}
-          </div>
-        )}
       </div>
-    </details>
+    </div>
   );
 }

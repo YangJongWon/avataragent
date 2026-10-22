@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { TEAMS } from '../../../shared/teams.ts';
 import type { Agent, StepLoop, TeamId, WorkflowStepInput } from '../../../shared/types.ts';
-import { LOOP_PLACEHOLDER, LOOPABLE, loopTargets, MAX_LOOP, MAX_PLAN_STEPS, STEP_KIND, stepKindHint, stepKindTitle } from '../../../shared/workflow.ts';
+import { LOOP_PLACEHOLDER, LOOPABLE, loopTargets, MAX_LOOP, MAX_PLAN_STEPS, PARALLEL_KINDS, STEP_KIND, stepKindHint, stepKindTitle } from '../../../shared/workflow.ts';
 import type { McpServer } from '../../../shared/mcp.ts';
 import { useLanguage } from '../LanguageProvider.tsx';
 import { StepExtras } from './StepExtras.tsx';
+import { PARALLEL_TEXT } from '../parallelText.ts';
 import { canMove, canRemove, changeKind, defaultLoop, insertIndex, insertStep, moveStep, removeStep, REMOVABLE } from '../planOps.ts';
 
 interface Props {
@@ -189,10 +190,10 @@ export function StepInspector({ team, agents, steps, index, locked, template, ap
       )}
       {step.kind !== 'approval' && <StepExtras step={step} servers={servers} readOnly={readOnly} onChange={update} />}
 
-      {(step.kind === 'research' || step.kind === 'review') && steps[index - 1]?.kind === step.kind && (
-        <label className="check small" title={step.kind === 'review' ? t('검토자 여럿이 같은 초안을 동시에 평가하고, 과반이 통과시키면 통과예요.') : t('같은 역할 직원 여럿이 각자 조사하고, 결과물 작성 단계에서 한꺼번에 비교해요.')}>
+      {PARALLEL_KINDS.includes(step.kind) && steps[index - 1]?.kind === step.kind && (
+        <label className="check small" title={t(PARALLEL_TEXT[step.kind]!.hint)}>
           <input type="checkbox" checked={Boolean(step.parallel)} disabled={readOnly} onChange={(e) => update(e.target.checked ? { parallel: true, loop: null } : { parallel: undefined })} />
-          ⇉ {step.kind === 'review' ? t('앞 검토와 동시에 진행 (다수결)') : t('앞 조사와 동시에 진행')}
+          ⇉ {t(PARALLEL_TEXT[step.kind]!.join)}
         </label>
       )}
 

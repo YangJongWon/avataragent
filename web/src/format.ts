@@ -100,6 +100,8 @@ export function eventLabel(event: OfficeEvent, agents: Map<string, Agent>) {
       return tpl('사용자가 도움줌', { who, answer: String(p.answer ?? '') });
     case 'agent.help_timed_out':
       return tpl('응답 없이 진행', { who, assumption: String(p.assumption ?? '') });
+    case 'draft.compared':
+      return tpl('{who}: 결과물 {count}개 중 "{chosen}"({writer}) 선택 - {reason}', { who, count: Number(p.count ?? 0), chosen: String(p.chosen ?? ''), writer: String(p.writer ?? ''), reason: String(p.reason ?? '') });
     case 'review.started':
       return tpl('{who} 검수 시작', { who });
     case 'review.rejected':
